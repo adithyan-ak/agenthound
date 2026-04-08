@@ -82,7 +82,7 @@ func NewServer(graphDB graph.GraphDB, reader *graph.Reader, pgPool *pgxpool.Pool
 		}
 		defer index.Close()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		io.Copy(w, index)
+		_, _ = io.Copy(w, index)
 	})
 
 	return &Server{router: r}
