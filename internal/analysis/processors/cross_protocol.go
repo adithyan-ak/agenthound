@@ -9,7 +9,7 @@ import (
 
 type CrossProtocol struct{}
 
-func (p *CrossProtocol) Name() string          { return "cross_protocol" }
+func (p *CrossProtocol) Name() string           { return "cross_protocol" }
 func (p *CrossProtocol) Dependencies() []string { return []string{"has_access_to"} }
 
 func (p *CrossProtocol) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

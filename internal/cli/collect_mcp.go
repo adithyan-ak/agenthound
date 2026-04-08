@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
 	collector "github.com/adithyan-ak/agenthound/internal/collector"
+	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
 	"github.com/spf13/cobra"
 )
 

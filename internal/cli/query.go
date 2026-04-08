@@ -103,13 +103,13 @@ func runRawCypher(ctx context.Context, cypher, format string) error {
 func runPrebuilt(ctx context.Context, id, format string) error {
 	q, ok := prebuilt.Get(id)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Unknown pre-built query %q. Available queries:\n\n", id)
+		_, _ = fmt.Fprintf(os.Stderr, "Unknown pre-built query %q. Available queries:\n\n", id)
 		printPrebuiltList()
 		return fmt.Errorf("pre-built query %q not found", id)
 	}
 
-	fmt.Fprintf(os.Stderr, "[%s] %s\n", q.Severity, q.Name)
-	fmt.Fprintf(os.Stderr, "%s\n\n", q.Description)
+	_, _ = fmt.Fprintf(os.Stderr, "[%s] %s\n", q.Severity, q.Name)
+	_, _ = fmt.Fprintf(os.Stderr, "%s\n\n", q.Description)
 
 	infra, cleanup, err := Bootstrap(ctx)
 	if err != nil {
@@ -155,7 +155,7 @@ func runFindings(ctx context.Context, severity, format string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSEVERITY\tCATEGORY\tTITLE\tSOURCE\tTARGET")
+	_, _ = fmt.Fprintln(w, "ID\tSEVERITY\tCATEGORY\tTITLE\tSOURCE\tTARGET")
 	for _, f := range findings {
 		srcLabel := f.SourceName
 		if srcLabel == "" {
@@ -165,12 +165,12 @@ func runFindings(ctx context.Context, severity, format string) error {
 		if tgtLabel == "" {
 			tgtLabel = f.TargetID
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			f.ID, f.Severity, f.Category, f.Title, srcLabel, tgtLabel)
 	}
-	w.Flush()
+	_ = w.Flush()
 
-	fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
+	_, _ = fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
 	return nil
 }
 
@@ -252,17 +252,17 @@ func printRows(rows []map[string]any, format string) error {
 	cols := orderedColumns(rows[0])
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, strings.Join(cols, "\t"))
+	_, _ = fmt.Fprintln(w, strings.Join(cols, "\t"))
 	for _, row := range rows {
 		vals := make([]string, len(cols))
 		for i, col := range cols {
 			vals[i] = formatValue(row[col])
 		}
-		fmt.Fprintln(w, strings.Join(vals, "\t"))
+		_, _ = fmt.Fprintln(w, strings.Join(vals, "\t"))
 	}
-	w.Flush()
+	_ = w.Flush()
 
-	fmt.Fprintf(os.Stderr, "\n%d row(s)\n", len(rows))
+	_, _ = fmt.Fprintf(os.Stderr, "\n%d row(s)\n", len(rows))
 	return nil
 }
 
@@ -312,9 +312,9 @@ func printJSON(v any) error {
 
 func printPrebuiltList() {
 	w := tabwriter.NewWriter(os.Stderr, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tCATEGORY\tSEVERITY\tNAME")
+	_, _ = fmt.Fprintln(w, "ID\tCATEGORY\tSEVERITY\tNAME")
 	for _, q := range prebuilt.List() {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", q.ID, q.Category, q.Severity, q.Name)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", q.ID, q.Category, q.Severity, q.Name)
 	}
-	w.Flush()
+	_ = w.Flush()
 }

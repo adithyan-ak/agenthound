@@ -15,7 +15,7 @@ const impersonationThreshold = 0.8
 
 type CanImpersonate struct{}
 
-func (p *CanImpersonate) Name() string          { return "can_impersonate" }
+func (p *CanImpersonate) Name() string           { return "can_impersonate" }
 func (p *CanImpersonate) Dependencies() []string { return nil }
 
 func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

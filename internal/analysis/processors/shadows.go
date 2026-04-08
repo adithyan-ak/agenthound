@@ -9,7 +9,7 @@ import (
 
 type Shadows struct{}
 
-func (p *Shadows) Name() string          { return "shadows" }
+func (p *Shadows) Name() string           { return "shadows" }
 func (p *Shadows) Dependencies() []string { return nil }
 
 func (p *Shadows) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

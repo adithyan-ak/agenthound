@@ -9,7 +9,7 @@ import (
 
 type CanExecute struct{}
 
-func (p *CanExecute) Name() string          { return "can_execute" }
+func (p *CanExecute) Name() string           { return "can_execute" }
 func (p *CanExecute) Dependencies() []string { return nil }
 
 func (p *CanExecute) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

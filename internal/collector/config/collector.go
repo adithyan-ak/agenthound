@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 	"github.com/adithyan-ak/agenthound/internal/collector/common"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	collector "github.com/adithyan-ak/agenthound/internal/collector"
 )
 
 type ConfigCollector struct {

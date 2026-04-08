@@ -9,7 +9,7 @@ import (
 
 type CanReach struct{}
 
-func (p *CanReach) Name() string          { return "can_reach" }
+func (p *CanReach) Name() string           { return "can_reach" }
 func (p *CanReach) Dependencies() []string { return []string{"has_access_to"} }
 
 func (p *CanReach) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

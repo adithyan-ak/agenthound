@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	a2acollector "github.com/adithyan-ak/agenthound/internal/collector/a2a"
 	collector "github.com/adithyan-ak/agenthound/internal/collector"
+	a2acollector "github.com/adithyan-ak/agenthound/internal/collector/a2a"
 	"github.com/spf13/cobra"
 )
 

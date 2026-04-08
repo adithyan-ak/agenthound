@@ -9,7 +9,7 @@ import (
 
 type PoisonedDescription struct{}
 
-func (p *PoisonedDescription) Name() string          { return "poisoned_description" }
+func (p *PoisonedDescription) Name() string           { return "poisoned_description" }
 func (p *PoisonedDescription) Dependencies() []string { return nil }
 
 func (p *PoisonedDescription) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

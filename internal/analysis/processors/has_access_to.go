@@ -9,7 +9,7 @@ import (
 
 type HasAccessTo struct{}
 
-func (p *HasAccessTo) Name() string          { return "has_access_to" }
+func (p *HasAccessTo) Name() string           { return "has_access_to" }
 func (p *HasAccessTo) Dependencies() []string { return nil }
 
 func (p *HasAccessTo) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {

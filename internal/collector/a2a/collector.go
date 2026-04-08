@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 	"github.com/adithyan-ak/agenthound/internal/collector/common"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	collector "github.com/adithyan-ak/agenthound/internal/collector"
 )
 
 type A2ACollector struct {

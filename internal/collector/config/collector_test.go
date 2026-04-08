@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/adithyan-ak/agenthound/internal/model"
 	collector "github.com/adithyan-ak/agenthound/internal/collector"
+	"github.com/adithyan-ak/agenthound/internal/model"
 )
 
 func TestConfigCollector_Name(t *testing.T) {

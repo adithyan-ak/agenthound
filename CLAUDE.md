@@ -2,6 +2,18 @@
 
 AgentHound is a BloodHound-style open-source security tool that enumerates MCP servers and A2A agents, builds a directed trust graph in Neo4j, and uses shortest-path algorithms to discover attack paths across protocol boundaries. **No existing tool does cross-protocol graph-based attack path analysis for AI agent infrastructure.**
 
+## Pre-Commit Checks (MANDATORY)
+
+Before every commit, run these checks locally and fix all issues:
+
+```bash
+gofmt -l .                  # Must produce no output (no formatting issues)
+go build ./...              # Must pass with zero errors
+go vet ./...                # Must pass with zero warnings
+```
+
+If any check fails, fix the issues before committing. Do NOT commit code that fails these checks. The CI runs `golangci-lint` which enforces `errcheck` (all error return values must be handled — use `_, _ =` for intentionally discarded ones like `fmt.Fprintf` to stderr) and `gofmt` (no manual alignment padding).
+
 ## Tech Stack
 
 | Component | Choice | Key Details |

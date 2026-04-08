@@ -9,7 +9,7 @@ import (
 
 type CanExfiltrate struct{}
 
-func (p *CanExfiltrate) Name() string          { return "can_exfiltrate" }
+func (p *CanExfiltrate) Name() string           { return "can_exfiltrate" }
 func (p *CanExfiltrate) Dependencies() []string { return []string{"can_reach"} }
 
 func (p *CanExfiltrate) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
