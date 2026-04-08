@@ -5,6 +5,7 @@ import { useNodeSearch } from "@/hooks/useNodeSearch";
 import { useGraphStore } from "@/store/graph";
 import { useUIStore } from "@/store/ui";
 import { NODE_COLORS } from "@/lib/node-styles";
+import { Input } from "@/components/ui/input";
 
 export function GraphSearch() {
   const sigma = useSigma();
@@ -49,14 +50,14 @@ export function GraphSearch() {
     <div className="absolute top-4 left-4 z-10 w-72">
       <div className="relative">
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <input
+        <Input
           type="text"
           placeholder="Search nodes..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 200)}
-          className="w-full rounded-md border bg-card pl-9 pr-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="pl-9 bg-card shadow-sm"
         />
       </div>
       {open && results.length > 0 && (

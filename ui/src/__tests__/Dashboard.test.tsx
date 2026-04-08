@@ -23,7 +23,7 @@ describe("StatCards", () => {
       error: null,
       isError: false,
       isPending: true,
-    } as ReturnType<typeof useGraphStats>);
+    } as unknown as ReturnType<typeof useGraphStats>);
 
     const { container } = render(<StatCards />);
     const skeletons = container.querySelectorAll('[class*="animate-pulse"]');
@@ -47,7 +47,7 @@ describe("StatCards", () => {
       error: null,
       isError: false,
       isPending: false,
-    } as ReturnType<typeof useGraphStats>);
+    } as unknown as ReturnType<typeof useGraphStats>);
 
     render(<StatCards />);
 
@@ -76,7 +76,7 @@ describe("StatCards", () => {
       error: null,
       isError: false,
       isPending: false,
-    } as ReturnType<typeof useGraphStats>);
+    } as unknown as ReturnType<typeof useGraphStats>);
 
     render(<StatCards />);
 

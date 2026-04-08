@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useGraphData } from "@/hooks/useGraph";
 import { runLayout } from "@/lib/layout";
+import { Button } from "@/components/ui/button";
 
 export function GraphControls() {
   const sigma = useSigma();
@@ -43,14 +44,16 @@ export function GraphControls() {
   return (
     <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
       {buttons.map(({ icon: Icon, action, title }) => (
-        <button
+        <Button
           key={title}
           onClick={action}
           title={title}
-          className="rounded-md bg-card border p-2 shadow-sm hover:bg-accent transition-colors"
+          variant="outline"
+          size="icon"
+          className="shadow-sm"
         >
           <Icon className="h-4 w-4" />
-        </button>
+        </Button>
       ))}
     </div>
   );

@@ -3,6 +3,7 @@ import { Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { useGraphStore } from "@/store/graph";
 import { NODE_COLORS } from "@/lib/node-styles";
 import { EDGE_COLORS, isCompositeEdge } from "@/lib/edge-styles";
+import { Button } from "@/components/ui/button";
 
 const NODE_KINDS = Object.keys(NODE_COLORS);
 const RAW_EDGE_KINDS = Object.keys(EDGE_COLORS).filter(
@@ -19,9 +20,10 @@ export function GraphFilters() {
 
   return (
     <div className="absolute top-4 right-4 z-10">
-      <button
+      <Button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm shadow-sm hover:bg-accent"
+        variant="outline"
+        className="shadow-sm"
       >
         <Filter className="h-4 w-4" />
         Filters
@@ -30,7 +32,7 @@ export function GraphFilters() {
         ) : (
           <ChevronDown className="h-3 w-3" />
         )}
-      </button>
+      </Button>
 
       {expanded && (
         <div className="mt-1 w-64 rounded-md border bg-card p-3 shadow-md max-h-[70vh] overflow-y-auto">
