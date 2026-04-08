@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "MEMORY_DIR": "/tmp/mcp-memory"
+      }
+    },
+    "remote-wind": {
+      "serverUrl": "https://windsurf-mcp.example.com/v1"
+    }
+  }
+}

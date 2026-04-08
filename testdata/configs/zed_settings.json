@@ -1,0 +1,12 @@
+{
+  "theme": "One Dark",
+  "context_servers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"]
+    },
+    "remote-zed": {
+      "url": "https://zed-mcp.example.com/v1"
+    }
+  }
+}

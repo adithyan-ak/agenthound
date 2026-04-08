@@ -1,0 +1,13 @@
+{
+  "editor.fontSize": 14,
+  "augment": {
+    "advanced": {
+      "mcpServers": {
+        "augment-nested": {
+          "command": "node",
+          "args": ["server.js"]
+        }
+      }
+    }
+  }
+}

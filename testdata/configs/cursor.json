@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "BSAxxxxxxxxxxxxxxxx"
+      },
+      "disabled": false
+    },
+    "github-mcp": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "ghp_xxxxxxxxxxxx"
+      },
+      "disabled": true
+    },
+    "remote-cursor": {
+      "url": "https://cursor-mcp.example.com/v1"
+    }
+  }
+}

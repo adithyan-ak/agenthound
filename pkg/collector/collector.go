@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/model"
 )
@@ -12,8 +13,18 @@ type Collector interface {
 }
 
 type CollectOptions struct {
-	ConfigPath string
-	TargetURL  string
-	TargetURLs []string
-	Discover   bool
+	ConfigPath              string
+	ConfigPaths             []string
+	TargetURL               string
+	TargetURLs              []string
+	TargetURLsFile          string
+	Discover                bool
+	ProjectDir              string
+	OutputPath              string
+	Concurrency             int
+	Timeout                 time.Duration
+	IncludeCredentialValues bool
+	Insecure                bool
+	AuthToken               string
+	ScanID                  string
 }

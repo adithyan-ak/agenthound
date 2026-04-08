@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codecatalyst": {
+      "command": "npx",
+      "args": ["-y", "@aws/mcp-server-codecatalyst"],
+      "env": {
+        "AWS_PROFILE": "default"
+      }
+    },
+    "q-remote": {
+      "url": "https://amazonq-mcp.example.com/v1"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "postgres-dev": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost:5432/devdb"],
+      "env": {
+        "PGPASSWORD": "dev-secret"
+      }
+    },
+    "slack-mcp": {
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "X-Slack-Token": "xoxb-fake-token"
+      }
+    }
+  }
+}

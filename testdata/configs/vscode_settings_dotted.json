@@ -1,0 +1,14 @@
+{
+  "editor.fontSize": 14,
+  "mcp.servers": {
+    "puppeteer": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    },
+    "sse-server": {
+      "type": "http",
+      "url": "http://localhost:8080/sse"
+    }
+  }
+}

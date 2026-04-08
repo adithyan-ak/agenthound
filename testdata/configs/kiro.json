@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "aws-mcp": {
+      "command": "npx",
+      "args": ["-y", "@aws/mcp-server-aws"],
+      "env": {
+        "AWS_PROFILE": "dev",
+        "AWS_REGION": "us-east-1"
+      }
+    },
+    "kiro-remote": {
+      "url": "https://kiro-mcp.example.com/v1"
+    }
+  }
+}

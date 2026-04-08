@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    "remote-api": {
+      "url": "https://mcp.example.com/api",
+      "headers": {
+        "Authorization": "Bearer sk-test-12345"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "PublicInfoBot",
+  "description": "An open agent that provides public information with no authentication required",
+  "url": "https://public.example.com/a2a",
+  "version": "0.1.0",
+  "provider": {
+    "organization": "OpenData"
+  },
+  "protocolVersion": "0.3.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "lookup",
+      "name": "Lookup",
+      "description": "Look up public information by topic",
+      "tags": ["info", "public"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"}
+        }
+      }
+    }
+  ]
+}

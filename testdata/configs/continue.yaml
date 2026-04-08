@@ -1,0 +1,11 @@
+mcpServers:
+  - name: filesystem
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "/home/user/projects"
+    env:
+      NODE_ENV: production
+  - name: http-tool
+    url: http://localhost:4000/mcp

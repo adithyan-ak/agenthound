@@ -1,0 +1,61 @@
+{
+  "name": "WeatherAgent",
+  "description": "Provides real-time weather information and forecasts",
+  "url": "https://weather.example.com/a2a",
+  "version": "1.2.0",
+  "provider": {
+    "organization": "WeatherCorp"
+  },
+  "protocolVersion": "0.3.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false,
+    "stateTransitionHistory": true
+  },
+  "securitySchemes": {
+    "api_key_auth": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-API-Key"
+    }
+  },
+  "security": [
+    {
+      "api_key_auth": []
+    }
+  ],
+  "skills": [
+    {
+      "id": "get-weather",
+      "name": "GetWeather",
+      "description": "Get current weather for a location",
+      "tags": ["weather", "forecast"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string"}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "temperature": {"type": "number"},
+          "conditions": {"type": "string"}
+        }
+      }
+    },
+    {
+      "id": "get-forecast",
+      "name": "GetForecast",
+      "description": "Get 7-day weather forecast for a location",
+      "tags": ["weather", "forecast"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string"},
+          "days": {"type": "integer"}
+        }
+      }
+    }
+  ]
+}

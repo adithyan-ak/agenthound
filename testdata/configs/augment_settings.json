@@ -1,0 +1,17 @@
+{
+  "editor.fontSize": 14,
+  "augment.advanced": {
+    "mcpServers": {
+      "augment-context": {
+        "command": "npx",
+        "args": ["-y", "@augment/mcp-server"],
+        "env": {
+          "AUGMENT_API_KEY": "aug_xxxxxxxxxxxx"
+        }
+      },
+      "augment-remote": {
+        "url": "https://augment-mcp.example.com/v1"
+      }
+    }
+  }
+}

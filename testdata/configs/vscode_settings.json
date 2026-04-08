@@ -1,0 +1,16 @@
+{
+  "editor.fontSize": 14,
+  "mcp": {
+    "servers": {
+      "sqlite": {
+        "type": "stdio",
+        "command": "uvx",
+        "args": ["mcp-server-sqlite", "--db-path", "/tmp/test.db"]
+      },
+      "everything": {
+        "type": "http",
+        "url": "http://localhost:3002/mcp"
+      }
+    }
+  }
+}

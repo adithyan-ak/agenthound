@@ -1,0 +1,55 @@
+{
+  "name": "DataAnalyst",
+  "description": "AI-powered data analysis agent that delegates to WeatherAgent for weather data",
+  "provider": {
+    "organization": "AnalyticsCo"
+  },
+  "supportedInterfaces": [
+    {
+      "type": "A2A",
+      "url": "https://analyst.example.com/a2a",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true
+  },
+  "securitySchemes": {
+    "oauth": {
+      "type": "oauth2",
+      "flows": {
+        "clientCredentials": {
+          "tokenUrl": "https://auth.example.com/token",
+          "scopes": {
+            "read": "Read access",
+            "write": "Write access"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "oauth": ["read"]
+    }
+  ],
+  "skills": [
+    {
+      "id": "analyze-data",
+      "name": "AnalyzeData",
+      "description": "Analyze structured data and produce insights",
+      "tags": ["analysis", "data"],
+      "inputModes": ["application/json", "text/csv"],
+      "outputModes": ["application/json", "text/plain"]
+    },
+    {
+      "id": "generate-report",
+      "name": "GenerateReport",
+      "description": "Generate a comprehensive report from analysis results",
+      "tags": ["report", "analysis"],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/pdf", "text/html"]
+    }
+  ]
+}

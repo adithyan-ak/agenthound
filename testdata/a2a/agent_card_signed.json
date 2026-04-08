@@ -1,0 +1,44 @@
+{
+  "name": "SecureAgent",
+  "description": "A security-hardened agent with signed card",
+  "url": "https://secure.example.com/a2a",
+  "version": "2.0.0",
+  "provider": {
+    "organization": "SecureCorp"
+  },
+  "protocolVersion": "0.3.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true
+  },
+  "securitySchemes": {
+    "mtls": {
+      "type": "mutualTLS"
+    }
+  },
+  "security": [
+    {
+      "mtls": []
+    }
+  ],
+  "skills": [
+    {
+      "id": "secure-op",
+      "name": "SecureOperation",
+      "description": "Perform a secure operation",
+      "tags": ["security"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string"}
+        }
+      }
+    }
+  ],
+  "signatures": [
+    {
+      "protected": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImtleTEifQ",
+      "signature": "dGVzdC1zaWduYXR1cmUtdmFsdWU"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      "autoApprove": ["read_file", "list_directory"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    },
+    "web-search": {
+      "url": "http://localhost:3003/mcp",
+      "autoApprove": ["search"]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "git-mcp": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "/home/user/repo"],
+      "env": {
+        "GIT_TOKEN": "ghp_faketoken"
+      }
+    },
+    "jb-remote": {
+      "url": "https://jetbrains-mcp.example.com/api"
+    }
+  }
+}
