@@ -7,9 +7,108 @@
 
 ---
 
-## 1. Authentication System
+## 1. Pre-Phase Security Fixes (Audit Findings)
 
-### 1.1 Strategy
+Phase 5 absorbs the remaining security findings from the Phase 1-2 audit. These are resolved as part of the hardening work — not as separate tasks, but woven into the relevant sections below. This section summarizes the mapping.
+
+| Finding | Severity | Resolved In | Section |
+|---------|----------|-------------|---------|
+| **S1** Unauthenticated Cypher endpoint | CRITICAL | Auth middleware on all routes | §2.5, §2.6 |
+| **S2** Unauthenticated ingest endpoint | CRITICAL | Auth middleware on all routes | §2.5, §2.6 |
+| **S3** No auth on any endpoint | CRITICAL | Full auth system | §2 |
+| **S5** CORS AllowedOrigins: `*` | HIGH | CORS tightened to configured origins | §1.1 |
+| **S6** Internal error messages leaked | HIGH | Standardized error responses | §4.1 |
+| **S7** No rate limiting | HIGH | Rate limiting middleware | §1.2 |
+| **S9** Docker container runs as root | MEDIUM | Non-root container user | §1.3 |
+| **S10** DB ports exposed on 0.0.0.0 | MEDIUM | Bind to 127.0.0.1 | §1.4 |
+
+### 1.1 Tighten CORS to Configured Origins [S5, HIGH]
+
+**Problem:** `middleware/cors.go:11` — `AllowedOrigins: []string{"*"}` allows any website to hit the API. Once auth is added (JWT in cookies or headers), this becomes exploitable via cross-origin requests.
+
+**Fix:** Replace wildcard with configurable origin list:
+
+```go
+// middleware/cors.go
+func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
+    if len(allowedOrigins) == 0 {
+        allowedOrigins = []string{"http://localhost:8080"}
+    }
+    return cors.Handler(cors.Options{
+        AllowedOrigins:   allowedOrigins,
+        AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowedHeaders:   []string{"Authorization", "Content-Type"},
+        AllowCredentials: true,
+    })
+}
+```
+
+Add `AGENTHOUND_CORS_ORIGINS` env var (comma-separated). Default to `http://localhost:8080` (embedded UI only).
+
+**Verify:** `curl -H "Origin: https://evil.com" -I /api/v1/health` — no `Access-Control-Allow-Origin` header in response.
+
+### 1.2 Add Rate Limiting Middleware [S7, HIGH]
+
+**Problem:** No rate limiting on any endpoint. Expensive Cypher queries or rapid ingest requests can exhaust Neo4j/PG resources.
+
+**Fix:** Add `go-chi/httprate` middleware:
+
+```go
+// Global: 100 requests/minute per IP
+r.Use(httprate.LimitByIP(100, time.Minute))
+
+// Per-endpoint tighter limits:
+r.With(httprate.LimitByIP(10, time.Minute)).Post("/query", queryH.Handle)
+r.With(httprate.LimitByIP(20, time.Minute)).Post("/ingest", ingestH.Handle)
+```
+
+**Verify:** 101st request within 1 minute returns 429 Too Many Requests.
+
+### 1.3 Run Docker Container as Non-Root [S9, MEDIUM]
+
+**Problem:** `docker/Dockerfile` has no `USER` directive. Process runs as root, increasing blast radius on compromise.
+
+**Fix:** Add to the Dockerfile runtime stage:
+
+```dockerfile
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates && \
+    adduser -D -u 1001 agenthound
+COPY --from=builder /bin/agenthound /usr/local/bin/agenthound
+USER 1001
+EXPOSE 8080
+ENTRYPOINT ["agenthound"]
+CMD ["serve"]
+```
+
+**Verify:** `docker exec <container> whoami` returns `agenthound`, not `root`.
+
+### 1.4 Bind Database Ports to Localhost [S10, MEDIUM]
+
+**Problem:** `docker-compose.yml` uses short port syntax (`"7474:7474"`) which binds to `0.0.0.0`. Neo4j and PostgreSQL with hardcoded default credentials are accessible to anyone on the network.
+
+**Fix:** Change all development port bindings to localhost:
+
+```yaml
+services:
+  graph-db:
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+  app-db:
+    ports:
+      - "127.0.0.1:5432:5432"
+```
+
+The `agenthound` service connects via Docker network names (`graph-db:7687`, `app-db:5432`), so it doesn't need host-exposed ports at all. The port mappings are only for local development tooling (Neo4j Browser, psql).
+
+**Verify:** `nmap -p 7687 <host-ip>` from another machine shows port closed. `cypher-shell -a bolt://localhost:7687` still works.
+
+---
+
+## 2. Authentication System
+
+### 2.1 Strategy
 
 MVP uses username/password + API tokens. No SSO/SAML/OIDC (deferred to v0.3).
 
@@ -20,7 +119,7 @@ MVP uses username/password + API tokens. No SSO/SAML/OIDC (deferred to v0.3).
 | `analyst` | Read graph, run queries, trigger scans, view findings |
 | `viewer` | Read-only: view graph, run pre-built queries |
 
-### 1.2 Implementation Files
+### 2.2 Implementation Files
 
 ```
 internal/auth/
@@ -31,7 +130,7 @@ internal/auth/
 └── rbac.go            # Role-based access control checks
 ```
 
-### 1.3 Password Authentication
+### 2.3 Password Authentication
 
 ```go
 // POST /api/v1/auth/login
@@ -51,7 +150,7 @@ type LoginResponse struct {
 - JWT secret from `AGENTHOUND_JWT_SECRET` env var (required in production)
 - Refresh tokens (optional, 7-day expiry)
 
-### 1.4 API Token Authentication
+### 2.4 API Token Authentication
 
 For programmatic access (CLI, CI/CD):
 
@@ -72,7 +171,9 @@ type CreateTokenResponse struct {
 - Sent via `Authorization: Bearer ah_xxx` header
 - Last-used timestamp updated on each use
 
-### 1.5 Auth Middleware
+### 2.5 Auth Middleware
+
+**Note [S1/S2/S3 fix]:** This middleware resolves all three "unauthenticated endpoint" findings. Once applied to the router, every non-public endpoint requires a valid JWT or API token.
 
 ```go
 func AuthMiddleware(next http.Handler) http.Handler {
@@ -101,7 +202,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 }
 ```
 
-### 1.6 RBAC Middleware
+### 2.6 RBAC Middleware
 
 ```go
 func RequireRole(roles ...string) func(http.Handler) http.Handler {
@@ -131,7 +232,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 | `GET /api/v1/audit/*` | admin only |
 | `POST /api/v1/auth/users` | admin only |
 
-### 1.7 First-Run Setup
+### 2.7 First-Run Setup
 
 On first boot with empty users table:
 1. Create default admin user: `admin` / `agenthound` (logged to stdout)
@@ -140,9 +241,9 @@ On first boot with empty users table:
 
 ---
 
-## 2. Audit Logging
+## 3. Audit Logging
 
-### 2.1 What Gets Logged
+### 3.1 What Gets Logged
 
 Every API action logged to `audit_log` table:
 
@@ -159,7 +260,7 @@ Every API action logged to `audit_log` table:
 | `user.create` | username, role |
 | `user.delete` | username |
 
-### 2.2 Implementation
+### 3.2 Implementation
 
 ```go
 // internal/audit/logger.go
@@ -179,7 +280,7 @@ func (l *AuditLogger) Log(ctx context.Context, action string, details map[string
 }
 ```
 
-### 2.3 Audit API
+### 3.3 Audit API
 
 ```
 GET /api/v1/audit?action=ingest.upload&limit=100&offset=0
@@ -190,9 +291,11 @@ Admin-only endpoint.
 
 ---
 
-## 3. Error Handling & Graceful Degradation
+## 4. Error Handling & Graceful Degradation
 
-### 3.1 API Error Responses
+### 4.1 API Error Responses
+
+**Note [S6 fix]:** This section resolves the "internal error messages leaked to clients" finding. Currently, handlers pass raw `err.Error()` to clients (e.g., `graph.go:23`, `query.go:36`, `health.go:30`), which can expose Neo4j URIs, connection strings, and schema details. The standardized error format below replaces all raw error leakage.
 
 Standardized error format:
 
@@ -221,7 +324,24 @@ Error codes:
 | `POSTGRES_ERROR` | 503 | PostgreSQL unavailable |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
 
-### 3.2 Graceful Degradation
+**Implementation pattern:** Log full error server-side with `slog.Error(...)`, return generic message + request ID to the client:
+
+```go
+func writeInternalError(w http.ResponseWriter, r *http.Request, err error) {
+    reqID := middleware.GetReqID(r.Context())
+    slog.Error("internal error", "error", err, "request_id", reqID)
+    writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+        Error: ErrorDetail{
+            Code:    "INTERNAL_ERROR",
+            Message: "An internal error occurred. Reference: " + reqID,
+        },
+    })
+}
+```
+
+Replace every `writeError(w, 500, err.Error())` call across all handlers with `writeInternalError(w, r, err)`.
+
+### 4.2 Graceful Degradation
 
 | Failure | Behavior |
 |---------|----------|
@@ -231,7 +351,7 @@ Error codes:
 | Frontend asset missing | Go server returns 404. API still functional. |
 | Post-processing failure | Ingest succeeds (raw data saved). Post-processing retried on next ingest. |
 
-### 3.3 Structured Logging
+### 4.3 Structured Logging
 
 All log output via `slog` (Go 1.21+):
 
@@ -252,9 +372,9 @@ Format: JSON in production (`--log-format json`), text in development
 
 ---
 
-## 4. Documentation
+## 5. Documentation
 
-### 4.1 Files to Create
+### 5.1 Files to Create
 
 | File | Contents |
 |------|----------|
@@ -269,7 +389,7 @@ Format: JSON in production (`--log-format json`), text in development
 | `CHANGELOG.md` | v0.1.0 release notes |
 | `LICENSE` | Apache 2.0 |
 
-### 4.2 OpenAPI Spec
+### 5.2 OpenAPI Spec
 
 Generate OpenAPI 3.0 spec for all API endpoints:
 
@@ -303,7 +423,7 @@ paths:
 
 Use `swaggo/swag` or hand-write the spec. Serve at `GET /api/v1/docs`.
 
-### 4.3 README Quickstart
+### 5.3 README Quickstart
 
 ```markdown
 ## Quickstart (5 minutes)
@@ -327,9 +447,9 @@ open http://localhost:8080
 
 ---
 
-## 5. Comprehensive Testing
+## 6. Comprehensive Testing
 
-### 5.1 Test Coverage Targets
+### 6.1 Test Coverage Targets
 
 | Package | Target | Strategy |
 |---------|--------|----------|
@@ -344,7 +464,7 @@ open http://localhost:8080
 | `internal/auth/` | > 85% | Unit tests for all auth paths |
 | Overall | > 80% | `go test -coverprofile` |
 
-### 5.2 Integration Test Suite
+### 6.2 Integration Test Suite
 
 A full end-to-end test that:
 1. Starts Docker containers (Neo4j + PostgreSQL) via testcontainers-go
@@ -357,7 +477,7 @@ A full end-to-end test that:
 8. Tests API endpoints (health, nodes, edges, pathfinding)
 9. Tests auth flow (login, token, RBAC)
 
-### 5.3 E2E UI Tests (Playwright)
+### 6.3 E2E UI Tests (Playwright)
 
 Already defined in Phase 4. Full suite:
 - Dashboard loads with data
@@ -369,7 +489,7 @@ Already defined in Phase 4. Full suite:
 - Scan Manager
 - Query Library
 
-### 5.4 Security Tests
+### 6.4 Security Tests
 
 | Test | What It Validates |
 |------|-------------------|
@@ -386,9 +506,9 @@ Already defined in Phase 4. Full suite:
 
 ---
 
-## 6. Performance Testing
+## 7. Performance Testing
 
-### 6.1 Graph Scale Benchmarks
+### 7.1 Graph Scale Benchmarks
 
 | Scenario | Nodes | Edges | Target |
 |----------|-------|-------|--------|
@@ -397,7 +517,7 @@ Already defined in Phase 4. Full suite:
 | Large (enterprise) | ~5000 | ~20000 | Ingest < 30s, query < 2s |
 | Stress test | ~50000 | ~200000 | Ingest < 5min, query < 10s |
 
-### 6.2 Benchmark Tool
+### 7.2 Benchmark Tool
 
 ```go
 // cmd/agenthound/bench.go
@@ -405,7 +525,7 @@ Already defined in Phase 4. Full suite:
 // Generates synthetic graph data, ingests, runs queries, reports timings
 ```
 
-### 6.3 Frontend Performance
+### 7.3 Frontend Performance
 
 | Test | Metric | Target |
 |------|--------|--------|
@@ -419,36 +539,39 @@ Measure with Lighthouse and Chrome DevTools Performance tab.
 
 ---
 
-## 7. Security Review Checklist
+## 8. Security Review Checklist
 
 Self-audit before release:
 
-| # | Check | Status |
-|---|-------|--------|
-| 1 | No hardcoded secrets in source code | |
-| 2 | All Cypher queries use parameterized inputs (no string concatenation) | |
-| 3 | All SQL queries use parameterized inputs | |
-| 4 | Authentication required on all non-public API endpoints | |
-| 5 | RBAC enforced per endpoint | |
-| 6 | Passwords hashed with bcrypt (cost >= 12) | |
-| 7 | API tokens stored as SHA-256 hashes | |
-| 8 | JWT tokens have reasonable expiry (24h) | |
-| 9 | JWT secret is configurable via environment variable | |
-| 10 | Input validation on all API endpoints (max payload size) | |
-| 11 | Credential values from config collector are hashed by default | |
-| 12 | CORS configured appropriately (not `*` in production) | |
-| 13 | Docker containers don't run as root | |
-| 14 | Neo4j and PostgreSQL credentials configurable (not hardcoded) | |
-| 15 | No verbose error messages leak internal details to clients | |
-| 16 | Audit logging captures all security-relevant actions | |
-| 17 | Dependency versions pinned in go.mod | |
-| 18 | No known CVEs in dependencies (`govulncheck`) | |
+| # | Check | Audit Finding | Status |
+|---|-------|---------------|--------|
+| 1 | No hardcoded secrets in source code | — | |
+| 2 | All Cypher queries use parameterized inputs (no string concatenation) | — | |
+| 3 | All SQL queries use parameterized inputs | — | |
+| 4 | Authentication required on all non-public API endpoints | **S1, S2, S3** | |
+| 5 | RBAC enforced per endpoint | **S1** (admin-only Cypher) | |
+| 6 | Passwords hashed with bcrypt (cost >= 12) | — | |
+| 7 | API tokens stored as SHA-256 hashes | — | |
+| 8 | JWT tokens have reasonable expiry (24h) | — | |
+| 9 | JWT secret is configurable via environment variable | — | |
+| 10 | Input validation on all API endpoints (max payload size) | — | |
+| 11 | Credential values from config collector are hashed by default | — | |
+| 12 | CORS configured appropriately (not `*` in production) | **S5** | |
+| 13 | Docker containers don't run as root | **S9** | |
+| 14 | Neo4j and PostgreSQL credentials configurable (not hardcoded) | — | |
+| 15 | No verbose error messages leak internal details to clients | **S6** | |
+| 16 | Audit logging captures all security-relevant actions | — | |
+| 17 | Dependency versions pinned in go.mod | — | |
+| 18 | No known CVEs in dependencies (`govulncheck`) | — | |
+| 19 | Rate limiting on all endpoints, tighter on query/ingest | **S7** | |
+| 20 | Database ports bound to 127.0.0.1 in docker-compose | **S10** | |
+| 21 | APOC procedures restricted to apoc.merge.*, apoc.algo.* | **S4** (done in Phase 3) | |
 
 ---
 
-## 8. Release Artifacts
+## 9. Release Artifacts
 
-### 8.1 Docker Images
+### 9.1 Docker Images
 
 Published to GitHub Container Registry (GHCR):
 
@@ -459,7 +582,7 @@ ghcr.io/agenthound/agenthound:latest
 
 Multi-arch: `linux/amd64`, `linux/arm64`
 
-### 8.2 CLI Binaries
+### 9.2 CLI Binaries
 
 Cross-compiled binaries:
 
@@ -473,7 +596,7 @@ Cross-compiled binaries:
 
 Published as GitHub Release assets.
 
-### 8.3 Release CI/CD
+### 9.3 Release CI/CD
 
 ```yaml
 # .github/workflows/release.yml
@@ -515,7 +638,7 @@ jobs:
             ghcr.io/agenthound/agenthound:latest
 ```
 
-### 8.4 GoReleaser Config
+### 9.4 GoReleaser Config
 
 ```yaml
 # .goreleaser.yml
@@ -545,9 +668,9 @@ changelog:
 
 ---
 
-## 9. Demo Environment
+## 10. Demo Environment
 
-### 9.1 Synthetic Test Data
+### 10.1 Synthetic Test Data
 
 Create a rich demo dataset that showcases all AgentHound features:
 
@@ -568,7 +691,7 @@ The demo data includes:
 - **Unsigned A2A card:** 1 agent without JWS signatures
 - **Instruction file poisoning:** CLAUDE.md with suspicious patterns
 
-### 9.2 Demo Seed Script
+### 10.2 Demo Seed Script
 
 ```bash
 #!/bin/bash
@@ -590,12 +713,17 @@ echo "  agenthound query --prebuilt exfiltration-routes"
 
 ---
 
-## 10. Final v0.1.0 Acceptance Criteria
+## 11. Final v0.1.0 Acceptance Criteria
 
 The MVP is complete when ALL of these are true:
 
 | # | Criterion | Test |
 |---|-----------|------|
+| 0a | **[S5]** CORS rejects requests from unconfigured origins | `curl -H "Origin: https://evil.com"` gets no ACAO header |
+| 0b | **[S6]** No internal error details in API responses | 500 errors return generic message + request ID only |
+| 0c | **[S7]** Rate limiting returns 429 on excess requests | 101st request/min returns 429 |
+| 0d | **[S9]** Docker container runs as non-root user | `docker exec whoami` returns `agenthound` |
+| 0e | **[S10]** DB ports not accessible from remote hosts | `nmap -p 7687,5432 <host-ip>` from LAN shows closed |
 | 1 | `docker compose up` starts all containers, healthy in < 60s | Manual + CI |
 | 2 | `agenthound collect config --discover` enumerates local MCP configs | Manual test |
 | 3 | `agenthound collect mcp --discover` enumerates MCP servers | Manual test |
@@ -619,7 +747,7 @@ The MVP is complete when ALL of these are true:
 
 ---
 
-## 11. Post-Release Checklist
+## 12. Post-Release Checklist
 
 After v0.1.0 tag:
 
@@ -633,7 +761,7 @@ After v0.1.0 tag:
 
 ---
 
-## 12. Risks and Mitigations
+## 13. Risks and Mitigations
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|

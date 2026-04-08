@@ -7,7 +7,120 @@
 
 ---
 
-## 1. Architecture Overview
+## 1. Pre-Phase Fixes (Audit Findings)
+
+Before building post-processors, resolve these validated findings from the Phase 1–2 audit. Each is a prerequisite for correct Phase 3 operation.
+
+### 1.1 Fix APOC Node Writer — Property Updates + Rug-Pull Detection [F2, HIGH]
+
+**Problem:** `writeNodesAPOC` (`writer.go:80-83`) uses `apoc.merge.node(kinds, identProps, onCreateProps)` — the third argument only applies on CREATE. On MATCH (re-scan), properties are NOT updated and `previous_description_hash` is NOT preserved. The fallback path (`writer.go:104-105`) correctly does both.
+
+**Impact:** The default Docker deployment (APOC enabled) silently breaks property updates on re-ingest AND breaks rug-pull detection (pre-built query `rug-pull` returns nothing).
+
+**Fix:** Replace the APOC node write Cypher with a two-step approach that matches fallback semantics:
+
+```cypher
+UNWIND $nodes AS node
+CALL apoc.merge.node(node.kinds, {objectid: node.id}, node.properties, node.properties) YIELD node AS n
+SET n.previous_description_hash = CASE WHEN n.description_hash IS NOT NULL THEN n.description_hash ELSE null END,
+    n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()
+RETURN count(*) AS written
+```
+
+Note: `apoc.merge.node` 4th argument is `onMatchProps` (available since APOC 4.4). If 4-arg form is unavailable, abandon APOC for node writes and use the fallback path universally — the fallback is already correct.
+
+**Verify:** Ingest a scan, change a tool description, re-ingest. Confirm `previous_description_hash` differs from `description_hash`. Run `agenthound query --prebuilt rug-pull` and confirm the changed tool appears.
+
+### 1.2 Fix Label-less MATCH in Edge Writes [F6, HIGH]
+
+**Problem:** Both APOC and fallback edge write paths (`writer.go:162-164, 186-188`) use `MATCH (a {objectid: edge.source})` without a node label. Neo4j cannot use per-label uniqueness constraints/indexes for this pattern — it performs a full graph scan per MATCH. At 100K+ nodes, this is O(N) per edge × 2 MATCHes.
+
+**Fix — Option A (recommended):** Add `source_kinds` and `target_kinds` to the `model.Edge` struct. Collectors already know the kinds of source/target nodes. Use the first kind as a label hint in the MATCH clause:
+
+```cypher
+MATCH (a:MCPServer {objectid: edge.source})
+MATCH (b:MCPTool {objectid: edge.target})
+```
+
+Each edge kind has known source/target labels (e.g., `PROVIDES_TOOL` is always `MCPServer → MCPTool`). Build a static map in `writer.go` keyed by edge kind → (source_label, target_label).
+
+**Fix — Option B (simpler, less optimal):** Create a cross-label index on `objectid`:
+```cypher
+CREATE INDEX idx_objectid IF NOT EXISTS FOR (n) ON (n.objectid)
+```
+Note: Neo4j 4.4 doesn't support token-lookup or cross-label property indexes natively. This may require a composite approach — verify against Neo4j 4.4 docs before choosing this option.
+
+**Verify:** Run `PROFILE MATCH (a {objectid: 'test'}) RETURN a` before and after fix. Confirm index usage in query plan. Benchmark edge write time with 1000 edges.
+
+### 1.3 Move pkg/ Interfaces to internal/ [F1, MEDIUM]
+
+**Problem:** `pkg/collector/collector.go` imports `internal/model` and `pkg/analysis/postprocessor.go` imports `internal/graph`. The `pkg/` convention signals "importable by external consumers," but these interfaces are unusable externally because they depend on `internal/` types.
+
+**Fix:** Since AgentHound is a single-binary tool (no external plugin system planned), move both interfaces into `internal/`:
+
+- `pkg/collector/collector.go` → `internal/collector/collector.go` (merge with existing package)
+- `pkg/analysis/postprocessor.go` → `internal/analysis/postprocessor.go` (this is where Phase 3's implementation lives anyway)
+
+Update all imports. Remove the empty `pkg/` directory.
+
+**Verify:** `go build ./...` succeeds. `go vet ./...` clean.
+
+### 1.4 Extract Shared Bootstrap Function [F4, LOW]
+
+**Problem:** `serve.go:26-53` and `ingest.go:38-62` have identical Neo4j + PG + schema + migrations + component creation. Phase 3 adds `query.go` as a third consumer.
+
+**Fix:** Create `internal/cli/bootstrap.go`:
+
+```go
+type Infrastructure struct {
+    Neo4jDriver neo4j.DriverWithContext
+    PGPool      *pgxpool.Pool
+    Writer      *graph.Writer
+    Reader      *graph.Reader
+    ScanStore   *appdb.ScanStore
+    Pipeline    *ingest.Pipeline
+}
+
+func bootstrap(ctx context.Context, cfg *config.Config) (*Infrastructure, func(), error) {
+    // Connect Neo4j, PG, init schemas, create components
+    // Return cleanup function for deferred calls
+}
+```
+
+Refactor `serve.go`, `ingest.go`, and the new `query.go` to use `bootstrap()`.
+
+**Verify:** All three CLI commands function identically to before. `go test ./internal/cli/...` passes.
+
+### 1.5 Validate Configuration Eagerly [F5, LOW]
+
+**Problem:** `config.go:36-39` — `AGENTHOUND_API_PORT=banana` silently falls back to 8080. No validation on any config value.
+
+**Fix:** Add a `Validate() error` method to `Config` that checks:
+- `APIPort` parsed successfully and is in range 1-65535
+- `LogLevel` is one of: debug, info, warn, error
+- `Neo4jURI` starts with `bolt://` or `neo4j://`
+- `PostgresURI` starts with `postgres://` or `postgresql://`
+
+Call `cfg.Validate()` at the start of every CLI command. Return a clear error on invalid config.
+
+**Verify:** `AGENTHOUND_API_PORT=banana agenthound serve` prints a clear error and exits non-zero.
+
+### 1.6 Restrict APOC Procedures in Docker Compose [S4, HIGH]
+
+**Problem:** `docker-compose.yml:10` sets `NEO4J_dbms_security_procedures_unrestricted: apoc.*` — this allows ALL APOC procedures including `apoc.load.json('file:///etc/passwd')` and `apoc.load.json('http://internal/...')` for file read and SSRF. Combined with the unauthenticated Cypher endpoint, this is exploitable.
+
+**Fix:** Restrict to only the APOC procedures AgentHound actually uses:
+```yaml
+NEO4J_dbms_security_procedures_unrestricted: apoc.merge.*,apoc.algo.*
+```
+
+Phase 3 uses `apoc.merge.node`, `apoc.merge.relationship`, and `apoc.algo.dijkstra`. Nothing else needs to be unrestricted.
+
+**Verify:** `CALL apoc.load.json('file:///etc/passwd')` returns a permission error. `CALL apoc.merge.node(...)` still works.
+
+---
+
+## 2. Architecture Overview
 
 Post-processing runs **after each ingest**. It reads the current graph state from Neo4j, evaluates conditions, and writes composite edges that encode multi-hop attack semantics. This is the BloodHound pattern: raw edges collected → composite edges derived.
 
@@ -23,9 +136,9 @@ A2A → A2A → Agent → Server → ...   A2A ──CAN_REACH──> Resource (
 
 ---
 
-## 2. Post-Processor Framework
+## 3. Post-Processor Framework
 
-### 2.1 Files
+### 3.1 Files
 
 ```
 internal/analysis/
@@ -52,10 +165,12 @@ internal/analysis/
 └── analysis_test.go           # Tests
 ```
 
-### 2.2 PostProcessor Interface
+### 3.2 PostProcessor Interface
+
+**Note (F1 fix):** This interface now lives in `internal/analysis/postprocessor.go`, not `pkg/analysis/`. The `GraphDB` interface replaces direct `*graph.Reader` / `*graph.Writer` dependencies (see section 13.1).
 
 ```go
-// pkg/analysis/postprocessor.go (defined in Phase 1)
+// internal/analysis/postprocessor.go (moved from pkg/ per F1 fix)
 type PostProcessor interface {
     Name() string
     Dependencies() []string
@@ -70,7 +185,7 @@ type ProcessingStats struct {
 }
 ```
 
-### 2.3 Execution Engine
+### 3.3 Execution Engine
 
 ```go
 // internal/analysis/postprocessor.go
@@ -128,9 +243,9 @@ RETURN count(r) AS deleted
 
 ---
 
-## 3. Composite Edge Processors — Detailed Implementation
+## 4. Composite Edge Processors — Detailed Implementation
 
-### 3.1 HAS_ACCESS_TO (Tool → Resource)
+### 4.1 HAS_ACCESS_TO (Tool → Resource)
 
 **Meaning:** This MCPTool can read/write this MCPResource.
 
@@ -152,7 +267,7 @@ e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
 e.source_collector = 'mcp', e.risk_weight = 0.2
 ```
 
-### 3.2 CAN_EXECUTE (Tool → Host)
+### 4.2 CAN_EXECUTE (Tool → Host)
 
 **Meaning:** This tool can execute arbitrary commands on this host.
 
@@ -170,7 +285,7 @@ e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
 e.source_collector = 'mcp', e.risk_weight = 0.1
 ```
 
-### 3.3 SHADOWS (Tool → Tool Cross-Server)
+### 4.3 SHADOWS (Tool → Tool Cross-Server)
 
 **Meaning:** Tool description references or attempts to influence a tool on another server.
 
@@ -186,7 +301,7 @@ SET e.malicious_server = s1.name, e.victim_server = s2.name,
     e.source_collector = 'mcp', e.risk_weight = 0.4
 ```
 
-### 3.4 POISONED_DESCRIPTION (Tool Self-Edge)
+### 4.4 POISONED_DESCRIPTION (Tool Self-Edge)
 
 ```cypher
 MATCH (t:MCPTool)
@@ -196,7 +311,7 @@ SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
     e.source_collector = 'mcp'
 ```
 
-### 3.5 CAN_REACH (Agent → Resource) — THE Critical Edge
+### 4.5 CAN_REACH (Agent → Resource) — THE Critical Edge
 
 **Direct path:**
 ```cypher
@@ -234,7 +349,7 @@ SET e.via_credential = c.name, e.hops = 6, e.confidence = 0.6,
     e.evidence = 'Credential chain: ' + s1.name + ' (file access via ' + t1.name + ') → credential ' + c.name + ' → ' + s2.name + ' → ' + t2.name + ' → ' + r.uri
 ```
 
-### 3.6 CAN_EXFILTRATE_VIA (Agent → Outbound Tool)
+### 4.6 CAN_EXFILTRATE_VIA (Agent → Outbound Tool)
 
 ```cypher
 MATCH (a:AgentInstance)-[:CAN_REACH]->(r:MCPResource)
@@ -249,7 +364,7 @@ SET e.data_source = r.uri, e.data_sensitivity = r.sensitivity,
     e.evidence = 'Agent can reach ' + r.uri + ' AND exfiltrate via ' + outbound.name
 ```
 
-### 3.7 CAN_IMPERSONATE (A2A → A2A)
+### 4.7 CAN_IMPERSONATE (A2A → A2A)
 
 Implemented in Go (not Cypher) because it requires TF-IDF cosine similarity:
 
@@ -279,7 +394,7 @@ func (p *CanImpersonateProcessor) Process(ctx context.Context, db GraphDB, scanI
 }
 ```
 
-### 3.8 Cross-Protocol CAN_REACH (A2A → MCP)
+### 4.8 Cross-Protocol CAN_REACH (A2A → MCP)
 
 ```cypher
 MATCH (ext:A2AAgent)-[:DELEGATES_TO*1..3]->(int:A2AAgent)
@@ -296,9 +411,9 @@ SET e.cross_protocol = true, e.via_mcp_server = s.name, e.via_mcp_tool = t.name,
 
 ---
 
-## 4. Risk Scoring (`internal/analysis/riskscore/`)
+## 5. Risk Scoring (`internal/analysis/riskscore/`)
 
-### 4.1 Edge Risk Weights (`weights.go`)
+### 5.1 Edge Risk Weights (`weights.go`)
 
 Assigned during post-processing on every edge:
 
@@ -318,7 +433,7 @@ Assigned during post-processing on every edge:
 
 Lower weight = easier to exploit. Dijkstra finds minimum-weight path = maximum-risk path.
 
-### 4.2 Node Risk Scores
+### 5.2 Node Risk Scores
 
 **AgentInstance risk (0–100):**
 ```
@@ -341,7 +456,7 @@ server_risk = 0.35 * auth_strength + 0.25 * tool_risk + 0.20 * exposure + 0.20 *
 tool_risk = 0.30 * capability_class + 0.25 * poisoning_score + 0.25 * access_sensitivity + 0.20 * input_validation
 ```
 
-### 4.3 Resource Sensitivity Auto-Classification (`sensitivity/classifier.go`)
+### 5.3 Resource Sensitivity Auto-Classification (`sensitivity/classifier.go`)
 
 | URI Pattern | Sensitivity |
 |------------|-------------|
@@ -356,9 +471,9 @@ tool_risk = 0.30 * capability_class + 0.25 * poisoning_score + 0.25 * access_sen
 
 ---
 
-## 5. Pathfinding API Endpoints
+## 6. Pathfinding API Endpoints
 
-### 5.1 `POST /api/v1/analysis/shortest-path`
+### 6.1 `POST /api/v1/analysis/shortest-path`
 
 **Request:**
 ```json
@@ -407,7 +522,7 @@ ORDER BY hops ASC
 LIMIT 10
 ```
 
-### 5.2 `POST /api/v1/analysis/all-paths`
+### 6.2 `POST /api/v1/analysis/all-paths`
 
 Bounded path enumeration:
 ```cypher
@@ -418,7 +533,7 @@ RETURN p
 LIMIT $limit
 ```
 
-### 5.3 `POST /api/v1/analysis/weighted-path`
+### 6.3 `POST /api/v1/analysis/weighted-path`
 
 Uses APOC Dijkstra for path of least resistance:
 ```cypher
@@ -432,7 +547,7 @@ RETURN path, weight
 LIMIT 10
 ```
 
-### 5.4 `GET /api/v1/analysis/findings`
+### 6.4 `GET /api/v1/analysis/findings`
 
 Returns all composite edges as security findings:
 ```go
@@ -459,7 +574,7 @@ Severity mapping:
 - WEAK_AUTH (static key): **Medium**
 - CAN_IMPERSONATE: **Medium**
 
-### 5.5 `GET /api/v1/analysis/prebuilt/{query_id}`
+### 6.5 `GET /api/v1/analysis/prebuilt/{query_id}`
 
 Pre-built query library — 17 queries from PRD `05-attack-paths.md`:
 
@@ -498,9 +613,9 @@ type PreBuiltQuery struct {
 
 ---
 
-## 6. CLI Query Mode
+## 7. CLI Query Mode
 
-### 6.1 `agenthound query`
+### 7.1 `agenthound query`
 
 ```bash
 # Raw Cypher query
@@ -522,7 +637,7 @@ agenthound query --findings --severity critical
 
 ---
 
-## 7. Integration with Ingest Pipeline
+## 8. Integration with Ingest Pipeline
 
 Update `internal/ingest/pipeline.go` to trigger post-processing after each ingest:
 
@@ -542,7 +657,7 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*IngestR
 
 ---
 
-## 8. Tests
+## 9. Tests
 
 ### Unit Tests
 
@@ -578,10 +693,16 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*IngestR
 
 ---
 
-## 9. Success Metrics / Exit Criteria
+## 10. Success Metrics / Exit Criteria
 
 | # | Criterion | Verification |
 |---|-----------|-------------|
+| 0a | **[F2]** APOC and fallback node write paths produce identical graph state | Ingest → re-ingest with changed description → `previous_description_hash` preserved in both paths |
+| 0b | **[F6]** Edge writes use labeled MATCH (or cross-label index) | `PROFILE` query shows index usage, not AllNodesScan |
+| 0c | **[F1]** No interfaces remain in `pkg/` — all moved to `internal/` | `ls pkg/` is empty or absent. `go build ./...` passes |
+| 0d | **[F4]** Single `bootstrap()` function used by serve, ingest, and query CLI | Code review: no duplicated Neo4j/PG setup in CLI commands |
+| 0e | **[F5]** Invalid config values produce clear errors | `AGENTHOUND_API_PORT=banana agenthound serve` exits with descriptive error |
+| 0f | **[S4]** APOC restricted to `apoc.merge.*,apoc.algo.*` | `CALL apoc.load.json('file:///etc/passwd')` returns permission denied |
 | 1 | After scanning a test environment with known attack paths, AgentHound correctly identifies all paths | Pre-seeded graph, run all pre-built queries, verify expected results |
 | 2 | CAN_REACH edges exist for every Agent→Resource path that traverses trust + capability edges | Count CAN_REACH edges matches expected |
 | 3 | CAN_EXFILTRATE_VIA edges exist where agent reaches sensitive data AND outbound channel | At least 1 exfiltration finding in test data |
@@ -596,7 +717,7 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*IngestR
 
 ---
 
-## 10. Risks and Mitigations
+## 11. Risks and Mitigations
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
@@ -608,7 +729,7 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*IngestR
 
 ---
 
-## 11. External References
+## 12. External References
 
 | Resource | URL | Relevance |
 |----------|-----|-----------|
@@ -620,9 +741,9 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*IngestR
 
 ---
 
-## 12. Additional Processors & Infrastructure
+## 13. Additional Processors & Infrastructure
 
-### 12.1 GraphDB Interface Definition
+### 13.1 GraphDB Interface Definition
 
 The `GraphDB` type referenced by all post-processors is defined in `internal/graph/`:
 
@@ -639,7 +760,7 @@ type GraphDB interface {
 
 `UpdateNodeProperties` is needed by `RiskScoreProcessor` to write risk scores back to nodes. `ExecuteWrite` runs post-processor Cypher that creates composite edges.
 
-### 12.2 WEAK_AUTH Processor (Missing from Main List)
+### 13.2 WEAK_AUTH Processor (Missing from Main List)
 
 Add `processors/weak_auth.go`:
 
@@ -660,7 +781,7 @@ SET a.weak_auth = true, a.weak_auth_severity = 'critical'
 
 Note: WEAK_AUTH is implemented as a **node property** rather than an edge, since it's a property of the server/agent itself. The `AllowedEdgeKinds` entry has been removed from Phase 1.
 
-### 12.3 Rug Pull / Historical Property Tracking
+### 13.3 Rug Pull / Historical Property Tracking
 
 To support rug-pull detection (comparing `description_hash` across scans), the ingest writer must preserve the previous hash before overwriting:
 
@@ -678,7 +799,7 @@ SET n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()
 
 The `ON MATCH SET` clause runs only when the node already exists, preserving the old `description_hash` as `previous_description_hash` before the new properties overwrite it.
 
-### 12.4 Scan Management Endpoints
+### 13.4 Scan Management Endpoints
 
 Add to Phase 1's API router and implement handlers:
 

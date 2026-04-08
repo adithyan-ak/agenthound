@@ -7,7 +7,57 @@
 
 ---
 
-## 1. Tech Stack
+## 1. Pre-Phase Fixes (Audit Findings)
+
+Before building the UI, resolve these findings that directly affect Phase 4 deliverables.
+
+### 1.1 Build Pipeline Scaffolding [F3]
+
+Phase 4 creates the full UI build pipeline. Ensure all four build paths are updated consistently:
+
+| Build Path | What to Add |
+|-----------|-------------|
+| **Makefile** | `ui-build` target: `cd ui && pnpm install && pnpm build`, copy `ui/dist` → `internal/api/ui/dist` |
+| **Dockerfile** | Node.js stage: `FROM node:20-alpine AS ui-builder`, `pnpm install && pnpm build`, copy dist into Go builder stage |
+| **CI (`ci.yml`)** | Add `setup-node` step, `pnpm install && pnpm build` before Go build. Cache `node_modules`. |
+| **`make build`** | Depend on `ui-build` so `go build` always has fresh `internal/api/ui/dist/` for `go:embed` |
+
+Add `//go:embed all:ui/dist` to `internal/api/server.go` with SPA fallback routing (see section 5.2).
+
+**Verify:** `make build` from clean checkout produces a binary that serves the UI at `http://localhost:8080`. `docker build` also works. CI builds pass.
+
+### 1.2 Cap API Query Limits [S7, MEDIUM]
+
+**Problem:** `handlers/graph.go:72-82` — `parseIntParam` accepts any positive integer. `?limit=999999999` causes Neo4j to attempt returning nearly a billion rows. Trivial resource exhaustion.
+
+**Fix:** Add a max cap to `parseIntParam`:
+
+```go
+const maxLimit = 10000
+
+func parseIntParam(r *http.Request, key string, defaultVal int) int {
+    s := r.URL.Query().Get(key)
+    if s == "" {
+        return defaultVal
+    }
+    v, err := strconv.Atoi(s)
+    if err != nil || v <= 0 {
+        return defaultVal
+    }
+    if v > maxLimit {
+        return maxLimit
+    }
+    return v
+}
+```
+
+This is done in Phase 4 because the frontend will be the primary consumer of these endpoints, and the limit values should match what the UI actually needs (default 10,000 nodes, 50,000 edges per the `useGraphData` hook).
+
+**Verify:** `curl /api/v1/graph/nodes?limit=999999999` returns at most 10,000 nodes.
+
+---
+
+## 2. Tech Stack
 
 | Component | Package | Version | Purpose |
 |-----------|---------|---------|---------|
@@ -31,7 +81,7 @@
 
 ---
 
-## 2. Project Structure
+## 3. Project Structure
 
 ```
 ui/
@@ -119,9 +169,9 @@ ui/
 
 ---
 
-## 3. Core Views — Detailed Implementation
+## 4. Core Views — Detailed Implementation
 
-### 3.1 Dashboard (`/`)
+### 4.1 Dashboard (`/`)
 
 Landing page. At-a-glance security posture.
 
@@ -140,7 +190,7 @@ Landing page. At-a-glance security posture.
 | `TopFindings` | Top 10 findings by severity | List with severity badges |
 | `RecentScans` | Last 5 scans with status | Table |
 
-### 3.2 Graph Explorer (`/graph`)
+### 4.2 Graph Explorer (`/graph`)
 
 The primary view. Interactive graph visualization.
 
@@ -279,7 +329,7 @@ function buildGraph(apiNodes: APINode[], apiEdges: APIEdge[]): MultiDirectedGrap
 - Settings: `gravity: 1, scalingRatio: 2, strongGravityMode: true`
 - Provide "Re-layout" button to rerun
 
-### 3.3 Pathfinder (`/pathfinder`)
+### 4.3 Pathfinder (`/pathfinder`)
 
 Dedicated attack path discovery.
 
@@ -315,7 +365,7 @@ function highlightPath(graph: Graph, pathNodeIds: string[], pathEdgeIds: string[
 }
 ```
 
-### 3.4 Entity Inspector (Right Sidebar)
+### 4.4 Entity Inspector (Right Sidebar)
 
 Slides in when a node is clicked. Shows:
 
@@ -326,7 +376,7 @@ Slides in when a node is clicked. Shows:
 5. **Findings:** Security findings related to this node
 6. **Actions:** "View in Graph", "Find paths from/to", "Raw JSON"
 
-### 3.5 Scan Manager (`/scans`)
+### 4.5 Scan Manager (`/scans`)
 
 - "New Scan" button → dialog with scan type selection (MCP/A2A/Config/Full)
 - Scan history table: timestamp, type, status, node/edge counts
@@ -334,7 +384,7 @@ Slides in when a node is clicked. Shows:
 
 **Note:** In MVP, scans are triggered via CLI. The UI calls `POST /api/v1/scans` which queues a scan — the API server runs the collector as a subprocess.
 
-### 3.6 Pre-Built Query Library (`/queries`)
+### 4.6 Pre-Built Query Library (`/queries`)
 
 Card-based grid of 17 pre-built queries from Phase 3:
 
@@ -350,9 +400,9 @@ Click a query → runs it → shows results (table or graph view).
 
 ---
 
-## 4. API Integration
+## 5. API Integration
 
-### 4.1 API Client (`api/client.ts`)
+### 5.1 API Client (`api/client.ts`)
 
 ```typescript
 import ky from "ky";
@@ -363,7 +413,7 @@ export const api = ky.create({
 });
 ```
 
-### 4.2 React Query Hooks
+### 5.2 React Query Hooks
 
 ```typescript
 // hooks/useGraph.ts
@@ -391,9 +441,9 @@ export function useShortestPath() {
 
 ---
 
-## 5. Embedding in Go Binary
+## 6. Embedding in Go Binary
 
-### 5.1 Build Process
+### 6.1 Build Process
 
 ```bash
 # In Makefile
@@ -408,7 +458,7 @@ build: ui-build
 	go build -o bin/agenthound ./cmd/agenthound
 ```
 
-### 5.2 Go Embed
+### 6.2 Go Embed
 
 The Makefile copies the Vite build output into `internal/api/ui/dist/` before `go build`,
 because Go's `//go:embed` forbids `..` path elements — patterns must resolve within the
@@ -459,7 +509,7 @@ func (s *Server) setupRoutes() {
 }
 ```
 
-### 5.3 Vite Config for Embedding
+### 6.3 Vite Config for Embedding
 
 ```typescript
 // vite.config.ts
@@ -482,7 +532,7 @@ In production: Built SPA embedded in Go binary, served from :8080
 
 ---
 
-## 6. Performance Targets
+## 7. Performance Targets
 
 | Metric | Target | How to Achieve |
 |--------|--------|----------------|
@@ -502,7 +552,7 @@ In production: Built SPA embedded in Go binary, served from :8080
 
 ---
 
-## 7. Tests
+## 8. Tests
 
 ### Component Tests (Vitest + React Testing Library)
 
@@ -529,10 +579,14 @@ In production: Built SPA embedded in Go binary, served from :8080
 
 ---
 
-## 8. Success Metrics / Exit Criteria
+## 9. Success Metrics / Exit Criteria
 
 | # | Criterion | Verification |
 |---|-----------|-------------|
+| 0a | **[F3]** `make build` from clean checkout produces binary with embedded UI | `curl http://localhost:8080` returns HTML |
+| 0b | **[F3]** `docker build` includes UI assets without manual steps | `docker run` serves UI at :8080 |
+| 0c | **[F3]** CI pipeline builds UI before Go binary | CI green with UI assets in artifact |
+| 0d | **[S7]** API enforces max limit on query parameters | `?limit=999999999` returns at most 10,000 results |
 | 1 | User opens `http://localhost:8080`, sees Dashboard with correct stats | E2E test |
 | 2 | Graph Explorer renders all nodes from seeded data | Sigma.js canvas shows nodes |
 | 3 | Clicking a node opens Entity Inspector with correct properties | E2E test |
@@ -546,7 +600,7 @@ In production: Built SPA embedded in Go binary, served from :8080
 
 ---
 
-## 9. Risks and Mitigations
+## 10. Risks and Mitigations
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
@@ -558,7 +612,7 @@ In production: Built SPA embedded in Go binary, served from :8080
 
 ---
 
-## 10. External References
+## 11. External References
 
 | Resource | URL | Relevance |
 |----------|-----|-----------|
