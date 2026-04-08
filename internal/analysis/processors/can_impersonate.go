@@ -9,7 +9,6 @@ import (
 	"github.com/adithyan-ak/agenthound/internal/analysis/similarity"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	"github.com/adithyan-ak/agenthound/pkg/analysis"
 )
 
 const impersonationThreshold = 0.8
@@ -19,19 +18,19 @@ type CanImpersonate struct{}
 func (p *CanImpersonate) Name() string          { return "can_impersonate" }
 func (p *CanImpersonate) Dependencies() []string { return nil }
 
-func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID string) (analysis.ProcessingStats, error) {
+func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
 	start := time.Now()
 
 	agents, err := p.loadAgents(ctx, db)
 	if err != nil {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, fmt.Errorf("load agents: %w", err)
 	}
 
 	if len(agents) < 2 {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, nil
@@ -39,7 +38,7 @@ func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID s
 
 	docs, err := p.buildDocuments(ctx, db, agents)
 	if err != nil {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, fmt.Errorf("build documents: %w", err)
@@ -108,7 +107,7 @@ func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID s
 	}
 
 	if len(edges) == 0 {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, nil
@@ -116,13 +115,13 @@ func (p *CanImpersonate) Process(ctx context.Context, db graph.GraphDB, scanID s
 
 	written, err := db.WriteEdges(ctx, edges, scanID)
 	if err != nil {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, fmt.Errorf("write edges: %w", err)
 	}
 
-	return analysis.ProcessingStats{
+	return graph.ProcessingStats{
 		ProcessorName: p.Name(),
 		EdgesCreated:  written,
 		Duration:      time.Since(start),

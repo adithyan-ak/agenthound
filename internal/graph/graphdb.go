@@ -3,10 +3,27 @@ package graph
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/model"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
+
+// PostProcessor computes composite edges from raw graph data.
+type PostProcessor interface {
+	Name() string
+	Dependencies() []string
+	Process(ctx context.Context, db GraphDB, scanID string) (ProcessingStats, error)
+}
+
+// ProcessingStats reports what a processor did.
+type ProcessingStats struct {
+	ProcessorName string        `json:"processor_name"`
+	EdgesCreated  int           `json:"edges_created"`
+	NodesUpdated  int           `json:"nodes_updated"`
+	Duration      time.Duration `json:"duration"`
+	Error         string        `json:"error,omitempty"`
+}
 
 // GraphDB abstracts graph read/write operations for post-processors.
 type GraphDB interface {

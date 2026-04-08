@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/adithyan-ak/agenthound/pkg/analysis"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 )
 
@@ -13,7 +12,7 @@ type HasAccessTo struct{}
 func (p *HasAccessTo) Name() string          { return "has_access_to" }
 func (p *HasAccessTo) Dependencies() []string { return nil }
 
-func (p *HasAccessTo) Process(ctx context.Context, db graph.GraphDB, scanID string) (analysis.ProcessingStats, error) {
+func (p *HasAccessTo) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
 	start := time.Now()
 
 	// Capability match: database_access capability + DB resource URI schemes
@@ -76,7 +75,7 @@ RETURN count(*) AS written`
 	for _, cypher := range []string{capDBCypher, capFileCypher, descCypher} {
 		n, err := db.ExecuteWrite(ctx, cypher, params)
 		if err != nil {
-			return analysis.ProcessingStats{
+			return graph.ProcessingStats{
 				ProcessorName: p.Name(),
 				Duration:      time.Since(start),
 			}, err
@@ -84,7 +83,7 @@ RETURN count(*) AS written`
 		total += n
 	}
 
-	return analysis.ProcessingStats{
+	return graph.ProcessingStats{
 		ProcessorName: p.Name(),
 		EdgesCreated:  total,
 		Duration:      time.Since(start),

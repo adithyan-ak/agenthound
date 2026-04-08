@@ -6,11 +6,10 @@ import (
 	"log/slog"
 
 	"github.com/adithyan-ak/agenthound/internal/graph"
-	pkganalysis "github.com/adithyan-ak/agenthound/pkg/analysis"
 )
 
-type PostProcessor = pkganalysis.PostProcessor
-type ProcessingStats = pkganalysis.ProcessingStats
+type PostProcessor = graph.PostProcessor
+type ProcessingStats = graph.ProcessingStats
 
 func RunPostProcessors(ctx context.Context, db graph.GraphDB, scanID string, collectors []string) ([]ProcessingStats, error) {
 	processors := allProcessors()

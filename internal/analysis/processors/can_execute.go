@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/adithyan-ak/agenthound/pkg/analysis"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 )
 
@@ -13,7 +12,7 @@ type CanExecute struct{}
 func (p *CanExecute) Name() string          { return "can_execute" }
 func (p *CanExecute) Dependencies() []string { return nil }
 
-func (p *CanExecute) Process(ctx context.Context, db graph.GraphDB, scanID string) (analysis.ProcessingStats, error) {
+func (p *CanExecute) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
 	start := time.Now()
 
 	cypher := `
@@ -34,13 +33,13 @@ RETURN count(*) AS written`
 
 	n, err := db.ExecuteWrite(ctx, cypher, map[string]any{"scan_id": scanID})
 	if err != nil {
-		return analysis.ProcessingStats{
+		return graph.ProcessingStats{
 			ProcessorName: p.Name(),
 			Duration:      time.Since(start),
 		}, err
 	}
 
-	return analysis.ProcessingStats{
+	return graph.ProcessingStats{
 		ProcessorName: p.Name(),
 		EdgesCreated:  n,
 		Duration:      time.Since(start),

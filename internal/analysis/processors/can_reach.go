@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/graph"
-	"github.com/adithyan-ak/agenthound/pkg/analysis"
 )
 
 type CanReach struct{}
@@ -13,7 +12,7 @@ type CanReach struct{}
 func (p *CanReach) Name() string          { return "can_reach" }
 func (p *CanReach) Dependencies() []string { return []string{"has_access_to"} }
 
-func (p *CanReach) Process(ctx context.Context, db graph.GraphDB, scanID string) (analysis.ProcessingStats, error) {
+func (p *CanReach) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
 	start := time.Now()
 
 	directCypher := `
@@ -47,7 +46,7 @@ RETURN count(*) AS written`
 	for _, cypher := range []string{directCypher, credChainCypher} {
 		n, err := db.ExecuteWrite(ctx, cypher, params)
 		if err != nil {
-			return analysis.ProcessingStats{
+			return graph.ProcessingStats{
 				ProcessorName: p.Name(),
 				Duration:      time.Since(start),
 			}, err
@@ -55,7 +54,7 @@ RETURN count(*) AS written`
 		total += n
 	}
 
-	return analysis.ProcessingStats{
+	return graph.ProcessingStats{
 		ProcessorName: p.Name(),
 		EdgesCreated:  total,
 		Duration:      time.Since(start),

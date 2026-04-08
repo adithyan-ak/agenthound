@@ -8,7 +8,6 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/analysis/riskscore"
 	"github.com/adithyan-ak/agenthound/internal/graph"
-	"github.com/adithyan-ak/agenthound/pkg/analysis"
 )
 
 type RiskScore struct{}
@@ -29,7 +28,7 @@ func (p *RiskScore) Dependencies() []string {
 	}
 }
 
-func (p *RiskScore) Process(ctx context.Context, db graph.GraphDB, scanID string) (analysis.ProcessingStats, error) {
+func (p *RiskScore) Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error) {
 	start := time.Now()
 	var updated int
 
@@ -47,7 +46,7 @@ func (p *RiskScore) Process(ctx context.Context, db graph.GraphDB, scanID string
 	for _, s := range scorers {
 		n, err := scoreNodes(ctx, db, s.kind, s.fn)
 		if err != nil {
-			return analysis.ProcessingStats{
+			return graph.ProcessingStats{
 				ProcessorName: p.Name(),
 				NodesUpdated:  updated,
 				Duration:      time.Since(start),
@@ -56,7 +55,7 @@ func (p *RiskScore) Process(ctx context.Context, db graph.GraphDB, scanID string
 		updated += n
 	}
 
-	return analysis.ProcessingStats{
+	return graph.ProcessingStats{
 		ProcessorName: p.Name(),
 		NodesUpdated:  updated,
 		Duration:      time.Since(start),
