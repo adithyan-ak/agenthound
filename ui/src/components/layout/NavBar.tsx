@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -7,9 +7,11 @@ import {
   ScanSearch,
   BookOpen,
   Shield,
+  LogOut,
 } from "lucide-react";
 import { api } from "@/api/client";
 import type { HealthResponse } from "@/api/types";
+import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -21,6 +23,9 @@ const navItems = [
 ];
 
 export function NavBar() {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.get("health").json<HealthResponse>(),
@@ -28,6 +33,11 @@ export function NavBar() {
   });
 
   const isHealthy = health?.status === "healthy";
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <header className="flex h-12 items-center border-b bg-card px-4">
@@ -55,17 +65,33 @@ export function NavBar() {
           </NavLink>
         ))}
       </nav>
-      <div className="ml-auto flex items-center gap-2">
-        <div
-          className={cn(
-            "h-2 w-2 rounded-full",
-            isHealthy ? "bg-green-500" : "bg-red-500",
-          )}
-          title={isHealthy ? "All systems operational" : "Service degraded"}
-        />
-        <span className="text-xs text-muted-foreground">
-          {isHealthy ? "Healthy" : "Degraded"}
-        </span>
+      <div className="ml-auto flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              "h-2 w-2 rounded-full",
+              isHealthy ? "bg-green-500" : "bg-red-500",
+            )}
+            title={isHealthy ? "All systems operational" : "Service degraded"}
+          />
+          <span className="text-xs text-muted-foreground">
+            {isHealthy ? "Healthy" : "Degraded"}
+          </span>
+        </div>
+        {user && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {user.username}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
+              title="Sign out"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

@@ -14,8 +14,9 @@ COPY --from=ui-builder /ui/dist ./internal/api/ui/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/agenthound ./cmd/agenthound
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates && adduser -D -u 1001 agenthound
 COPY --from=builder /bin/agenthound /usr/local/bin/agenthound
 EXPOSE 8080
+USER 1001
 ENTRYPOINT ["agenthound"]
 CMD ["serve"]

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/adithyan-ak/agenthound/internal/appdb"
@@ -24,30 +25,30 @@ func (h *ScanHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 	scans, err := h.scanStore.ListScans(r.Context(), limit, offset)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list scans: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("list scans: %w", err))
 		return
 	}
 	if scans == nil {
 		scans = []model.Scan{}
 	}
-	writeJSON(w, http.StatusOK, scans)
+	WriteJSON(w, http.StatusOK, scans)
 }
 
 func (h *ScanHandler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "scan id is required")
+		WriteValidationError(w, "scan id is required")
 		return
 	}
 
 	scan, err := h.scanStore.GetScan(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "scan not found")
+			WriteNotFound(w, "scan not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get scan: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("get scan: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, scan)
+	WriteJSON(w, http.StatusOK, scan)
 }

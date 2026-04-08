@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -20,10 +20,10 @@ func NewGraphHandler(reader *graph.Reader) *GraphHandler {
 func (h *GraphHandler) HandleStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.reader.GetStats(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteInternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, stats)
+	WriteJSON(w, http.StatusOK, stats)
 }
 
 func (h *GraphHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
@@ -32,24 +32,24 @@ func (h *GraphHandler) HandleListNodes(w http.ResponseWriter, r *http.Request) {
 
 	nodes, err := h.reader.ListNodes(r.Context(), kind, limit)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteInternalError(w, r, fmt.Errorf("list nodes: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, nodes)
+	WriteJSON(w, http.StatusOK, nodes)
 }
 
 func (h *GraphHandler) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	node, edges, err := h.reader.GetNode(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteInternalError(w, r, err)
 		return
 	}
 	if node == nil {
-		writeError(w, http.StatusNotFound, "node not found")
+		WriteNotFound(w, "node not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	WriteJSON(w, http.StatusOK, map[string]any{
 		"node":  node,
 		"edges": edges,
 	})
@@ -63,10 +63,10 @@ func (h *GraphHandler) HandleListEdges(w http.ResponseWriter, r *http.Request) {
 
 	edges, err := h.reader.ListEdges(r.Context(), kind, source, target, limit)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		WriteInternalError(w, r, fmt.Errorf("list edges: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, edges)
+	WriteJSON(w, http.StatusOK, edges)
 }
 
 const maxQueryLimit = 10000
@@ -84,16 +84,4 @@ func parseIntParam(r *http.Request, key string, defaultVal int) int {
 		return maxQueryLimit
 	}
 	return v
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

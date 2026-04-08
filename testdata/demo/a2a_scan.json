@@ -1,0 +1,386 @@
+{
+  "meta": {
+    "version": 1,
+    "type": "agenthound-ingest",
+    "collector": "a2a",
+    "collector_version": "0.1.0",
+    "timestamp": "2026-04-08T12:10:00Z",
+    "scan_id": "scan-demo-a2a-001"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "kinds": ["A2AAgent"],
+        "properties": {
+          "name": "data-pipeline-agent",
+          "description": "Internal data pipeline agent that orchestrates ETL workflows and queries production databases",
+          "url": "https://data-pipeline.internal.example.com",
+          "provider": "InternalTeam",
+          "version": "2.1.0",
+          "protocol_versions": ["0.3.0", "1.0"],
+          "capabilities": ["streaming", "pushNotifications"],
+          "security_schemes": ["bearer"],
+          "auth_method": "bearer",
+          "is_signed": true,
+          "signature_valid": true,
+          "card_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          "objectid": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a"
+        }
+      },
+      {
+        "id": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d",
+        "kinds": ["A2AAgent"],
+        "properties": {
+          "name": "external-assistant",
+          "description": "Third-party AI assistant from an external vendor with broad access capabilities",
+          "url": "https://assistant.external-vendor.com",
+          "provider": "ExternalVendorCorp",
+          "version": "1.0.0",
+          "protocol_versions": ["0.3.0"],
+          "capabilities": ["streaming"],
+          "security_schemes": ["none"],
+          "auth_method": "none",
+          "is_signed": false,
+          "signature_valid": false,
+          "card_hash": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+          "objectid": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d"
+        }
+      },
+      {
+        "id": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "kinds": ["A2AAgent"],
+        "properties": {
+          "name": "admin-bot",
+          "description": "Internal admin bot for service deployment, restarts, and log retrieval across infrastructure",
+          "url": "https://admin-bot.internal.example.com",
+          "provider": "InternalTeam",
+          "version": "1.5.0",
+          "protocol_versions": ["1.0"],
+          "capabilities": ["streaming", "pushNotifications"],
+          "security_schemes": ["bearer", "apiKey"],
+          "auth_method": "bearer",
+          "is_signed": true,
+          "signature_valid": true,
+          "card_hash": "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+          "objectid": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50"
+        }
+      },
+      {
+        "id": "sha256:596395e0e42fec8771dceef7e655437e8dd81923e34e239e7afc3167f1577ff2",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "run-etl",
+          "name": "Run ETL Pipeline",
+          "description": "Execute an ETL pipeline to extract, transform, and load data from production sources",
+          "input_modes": ["application/json"],
+          "output_modes": ["application/json"],
+          "description_hash": "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
+          "has_injection_patterns": false,
+          "objectid": "sha256:596395e0e42fec8771dceef7e655437e8dd81923e34e239e7afc3167f1577ff2"
+        }
+      },
+      {
+        "id": "sha256:be397060f8ec8e924faf4335fede2bf2748737a6e73dc5f31f77ff5e60e528bb",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "query-data",
+          "name": "Query Production Data",
+          "description": "Query production databases and return structured results",
+          "input_modes": ["text/plain", "application/json"],
+          "output_modes": ["application/json"],
+          "description_hash": "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
+          "has_injection_patterns": false,
+          "objectid": "sha256:be397060f8ec8e924faf4335fede2bf2748737a6e73dc5f31f77ff5e60e528bb"
+        }
+      },
+      {
+        "id": "sha256:f502f5c3718b407149c6a208c614c6afb931f663f0ee8bf9413da4a5ef36f80d",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "transform-data",
+          "name": "Transform Data",
+          "description": "Apply transformations to data including aggregation, filtering, and format conversion",
+          "input_modes": ["application/json"],
+          "output_modes": ["application/json", "text/csv"],
+          "description_hash": "f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1",
+          "has_injection_patterns": false,
+          "objectid": "sha256:f502f5c3718b407149c6a208c614c6afb931f663f0ee8bf9413da4a5ef36f80d"
+        }
+      },
+      {
+        "id": "sha256:913e769698b762d5c013afdaa8a9db7b00966b8c23d255b57dea287f3ac4817d",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "general-assist",
+          "name": "General Assistance",
+          "description": "Provide general-purpose AI assistance including text generation, analysis, and summarization",
+          "input_modes": ["text/plain"],
+          "output_modes": ["text/plain"],
+          "description_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          "has_injection_patterns": false,
+          "objectid": "sha256:913e769698b762d5c013afdaa8a9db7b00966b8c23d255b57dea287f3ac4817d"
+        }
+      },
+      {
+        "id": "sha256:57ef891f45b3eac6dfc5b5902f971fadbd199e60e8e8bae5d49955451a879161",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "knowledge-lookup",
+          "name": "Knowledge Lookup",
+          "description": "Search and retrieve information from knowledge bases and documentation",
+          "input_modes": ["text/plain"],
+          "output_modes": ["text/plain", "application/json"],
+          "description_hash": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+          "has_injection_patterns": false,
+          "objectid": "sha256:57ef891f45b3eac6dfc5b5902f971fadbd199e60e8e8bae5d49955451a879161"
+        }
+      },
+      {
+        "id": "sha256:8a3591b93810a1f29d12c1db18790cde1e6bb9c67ffcaab52803377bde9ef275",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "deploy-service",
+          "name": "Deploy Service",
+          "description": "Deploy a service to production infrastructure using the CI/CD pipeline",
+          "input_modes": ["application/json"],
+          "output_modes": ["application/json"],
+          "description_hash": "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+          "has_injection_patterns": false,
+          "objectid": "sha256:8a3591b93810a1f29d12c1db18790cde1e6bb9c67ffcaab52803377bde9ef275"
+        }
+      },
+      {
+        "id": "sha256:2054c586268bad3f270ed4a124d22fa96e2f5a7d1bdc18f74b598e2fa8701f24",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "restart-service",
+          "name": "Restart Service",
+          "description": "Restart a running service on production infrastructure",
+          "input_modes": ["application/json"],
+          "output_modes": ["application/json"],
+          "description_hash": "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
+          "has_injection_patterns": false,
+          "objectid": "sha256:2054c586268bad3f270ed4a124d22fa96e2f5a7d1bdc18f74b598e2fa8701f24"
+        }
+      },
+      {
+        "id": "sha256:6bad1bfa685b93a784cf4d3005a87e78fad7a9aae80a8e4e85bba7aa44e90a5e",
+        "kinds": ["A2ASkill"],
+        "properties": {
+          "id": "get-logs",
+          "name": "Get Service Logs",
+          "description": "Retrieve logs from production services for debugging and monitoring",
+          "input_modes": ["application/json"],
+          "output_modes": ["text/plain", "application/json"],
+          "description_hash": "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
+          "has_injection_patterns": false,
+          "objectid": "sha256:6bad1bfa685b93a784cf4d3005a87e78fad7a9aae80a8e4e85bba7aa44e90a5e"
+        }
+      },
+      {
+        "id": "sha256:4e5cb98f29b7e05b2223766717d32ff6a2e38492f94441c1f7241cfd347c601c",
+        "kinds": ["Host"],
+        "properties": {
+          "hostname": "data-pipeline.internal.example.com",
+          "is_local": false,
+          "is_private": true,
+          "is_public": false,
+          "objectid": "sha256:4e5cb98f29b7e05b2223766717d32ff6a2e38492f94441c1f7241cfd347c601c"
+        }
+      },
+      {
+        "id": "sha256:24cc13bc005120344ebc4e0f4537a8d6dfe97a01bec51726ba2468ccf2b59df3",
+        "kinds": ["Host"],
+        "properties": {
+          "hostname": "assistant.external-vendor.com",
+          "is_local": false,
+          "is_private": false,
+          "is_public": true,
+          "objectid": "sha256:24cc13bc005120344ebc4e0f4537a8d6dfe97a01bec51726ba2468ccf2b59df3"
+        }
+      },
+      {
+        "id": "sha256:e064ba278c66ee6985b52020aba0cd6fc426a8a1369191333fd6fdae688acd3a",
+        "kinds": ["Host"],
+        "properties": {
+          "hostname": "localhost",
+          "is_local": true,
+          "is_private": true,
+          "is_public": false,
+          "objectid": "sha256:e064ba278c66ee6985b52020aba0cd6fc426a8a1369191333fd6fdae688acd3a"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:596395e0e42fec8771dceef7e655437e8dd81923e34e239e7afc3167f1577ff2",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:be397060f8ec8e924faf4335fede2bf2748737a6e73dc5f31f77ff5e60e528bb",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:f502f5c3718b407149c6a208c614c6afb931f663f0ee8bf9413da4a5ef36f80d",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d",
+        "target": "sha256:913e769698b762d5c013afdaa8a9db7b00966b8c23d255b57dea287f3ac4817d",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d",
+        "target": "sha256:57ef891f45b3eac6dfc5b5902f971fadbd199e60e8e8bae5d49955451a879161",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "target": "sha256:8a3591b93810a1f29d12c1db18790cde1e6bb9c67ffcaab52803377bde9ef275",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "target": "sha256:2054c586268bad3f270ed4a124d22fa96e2f5a7d1bdc18f74b598e2fa8701f24",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "target": "sha256:6bad1bfa685b93a784cf4d3005a87e78fad7a9aae80a8e4e85bba7aa44e90a5e",
+        "kind": "ADVERTISES_SKILL",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d",
+        "kind": "DELEGATES_TO",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 0.9,
+          "risk_weight": 0.1,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "target": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "kind": "DELEGATES_TO",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 0.85,
+          "risk_weight": 0.5,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:4e5cb98f29b7e05b2223766717d32ff6a2e38492f94441c1f7241cfd347c601c",
+        "kind": "RUNS_ON",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.0,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:cc5759c5e343db6584ff0c0408953ee0689ab9264b89b3a727d47da431ac209d",
+        "target": "sha256:24cc13bc005120344ebc4e0f4537a8d6dfe97a01bec51726ba2468ccf2b59df3",
+        "kind": "RUNS_ON",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.0,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "target": "sha256:e064ba278c66ee6985b52020aba0cd6fc426a8a1369191333fd6fdae688acd3a",
+        "kind": "RUNS_ON",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 1.0,
+          "risk_weight": 0.0,
+          "is_composite": false
+        }
+      },
+      {
+        "source": "sha256:8e7640693a871d6c5ea15167c7567e223b1240e252dc52562413327e9e705f0a",
+        "target": "sha256:e3dfae4c3422a627fc5b182cc6d5c9db499d85b2c3e62bcf499778c783d90e50",
+        "kind": "SAME_AUTH_DOMAIN",
+        "properties": {
+          "scan_id": "scan-demo-a2a-001",
+          "last_seen": "2026-04-08T12:10:00Z",
+          "confidence": 0.8,
+          "risk_weight": 0.3,
+          "is_composite": false
+        }
+      }
+    ]
+  }
+}

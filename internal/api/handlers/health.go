@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -27,7 +28,8 @@ func (h *HealthHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	statusCode := http.StatusOK
 
 	if err := h.reader.Ping(ctx); err != nil {
-		resp["neo4j"] = "error: " + err.Error()
+		slog.Error("neo4j health check failed", "error", err)
+		resp["neo4j"] = "unavailable"
 		resp["status"] = "degraded"
 		statusCode = http.StatusServiceUnavailable
 	} else {
@@ -35,7 +37,8 @@ func (h *HealthHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.pgPool.Ping(ctx); err != nil {
-		resp["postgres"] = "error: " + err.Error()
+		slog.Error("postgres health check failed", "error", err)
+		resp["postgres"] = "unavailable"
 		resp["status"] = "degraded"
 		statusCode = http.StatusServiceUnavailable
 	} else {

@@ -19,6 +19,9 @@ type Infrastructure struct {
 	Reader      *graph.Reader
 	GraphDB     graph.GraphDB
 	ScanStore   *appdb.ScanStore
+	UserStore   *appdb.UserStore
+	TokenStore  *appdb.TokenStore
+	AuditStore  *appdb.AuditStore
 	Pipeline    *ingest.Pipeline
 }
 
@@ -51,6 +54,9 @@ func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
 	reader := graph.NewReader(neo4jDriver)
 	graphDB := graph.NewDB(reader, writer)
 	scanStore := appdb.NewScanStore(pgPool)
+	userStore := appdb.NewUserStore(pgPool)
+	tokenStore := appdb.NewTokenStore(pgPool)
+	auditStore := appdb.NewAuditStore(pgPool)
 	pipeline := ingest.NewPipeline(writer, graphDB, scanStore)
 
 	cleanup := func() {
@@ -65,6 +71,9 @@ func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
 		Reader:      reader,
 		GraphDB:     graphDB,
 		ScanStore:   scanStore,
+		UserStore:   userStore,
+		TokenStore:  tokenStore,
+		AuditStore:  auditStore,
 		Pipeline:    pipeline,
 	}, cleanup, nil
 }

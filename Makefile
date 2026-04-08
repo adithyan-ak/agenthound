@@ -1,4 +1,4 @@
-.PHONY: build test lint docker up down clean seed ui-build ui-dev ui-test
+.PHONY: build test lint docker up down clean seed demo release ui-build ui-dev ui-test
 
 ui-build:
 	cd ui && npm install && npm run build
@@ -35,3 +35,9 @@ clean:
 
 seed:
 	@bash scripts/seed-test-data.sh
+
+demo:
+	@bash scripts/seed-demo.sh
+
+release:
+	goreleaser release --clean --snapshot

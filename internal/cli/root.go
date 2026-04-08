@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -22,6 +23,10 @@ var rootCmd = &cobra.Command{
 		setupLogger(cfg.LogLevel)
 		return nil
 	},
+}
+
+func SetVersion(version, commit string) {
+	rootCmd.Version = fmt.Sprintf("%s (commit: %s)", version, commit)
 }
 
 func Execute() error {

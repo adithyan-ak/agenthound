@@ -134,3 +134,30 @@ export interface HealthResponse {
   neo4j: string;
   postgres: string;
 }
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  role: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expires_at: string;
+  user: UserInfo;
+}
+
+export interface CreateTokenResponse {
+  token: string;
+  id: string;
+  name: string;
+}
+
+export interface APIToken {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  expires_at?: string;
+  last_used?: string;
+}

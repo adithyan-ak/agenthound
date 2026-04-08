@@ -1,7 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +19,9 @@ type Config struct {
 	PostgresURI   string
 	APIPort       int
 	LogLevel      string
+	JWTSecret     string
+	CORSOrigins   []string
+	AdminPassword string
 }
 
 // LoadWithFlags creates a Config using flag values → env vars → defaults (in priority order).
@@ -34,11 +40,24 @@ func LoadWithFlags(flags *pflag.FlagSet) *Config {
 	cfg.Neo4jPassword = resolve(flags, "neo4j-password", "AGENTHOUND_NEO4J_PASSWORD", cfg.Neo4jPassword)
 	cfg.PostgresURI = resolve(flags, "pg-uri", "AGENTHOUND_PG_URI", cfg.PostgresURI)
 	cfg.LogLevel = resolve(flags, "log-level", "AGENTHOUND_LOG_LEVEL", cfg.LogLevel)
+	cfg.JWTSecret = resolve(flags, "jwt-secret", "AGENTHOUND_JWT_SECRET", "")
+	cfg.AdminPassword = resolve(flags, "admin-password", "AGENTHOUND_ADMIN_PASSWORD", "agenthound")
 
 	if portStr := resolve(flags, "port", "AGENTHOUND_API_PORT", ""); portStr != "" {
 		if port, err := strconv.Atoi(portStr); err == nil {
 			cfg.APIPort = port
 		}
+	}
+
+	if origins := resolve(flags, "cors-origins", "AGENTHOUND_CORS_ORIGINS", ""); origins != "" {
+		for _, o := range strings.Split(origins, ",") {
+			if trimmed := strings.TrimSpace(o); trimmed != "" {
+				cfg.CORSOrigins = append(cfg.CORSOrigins, trimmed)
+			}
+		}
+	}
+	if len(cfg.CORSOrigins) == 0 {
+		cfg.CORSOrigins = []string{"http://localhost:8080"}
 	}
 
 	return cfg
@@ -67,6 +86,16 @@ func (c *Config) Validate() error {
 	}
 	if c.PostgresURI == "" {
 		errs = append(errs, "postgres URI must not be empty")
+	}
+
+	if c.JWTSecret == "" {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			errs = append(errs, "failed to generate JWT secret")
+		} else {
+			c.JWTSecret = hex.EncodeToString(b)
+			slog.Warn("no JWT secret configured, using random value (set AGENTHOUND_JWT_SECRET for stable tokens across restarts)")
+		}
 	}
 
 	if len(errs) > 0 {

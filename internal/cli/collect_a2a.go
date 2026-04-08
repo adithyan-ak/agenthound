@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -25,6 +26,11 @@ var collectA2ACmd = &cobra.Command{
 		insecure, _ := cmd.Flags().GetBool("insecure")
 		concurrency, _ := cmd.Flags().GetInt("concurrency")
 		timeout, _ := cmd.Flags().GetDuration("timeout")
+
+		discoverDomains, _ := cmd.Flags().GetStringSlice("discover-domain")
+		for _, domain := range discoverDomains {
+			targets = append(targets, fmt.Sprintf("https://%s/.well-known/agent-card.json", domain))
+		}
 
 		if target == "" && len(targets) == 0 && targetsFile == "" {
 			return cmd.Help()
@@ -68,6 +74,7 @@ var collectA2ACmd = &cobra.Command{
 func init() {
 	collectA2ACmd.Flags().String("target", "", "URL of a single A2A agent")
 	collectA2ACmd.Flags().StringSlice("targets", nil, "URLs of multiple A2A agents")
+	collectA2ACmd.Flags().StringSlice("discover-domain", nil, "Domains to probe for well-known agent cards")
 	collectA2ACmd.Flags().String("targets-file", "", "File with A2A agent URLs (one per line)")
 	collectA2ACmd.Flags().String("output", "", "Write JSON output to file (default: stdout)")
 	collectA2ACmd.Flags().Bool("ingest", false, "Ingest directly into graph database")

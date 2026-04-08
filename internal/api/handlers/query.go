@@ -2,17 +2,20 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
+	"github.com/adithyan-ak/agenthound/internal/audit"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 )
 
 type QueryHandler struct {
 	reader *graph.Reader
+	audit  *audit.Logger
 }
 
-func NewQueryHandler(reader *graph.Reader) *QueryHandler {
-	return &QueryHandler{reader: reader}
+func NewQueryHandler(reader *graph.Reader, auditLog *audit.Logger) *QueryHandler {
+	return &QueryHandler{reader: reader, audit: auditLog}
 }
 
 type queryRequest struct {
@@ -23,19 +26,31 @@ type queryRequest struct {
 func (h *QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	var req queryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		WriteValidationError(w, "invalid JSON payload")
 		return
 	}
 	if req.Cypher == "" {
-		writeError(w, http.StatusBadRequest, "cypher query is required")
+		WriteValidationError(w, "cypher query is required")
 		return
+	}
+
+	if h.audit != nil {
+		cypher := req.Cypher
+		if len(cypher) > 500 {
+			cypher = cypher[:500]
+		}
+		if err := h.audit.Log(r.Context(), "query.execute", map[string]any{
+			"cypher": cypher,
+		}); err != nil {
+			slog.Warn("audit log failed", "error", err)
+		}
 	}
 
 	rows, err := h.reader.Query(r.Context(), req.Cypher, req.Params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteInternalError(w, r, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
+	WriteJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }

@@ -3,18 +3,21 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
+	"github.com/adithyan-ak/agenthound/internal/audit"
 	"github.com/adithyan-ak/agenthound/internal/ingest"
 	"github.com/adithyan-ak/agenthound/internal/model"
 )
 
 type IngestHandler struct {
 	pipeline *ingest.Pipeline
+	audit    *audit.Logger
 }
 
-func NewIngestHandler(pipeline *ingest.Pipeline) *IngestHandler {
-	return &IngestHandler{pipeline: pipeline}
+func NewIngestHandler(pipeline *ingest.Pipeline, auditLog *audit.Logger) *IngestHandler {
+	return &IngestHandler{pipeline: pipeline, audit: auditLog}
 }
 
 const maxIngestBodySize = 100 << 20 // 100 MB
@@ -24,7 +27,7 @@ func (h *IngestHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 	var data model.IngestData
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		WriteValidationError(w, "invalid JSON payload")
 		return
 	}
 
@@ -32,17 +35,28 @@ func (h *IngestHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var ve *ingest.ValidationError
 		if errors.As(err, &ve) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":   "validation failed",
-				"details": ve.Errors,
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: ErrorDetail{
+					Code:    "VALIDATION_ERROR",
+					Message: "validation failed",
+					Details: ve.Errors,
+				},
 			})
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		WriteInternalError(w, r, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	if h.audit != nil {
+		if err := h.audit.Log(r.Context(), "ingest.upload", map[string]any{
+			"scan_id":    result.ScanID,
+			"node_count": result.NodesWritten,
+			"edge_count": result.EdgesWritten,
+		}); err != nil {
+			slog.Warn("audit log failed", "error", err)
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, result)
 }

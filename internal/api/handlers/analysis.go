@@ -45,21 +45,21 @@ type pathRequest struct {
 func (h *AnalysisHandler) HandleShortestPath(w http.ResponseWriter, r *http.Request) {
 	var req pathRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		WriteValidationError(w, "invalid JSON: "+err.Error())
 		return
 	}
 	if req.Source == "" || req.SourceKind == "" {
-		writeError(w, http.StatusBadRequest, "source and source_kind are required")
+		WriteValidationError(w, "source and source_kind are required")
 		return
 	}
 	if !validNodeKind(req.SourceKind) {
-		writeError(w, http.StatusBadRequest, "invalid source_kind: "+req.SourceKind)
+		WriteValidationError(w, "invalid source_kind: "+req.SourceKind)
 		return
 	}
 
 	targetKind, targetName := parseTarget(req.Target, req.TargetKind)
 	if targetKind != "" && !validNodeKind(targetKind) {
-		writeError(w, http.StatusBadRequest, "invalid target_kind: "+targetKind)
+		WriteValidationError(w, "invalid target_kind: "+targetKind)
 		return
 	}
 
@@ -104,30 +104,30 @@ func (h *AnalysisHandler) HandleShortestPath(w http.ResponseWriter, r *http.Requ
 
 	rows, err := h.graphDB.Query(r.Context(), cypher, params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "query failed: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("shortest path query: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"paths": rows})
+	WriteJSON(w, http.StatusOK, map[string]any{"paths": rows})
 }
 
 func (h *AnalysisHandler) HandleAllPaths(w http.ResponseWriter, r *http.Request) {
 	var req pathRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		WriteValidationError(w, "invalid JSON: "+err.Error())
 		return
 	}
 	if req.Source == "" || req.SourceKind == "" {
-		writeError(w, http.StatusBadRequest, "source and source_kind are required")
+		WriteValidationError(w, "source and source_kind are required")
 		return
 	}
 	if !validNodeKind(req.SourceKind) {
-		writeError(w, http.StatusBadRequest, "invalid source_kind: "+req.SourceKind)
+		WriteValidationError(w, "invalid source_kind: "+req.SourceKind)
 		return
 	}
 
 	targetKind, targetName := parseTarget(req.Target, req.TargetKind)
 	if targetKind != "" && !validNodeKind(targetKind) {
-		writeError(w, http.StatusBadRequest, "invalid target_kind: "+targetKind)
+		WriteValidationError(w, "invalid target_kind: "+targetKind)
 		return
 	}
 
@@ -173,10 +173,10 @@ func (h *AnalysisHandler) HandleAllPaths(w http.ResponseWriter, r *http.Request)
 
 	rows, err := h.graphDB.Query(r.Context(), cypher, params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "query failed: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("all paths query: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"paths": rows})
+	WriteJSON(w, http.StatusOK, map[string]any{"paths": rows})
 }
 
 const dijkstraRelTypes = "TRUSTS_SERVER|PROVIDES_TOOL|HAS_ACCESS_TO|CAN_EXECUTE|DELEGATES_TO|CAN_REACH"
@@ -184,25 +184,25 @@ const dijkstraRelTypes = "TRUSTS_SERVER|PROVIDES_TOOL|HAS_ACCESS_TO|CAN_EXECUTE|
 func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Request) {
 	var req pathRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		WriteValidationError(w, "invalid JSON: "+err.Error())
 		return
 	}
 	if req.Source == "" || req.Target == "" || req.SourceKind == "" {
-		writeError(w, http.StatusBadRequest, "source, target, and source_kind are required")
+		WriteValidationError(w, "source, target, and source_kind are required")
 		return
 	}
 	if !validNodeKind(req.SourceKind) {
-		writeError(w, http.StatusBadRequest, "invalid source_kind: "+req.SourceKind)
+		WriteValidationError(w, "invalid source_kind: "+req.SourceKind)
 		return
 	}
 
 	targetKind, targetName := parseTarget(req.Target, req.TargetKind)
 	if targetKind != "" && !validNodeKind(targetKind) {
-		writeError(w, http.StatusBadRequest, "invalid target_kind: "+targetKind)
+		WriteValidationError(w, "invalid target_kind: "+targetKind)
 		return
 	}
 	if targetName == "" {
-		writeError(w, http.StatusBadRequest, "target name is required")
+		WriteValidationError(w, "target name is required")
 		return
 	}
 
@@ -238,10 +238,10 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 
 		rows, err := h.graphDB.Query(ctx, cypher, params)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "dijkstra query failed: "+err.Error())
+			WriteInternalError(w, r, fmt.Errorf("dijkstra query: %w", err))
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"paths": rows, "algorithm": "dijkstra"})
+		WriteJSON(w, http.StatusOK, map[string]any{"paths": rows, "algorithm": "dijkstra"})
 		return
 	}
 
@@ -276,10 +276,10 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 
 	rows, err := h.graphDB.Query(ctx, cypher, params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "weighted path query failed: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("weighted path query: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"paths": rows, "algorithm": "shortestPath+reduce"})
+	WriteJSON(w, http.StatusOK, map[string]any{"paths": rows, "algorithm": "shortestPath+reduce"})
 }
 
 func (h *AnalysisHandler) HandleFindings(w http.ResponseWriter, r *http.Request) {
@@ -287,33 +287,33 @@ func (h *AnalysisHandler) HandleFindings(w http.ResponseWriter, r *http.Request)
 
 	findings, err := analysis.QueryFindings(r.Context(), h.graphDB, severity)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "findings query failed: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("findings query: %w", err))
 		return
 	}
 	if findings == nil {
 		findings = []analysis.Finding{}
 	}
-	writeJSON(w, http.StatusOK, findings)
+	WriteJSON(w, http.StatusOK, findings)
 }
 
 func (h *AnalysisHandler) HandleListPreBuilt(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, prebuilt.List())
+	WriteJSON(w, http.StatusOK, prebuilt.List())
 }
 
 func (h *AnalysisHandler) HandlePreBuilt(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	q, ok := prebuilt.Get(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "pre-built query not found: "+id)
+		WriteNotFound(w, "pre-built query not found: "+id)
 		return
 	}
 
 	rows, err := h.graphDB.Query(r.Context(), q.Cypher, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "query failed: "+err.Error())
+		WriteInternalError(w, r, fmt.Errorf("prebuilt query %s: %w", id, err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	WriteJSON(w, http.StatusOK, map[string]any{
 		"query": q,
 		"rows":  rows,
 	})

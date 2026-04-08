@@ -2,15 +2,15 @@ package cli
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/api"
+	"github.com/adithyan-ak/agenthound/internal/auth"
 	"github.com/spf13/cobra"
-
-	"log/slog"
 )
 
 var serveCmd = &cobra.Command{
@@ -25,7 +25,22 @@ var serveCmd = &cobra.Command{
 		}
 		defer cleanup()
 
-		server := api.NewServer(infra.GraphDB, infra.Reader, infra.PGPool, infra.Pipeline, infra.ScanStore)
+		if err := auth.EnsureAdminUser(ctx, infra.UserStore, cfg.AdminPassword); err != nil {
+			return err
+		}
+
+		server := api.NewServer(api.ServerDeps{
+			GraphDB:     infra.GraphDB,
+			Reader:      infra.Reader,
+			PGPool:      infra.PGPool,
+			Pipeline:    infra.Pipeline,
+			ScanStore:   infra.ScanStore,
+			UserStore:   infra.UserStore,
+			TokenStore:  infra.TokenStore,
+			AuditStore:  infra.AuditStore,
+			JWTSecret:   cfg.JWTSecret,
+			CORSOrigins: cfg.CORSOrigins,
+		})
 
 		errCh := make(chan error, 1)
 		go func() {
