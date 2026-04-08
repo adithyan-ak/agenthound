@@ -9,6 +9,7 @@ coverage.out
 .env.*
 ui/dist/
 ui/node_modules/
+*.tsbuildinfo
 internal/api/ui/dist/
 vendor/
 *.test
