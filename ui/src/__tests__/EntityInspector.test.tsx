@@ -67,11 +67,11 @@ describe("EntityInspector", () => {
     expect(screen.getByText("Findings")).toBeInTheDocument();
   });
 
-  it("shows not found when node data returns empty", async () => {
+  it("shows not found when node data returns null", async () => {
     useGraphStore.setState({ selectedNodeId: "nonexistent" });
 
     mockedFetchNode.mockResolvedValue(
-      undefined as unknown as Awaited<ReturnType<typeof fetchNode>>,
+      null as unknown as Awaited<ReturnType<typeof fetchNode>>,
     );
 
     render(<EntityInspector />, { wrapper: createWrapper() });
