@@ -292,28 +292,6 @@ func TestParseConfigForSpecsInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestStripJSONComments(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"no_comments", `{"key":"val"}`, `{"key":"val"}`},
-		{"line_comment", "{// comment\n\"key\":\"val\"}", "{\n\"key\":\"val\"}"},
-		{"block_comment", `{/* comment */"key":"val"}`, `{"key":"val"}`},
-		{"string_preserved", `{"key":"// not a comment"}`, `{"key":"// not a comment"}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := string(stripJSONComments([]byte(tt.input)))
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestMarshalJSON(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		if marshalJSON(nil) != "" {

@@ -367,6 +367,11 @@ func buildServerNode(serverID string, spec ServerSpec, initResult *mcpsdk.Initia
 		"status":           "reachable",
 	}
 
+	if initResult.Instructions != "" {
+		props["instructions_has_injection"] = common.HasInjectionPatterns(initResult.Instructions)
+		props["instructions_hash"] = common.HashSHA256(initResult.Instructions)
+	}
+
 	return common.NewNode(serverID, []string{"MCPServer"}, props)
 }
 

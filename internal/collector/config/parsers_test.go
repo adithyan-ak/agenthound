@@ -89,8 +89,14 @@ func TestClaudeCodeParser(t *testing.T) {
 	}
 
 	paths := p.ConfigPaths("/home/user")
-	if len(paths) != 1 || paths[0] != "/home/user/.claude.json" {
-		t.Fatalf("ConfigPaths = %v", paths)
+	if len(paths) != 2 {
+		t.Fatalf("ConfigPaths len = %d, want 2; got %v", len(paths), paths)
+	}
+	if paths[0] != "/home/user/.claude.json" {
+		t.Errorf("ConfigPaths[0] = %q, want /home/user/.claude.json", paths[0])
+	}
+	if paths[1] != ".mcp.json" {
+		t.Errorf("ConfigPaths[1] = %q, want .mcp.json", paths[1])
 	}
 
 	data := readFixture(t, "claude_code.json")
@@ -412,8 +418,14 @@ func TestJetBrainsParser(t *testing.T) {
 	}
 
 	paths := p.ConfigPaths("/home/user")
-	if len(paths) != 1 || paths[0] != filepath.Join(".junie", "mcp", "mcp.json") {
-		t.Fatalf("ConfigPaths = %v", paths)
+	if len(paths) != 2 {
+		t.Fatalf("ConfigPaths len = %d, want 2; got %v", len(paths), paths)
+	}
+	if paths[0] != filepath.Join(".junie", "mcp", "mcp.json") {
+		t.Errorf("ConfigPaths[0] = %q, want project-level path", paths[0])
+	}
+	if paths[1] != filepath.Join("/home/user", ".junie", "mcp", "mcp.json") {
+		t.Errorf("ConfigPaths[1] = %q, want user-level path", paths[1])
 	}
 
 	data := readFixture(t, "jetbrains.json")

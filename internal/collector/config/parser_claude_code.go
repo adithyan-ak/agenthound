@@ -7,7 +7,10 @@ type ClaudeCodeParser struct{}
 func (p *ClaudeCodeParser) ClientName() string { return "claude-code" }
 
 func (p *ClaudeCodeParser) ConfigPaths(homeDir string) []string {
-	return []string{filepath.Join(homeDir, ".claude.json")}
+	return []string{
+		filepath.Join(homeDir, ".claude.json"),
+		".mcp.json",
+	}
 }
 
 func (p *ClaudeCodeParser) Parse(path string, data []byte) (*ParsedConfig, error) {

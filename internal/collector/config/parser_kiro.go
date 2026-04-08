@@ -7,7 +7,10 @@ type KiroParser struct{}
 func (p *KiroParser) ClientName() string { return "kiro" }
 
 func (p *KiroParser) ConfigPaths(homeDir string) []string {
-	return []string{filepath.Join(".kiro", "settings", "mcp.json")}
+	return []string{
+		filepath.Join(".kiro", "settings", "mcp.json"),
+		filepath.Join(homeDir, ".kiro", "settings", "mcp.json"),
+	}
 }
 
 func (p *KiroParser) Parse(path string, data []byte) (*ParsedConfig, error) {

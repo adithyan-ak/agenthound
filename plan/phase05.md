@@ -21,6 +21,7 @@ Phase 5 absorbs the remaining security findings from the Phase 1-2 audit. These 
 | **S7** No rate limiting | HIGH | Rate limiting middleware | §1.2 |
 | **S9** Docker container runs as root | MEDIUM | Non-root container user | §1.3 |
 | **S10** DB ports exposed on 0.0.0.0 | MEDIUM | Bind to 127.0.0.1 | §1.4 |
+| **S11** JWS signature verification stub | MEDIUM | Complete A2A JWS verification | §1.5 |
 
 ### 1.1 Tighten CORS to Configured Origins [S5, HIGH]
 
@@ -103,6 +104,27 @@ services:
 The `agenthound` service connects via Docker network names (`graph-db:7687`, `app-db:5432`), so it doesn't need host-exposed ports at all. The port mappings are only for local development tooling (Neo4j Browser, psql).
 
 **Verify:** `nmap -p 7687 <host-ip>` from another machine shows port closed. `cypher-shell -a bolt://localhost:7687` still works.
+
+### 1.5 Complete JWS Signature Verification for A2A Agent Cards [S11, MEDIUM]
+
+**Problem:** `internal/collector/a2a/jws.go` is a stub — it detects the presence of the `signatures` field but always returns `valid=false`. Unsigned agent cards are flagged, but signed cards cannot be validated.
+
+**Fix:**
+1. Implement RS256 and ES256 verification per RFC 7515 (JSON Web Signature)
+2. Support public key discovery from the agent card's `jwks` or `jwks_uri` field
+3. Verify the `signatures` array: decode base64url header+payload, validate algorithm, check signature with discovered key
+4. On success: set `signature_valid=true` on the A2AAgent node
+5. On verification failure (bad signature, expired key, unknown algorithm): set `signature_valid=false` with `signature_error` property
+
+**Exit criterion:** `TestJWSSignatureValid` passes using a test-signed agent card with a known keypair. `TestJWSSignatureInvalid` detects a tampered card.
+
+### 1.6 Add `--discover-domain` Flag to A2A Collector CLI
+
+**Problem:** Phase 2 planned `agenthound collect a2a --discover-domain example.com` for convenient domain-level probing. Not implemented — functionally a thin UX wrapper around `--target`.
+
+**Fix:** In `internal/cli/collect_a2a.go`, add `--discover-domain` flag that constructs `https://<domain>/.well-known/agent-card.json` and passes the URL to the existing fetch pipeline. Accept multiple domains via comma separation.
+
+**Exit criterion:** `agenthound collect a2a --discover-domain example.com` produces the same output as `agenthound collect a2a --target https://example.com`.
 
 ---
 

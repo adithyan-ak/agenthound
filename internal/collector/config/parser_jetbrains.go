@@ -7,7 +7,10 @@ type JetBrainsParser struct{}
 func (p *JetBrainsParser) ClientName() string { return "jetbrains" }
 
 func (p *JetBrainsParser) ConfigPaths(homeDir string) []string {
-	return []string{filepath.Join(".junie", "mcp", "mcp.json")}
+	return []string{
+		filepath.Join(".junie", "mcp", "mcp.json"),
+		filepath.Join(homeDir, ".junie", "mcp", "mcp.json"),
+	}
 }
 
 func (p *JetBrainsParser) Parse(path string, data []byte) (*ParsedConfig, error) {
