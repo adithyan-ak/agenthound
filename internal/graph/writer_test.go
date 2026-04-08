@@ -6,16 +6,15 @@ import (
 	"github.com/adithyan-ak/agenthound/internal/model"
 )
 
-func TestEdgeKindCypherCoversAllEdgeKinds(t *testing.T) {
-	keys := EdgeKindCypherKeys()
+func TestEdgeKindEndpointsCoversAllEdgeKinds(t *testing.T) {
 	for kind := range model.AllowedEdgeKinds {
-		if !keys[kind] {
-			t.Errorf("edgeKindCypher missing entry for edge kind %q", kind)
+		if _, ok := model.EdgeKindEndpoints[kind]; !ok {
+			t.Errorf("EdgeKindEndpoints missing entry for edge kind %q", kind)
 		}
 	}
-	for kind := range keys {
+	for kind := range model.EdgeKindEndpoints {
 		if !model.AllowedEdgeKinds[kind] {
-			t.Errorf("edgeKindCypher has extra entry for unknown edge kind %q", kind)
+			t.Errorf("EdgeKindEndpoints has extra entry for unknown edge kind %q", kind)
 		}
 	}
 }

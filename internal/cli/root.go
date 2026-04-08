@@ -14,9 +14,13 @@ var rootCmd = &cobra.Command{
 	Use:   "agenthound",
 	Short: "BloodHound for AI Agent Infrastructure",
 	Long:  "AgentHound enumerates MCP servers and A2A agents, builds a directed trust graph, and discovers attack paths across protocol boundaries.",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cfg = config.LoadWithFlags(cmd.Root().PersistentFlags())
+		if err := cfg.Validate(); err != nil {
+			return err
+		}
 		setupLogger(cfg.LogLevel)
+		return nil
 	},
 }
 

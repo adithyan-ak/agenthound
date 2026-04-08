@@ -31,14 +31,14 @@ func (w *Writer) detectAPOC(ctx context.Context) {
 		session := w.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 		defer session.Close(ctx)
 		_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			res, err := tx.Run(ctx, "RETURN apoc.version() AS version", nil)
+			res, err := tx.Run(ctx, "CALL dbms.procedures() YIELD name WHERE name = 'apoc.merge.relationship' RETURN name", nil)
 			if err != nil {
 				return nil, err
 			}
 			if res.Next(ctx) {
 				return res.Record().Values[0], nil
 			}
-			return nil, fmt.Errorf("no result")
+			return nil, fmt.Errorf("apoc.merge.relationship not found")
 		})
 		w.hasAPOC = err == nil
 		if w.hasAPOC {
@@ -53,48 +53,10 @@ func (w *Writer) WriteNodes(ctx context.Context, nodes []model.Node, scanID stri
 	if len(nodes) == 0 {
 		return 0, nil
 	}
-
-	w.detectAPOC(ctx)
-
-	if w.hasAPOC {
-		return w.writeNodesAPOC(ctx, nodes, scanID)
-	}
-	return w.writeNodesFallback(ctx, nodes, scanID)
+	return w.writeNodesBatched(ctx, nodes, scanID)
 }
 
-func (w *Writer) writeNodesAPOC(ctx context.Context, nodes []model.Node, scanID string) (int, error) {
-	total := 0
-	for i := 0; i < len(nodes); i += w.batchSize {
-		end := min(i+w.batchSize, len(nodes))
-		batch := nodes[i:end]
-
-		params := make([]map[string]any, len(batch))
-		for j, n := range batch {
-			params[j] = map[string]any{
-				"id":         n.ID,
-				"kinds":      n.Kinds,
-				"properties": n.Properties,
-			}
-		}
-
-		cypher := `UNWIND $nodes AS node
-CALL apoc.merge.node(node.kinds, {objectid: node.id}, node.properties) YIELD node AS n
-SET n.scan_id = $scan_id, n.last_seen = datetime()
-RETURN count(*) AS written`
-
-		written, err := w.execBatch(ctx, cypher, map[string]any{
-			"nodes":   params,
-			"scan_id": scanID,
-		})
-		if err != nil {
-			return total, fmt.Errorf("apoc node batch at offset %d: %w", i, err)
-		}
-		total += written
-	}
-	return total, nil
-}
-
-func (w *Writer) writeNodesFallback(ctx context.Context, nodes []model.Node, scanID string) (int, error) {
+func (w *Writer) writeNodesBatched(ctx context.Context, nodes []model.Node, scanID string) (int, error) {
 	grouped := groupNodesByKind(nodes)
 	total := 0
 
@@ -144,64 +106,57 @@ func (w *Writer) WriteEdges(ctx context.Context, edges []model.Edge, scanID stri
 }
 
 func (w *Writer) writeEdgesAPOC(ctx context.Context, edges []model.Edge, scanID string) (int, error) {
+	grouped := groupEdgesByEndpoints(edges)
 	total := 0
-	for i := 0; i < len(edges); i += w.batchSize {
-		end := min(i+w.batchSize, len(edges))
-		batch := edges[i:end]
 
-		params := make([]map[string]any, len(batch))
-		for j, e := range batch {
-			params[j] = map[string]any{
-				"source":     e.Source,
-				"target":     e.Target,
-				"kind":       e.Kind,
-				"properties": e.Properties,
-			}
-		}
+	for key, kindEdges := range grouped {
+		sourceMatch := matchClause("a", key.SourceKind, "source")
+		targetMatch := matchClause("b", key.TargetKind, "target")
 
-		cypher := `UNWIND $edges AS edge
-MATCH (a {objectid: edge.source})
-MATCH (b {objectid: edge.target})
-CALL apoc.merge.relationship(a, edge.kind, {}, edge.properties, b) YIELD rel
+		cypher := fmt.Sprintf(`UNWIND $edges AS edge
+%s
+%s
+CALL apoc.merge.relationship(a, $kind, {}, edge.properties, b) YIELD rel
 SET rel.scan_id = $scan_id, rel.last_seen = datetime()
-RETURN count(*) AS written`
+RETURN count(*) AS written`, sourceMatch, targetMatch)
 
-		written, err := w.execBatch(ctx, cypher, map[string]any{
-			"edges":   params,
-			"scan_id": scanID,
-		})
-		if err != nil {
-			return total, fmt.Errorf("apoc edge batch at offset %d: %w", i, err)
+		for i := 0; i < len(kindEdges); i += w.batchSize {
+			end := min(i+w.batchSize, len(kindEdges))
+			batch := kindEdges[i:end]
+
+			params := make([]map[string]any, len(batch))
+			for j, e := range batch {
+				props := e.Properties
+				if props == nil {
+					props = map[string]any{}
+				}
+				params[j] = map[string]any{
+					"source":     e.Source,
+					"target":     e.Target,
+					"properties": props,
+				}
+			}
+
+			written, err := w.execBatch(ctx, cypher, map[string]any{
+				"edges":   params,
+				"kind":    key.Kind,
+				"scan_id": scanID,
+			})
+			if err != nil {
+				return total, fmt.Errorf("apoc edge batch %s at offset %d: %w", key.Kind, i, err)
+			}
+			total += written
 		}
-		total += written
 	}
 	return total, nil
 }
 
-var edgeKindCypher = buildEdgeKindCypher()
-
-func buildEdgeKindCypher() map[string]string {
-	m := make(map[string]string, len(model.AllowedEdgeKinds))
-	for kind := range model.AllowedEdgeKinds {
-		m[kind] = fmt.Sprintf(`UNWIND $edges AS edge
-MATCH (a {objectid: edge.source})
-MATCH (b {objectid: edge.target})
-MERGE (a)-[r:%s]->(b)
-SET r += edge.properties, r.scan_id = $scan_id, r.last_seen = datetime()
-RETURN count(*) AS written`, kind)
-	}
-	return m
-}
-
 func (w *Writer) writeEdgesFallback(ctx context.Context, edges []model.Edge, scanID string) (int, error) {
-	grouped := groupEdgesByKind(edges)
+	grouped := groupEdgesByEndpoints(edges)
 	total := 0
 
-	for kind, kindEdges := range grouped {
-		cypher, ok := edgeKindCypher[kind]
-		if !ok {
-			return total, fmt.Errorf("unknown edge kind: %s", kind)
-		}
+	for key, kindEdges := range grouped {
+		cypher := edgeCypherForKinds(key.Kind, key.SourceKind, key.TargetKind)
 
 		for i := 0; i < len(kindEdges); i += w.batchSize {
 			end := min(i+w.batchSize, len(kindEdges))
@@ -225,12 +180,29 @@ func (w *Writer) writeEdgesFallback(ctx context.Context, edges []model.Edge, sca
 				"scan_id": scanID,
 			})
 			if err != nil {
-				return total, fmt.Errorf("fallback edge batch %s at offset %d: %w", kind, i, err)
+				return total, fmt.Errorf("edge batch %s at offset %d: %w", key.Kind, i, err)
 			}
 			total += written
 		}
 	}
 	return total, nil
+}
+
+func matchClause(variable, kind, edgeField string) string {
+	if kind == "" {
+		return fmt.Sprintf("MATCH (%s {objectid: edge.%s})", variable, edgeField)
+	}
+	return fmt.Sprintf("MATCH (%s:%s {objectid: edge.%s})", variable, kind, edgeField)
+}
+
+// edgeCypherForKinds generates a MERGE Cypher statement with optional label hints.
+func edgeCypherForKinds(edgeKind, sourceKind, targetKind string) string {
+	return fmt.Sprintf(`UNWIND $edges AS edge
+%s
+%s
+MERGE (a)-[r:%s]->(b)
+SET r += edge.properties, r.scan_id = $scan_id, r.last_seen = datetime()
+RETURN count(*) AS written`, matchClause("a", sourceKind, "source"), matchClause("b", targetKind, "target"), edgeKind)
 }
 
 func (w *Writer) execBatch(ctx context.Context, cypher string, params map[string]any) (int, error) {
@@ -269,20 +241,18 @@ func groupNodesByKind(nodes []model.Node) map[string][]model.Node {
 	return grouped
 }
 
-func groupEdgesByKind(edges []model.Edge) map[string][]model.Edge {
-	grouped := make(map[string][]model.Edge)
-	for _, e := range edges {
-		grouped[e.Kind] = append(grouped[e.Kind], e)
-	}
-	return grouped
+type edgeGroupKey struct {
+	Kind       string
+	SourceKind string
+	TargetKind string
 }
 
-// EdgeKindCypherKeys returns all edge kinds that have Cypher templates.
-// Used by tests to verify completeness against AllowedEdgeKinds.
-func EdgeKindCypherKeys() map[string]bool {
-	keys := make(map[string]bool, len(edgeKindCypher))
-	for k := range edgeKindCypher {
-		keys[k] = true
+func groupEdgesByEndpoints(edges []model.Edge) map[edgeGroupKey][]model.Edge {
+	grouped := make(map[edgeGroupKey][]model.Edge)
+	for _, e := range edges {
+		sk, tk := model.ResolveEdgeEndpoints(e.Kind, e.SourceKind, e.TargetKind)
+		key := edgeGroupKey{Kind: e.Kind, SourceKind: sk, TargetKind: tk}
+		grouped[key] = append(grouped[key], e)
 	}
-	return keys
+	return grouped
 }

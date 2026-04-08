@@ -7,7 +7,7 @@ services:
     environment:
       NEO4J_AUTH: neo4j/agenthound
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_dbms_security_procedures_unrestricted: apoc.merge.*,apoc.algo.*
       NEO4J_dbms_memory_heap_initial__size: 512m
       NEO4J_dbms_memory_heap_max__size: 1G
     volumes:

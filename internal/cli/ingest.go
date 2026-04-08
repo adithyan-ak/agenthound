@@ -7,9 +7,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/adithyan-ak/agenthound/internal/appdb"
-	"github.com/adithyan-ak/agenthound/internal/graph"
-	"github.com/adithyan-ak/agenthound/internal/ingest"
 	"github.com/adithyan-ak/agenthound/internal/model"
 	"github.com/spf13/cobra"
 )
@@ -22,46 +19,23 @@ var ingestCmd = &cobra.Command{
 		ctx := context.Background()
 		filePath := args[0]
 
-		// Read file
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
 		}
 
-		// Parse JSON
 		var ingestData model.IngestData
 		if err := json.Unmarshal(data, &ingestData); err != nil {
 			return fmt.Errorf("parse JSON: %w", err)
 		}
 
-		// Connect Neo4j
-		neo4jDriver, err := graph.NewDriver(cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword)
+		infra, cleanup, err := Bootstrap(ctx)
 		if err != nil {
-			return fmt.Errorf("neo4j: %w", err)
+			return err
 		}
-		defer neo4jDriver.Close(ctx)
+		defer cleanup()
 
-		// Connect PostgreSQL
-		pgPool, err := appdb.NewPool(cfg.PostgresURI)
-		if err != nil {
-			return fmt.Errorf("postgres: %w", err)
-		}
-		defer pgPool.Close()
-
-		// Initialize schema
-		if err := graph.InitSchema(ctx, neo4jDriver); err != nil {
-			return fmt.Errorf("neo4j schema: %w", err)
-		}
-		if err := appdb.RunMigrations(ctx, pgPool); err != nil {
-			return fmt.Errorf("postgres migrations: %w", err)
-		}
-
-		// Run pipeline
-		writer := graph.NewWriter(neo4jDriver)
-		scanStore := appdb.NewScanStore(pgPool)
-		pipeline := ingest.NewPipeline(writer, scanStore)
-
-		result, err := pipeline.Ingest(ctx, &ingestData)
+		result, err := infra.Pipeline.Ingest(ctx, &ingestData)
 		if err != nil {
 			return fmt.Errorf("ingest: %w", err)
 		}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/adithyan-ak/agenthound/internal/analysis"
 	"github.com/adithyan-ak/agenthound/internal/appdb"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 	"github.com/adithyan-ak/agenthound/internal/model"
@@ -15,14 +16,16 @@ type Pipeline struct {
 	validator  *Validator
 	normalizer *Normalizer
 	writer     *graph.Writer
+	graphDB    graph.GraphDB
 	scanStore  *appdb.ScanStore
 }
 
-func NewPipeline(writer *graph.Writer, scanStore *appdb.ScanStore) *Pipeline {
+func NewPipeline(writer *graph.Writer, graphDB graph.GraphDB, scanStore *appdb.ScanStore) *Pipeline {
 	return &Pipeline{
 		validator:  NewValidator(),
 		normalizer: NewNormalizer(),
 		writer:     writer,
+		graphDB:    graphDB,
 		scanStore:  scanStore,
 	}
 }
@@ -77,7 +80,24 @@ func (p *Pipeline) Ingest(ctx context.Context, data *model.IngestData) (*model.I
 	result.EdgesWritten = edgesWritten
 	slog.Info("edges written", "count", edgesWritten)
 
-	// Stage 6: Record completion
+	// Stage 6: Post-processing (non-fatal)
+	if p.graphDB != nil {
+		ppStats, ppErr := analysis.RunPostProcessors(ctx, p.graphDB, data.Meta.ScanID, []string{data.Meta.Collector})
+		if ppErr != nil {
+			slog.Error("post-processing failed", "error", ppErr)
+		}
+		for _, s := range ppStats {
+			result.PostProcessingStats = append(result.PostProcessingStats, model.PostProcessingStat{
+				ProcessorName: s.ProcessorName,
+				EdgesCreated:  s.EdgesCreated,
+				NodesUpdated:  s.NodesUpdated,
+				Duration:      s.Duration,
+				Error:         s.Error,
+			})
+		}
+	}
+
+	// Stage 7: Record completion
 	if p.scanStore != nil {
 		if err := p.scanStore.UpdateScan(ctx, data.Meta.ScanID, model.ScanStatusCompleted, nodesWritten, edgesWritten, ""); err != nil {
 			slog.Warn("failed to update scan record", "error", err)

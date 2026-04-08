@@ -2,18 +2,15 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/api"
-	"github.com/adithyan-ak/agenthound/internal/appdb"
-	"github.com/adithyan-ak/agenthound/internal/graph"
-	"github.com/adithyan-ak/agenthound/internal/ingest"
 	"github.com/spf13/cobra"
+
+	"log/slog"
 )
 
 var serveCmd = &cobra.Command{
@@ -22,38 +19,14 @@ var serveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		// Connect Neo4j
-		neo4jDriver, err := graph.NewDriver(cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword)
+		infra, cleanup, err := Bootstrap(ctx)
 		if err != nil {
-			return fmt.Errorf("neo4j: %w", err)
+			return err
 		}
-		defer neo4jDriver.Close(ctx)
-		slog.Info("connected to neo4j", "uri", cfg.Neo4jURI)
+		defer cleanup()
 
-		// Connect PostgreSQL
-		pgPool, err := appdb.NewPool(cfg.PostgresURI)
-		if err != nil {
-			return fmt.Errorf("postgres: %w", err)
-		}
-		defer pgPool.Close()
-		slog.Info("connected to postgres")
+		server := api.NewServer(infra.GraphDB, infra.Reader, infra.PGPool, infra.Pipeline, infra.ScanStore)
 
-		// Initialize schemas
-		if err := graph.InitSchema(ctx, neo4jDriver); err != nil {
-			return fmt.Errorf("neo4j schema: %w", err)
-		}
-		if err := appdb.RunMigrations(ctx, pgPool); err != nil {
-			return fmt.Errorf("postgres migrations: %w", err)
-		}
-
-		// Create components
-		writer := graph.NewWriter(neo4jDriver)
-		reader := graph.NewReader(neo4jDriver)
-		scanStore := appdb.NewScanStore(pgPool)
-		pipeline := ingest.NewPipeline(writer, scanStore)
-		server := api.NewServer(reader, pgPool, pipeline)
-
-		// Graceful shutdown
 		errCh := make(chan error, 1)
 		go func() {
 			errCh <- server.ListenAndServe(cfg.APIPort)

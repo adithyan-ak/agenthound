@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/adithyan-ak/agenthound/internal/model"
-	collector "github.com/adithyan-ak/agenthound/pkg/collector"
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 )
 
 func TestConfigCollector_Name(t *testing.T) {

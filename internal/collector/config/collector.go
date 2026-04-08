@@ -11,7 +11,7 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/collector/common"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	collector "github.com/adithyan-ak/agenthound/pkg/collector"
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 )
 
 type ConfigCollector struct {
@@ -123,10 +123,10 @@ func (c *ConfigCollector) Collect(ctx context.Context, opts collector.CollectOpt
 			}))
 
 			trustWeight := authRiskWeight(authMethod)
-			addEdge(common.NewEdge(agentID, serverID, "TRUSTS_SERVER",
+			addEdge(common.NewEdge(agentID, serverID, "TRUSTS_SERVER", "AgentInstance", "MCPServer",
 				common.NewEdgeProps(scanID, 1.0, trustWeight)))
 
-			addEdge(common.NewEdge(serverID, configFileID, "CONFIGURED_IN",
+			addEdge(common.NewEdge(serverID, configFileID, "CONFIGURED_IN", "MCPServer", "ConfigFile",
 				common.DefaultEdgeProps(scanID)))
 
 			hostName := hostForServer(srv)
@@ -139,7 +139,7 @@ func (c *ConfigCollector) Collect(ctx context.Context, opts collector.CollectOpt
 				"is_private": hostInfo.IsPrivate,
 				"is_public":  hostInfo.IsPublic,
 			}))
-			addEdge(common.NewEdge(serverID, hostID, "RUNS_ON",
+			addEdge(common.NewEdge(serverID, hostID, "RUNS_ON", "MCPServer", "Host",
 				common.DefaultEdgeProps(scanID)))
 
 			creds := ExtractCredentials(srv.Env, srv.Headers, srv.Name, opts.IncludeCredentialValues)
@@ -164,13 +164,13 @@ func (c *ConfigCollector) Collect(ctx context.Context, opts collector.CollectOpt
 				}))
 
 				authWeight := identityAuthWeight(identityType)
-				addEdge(common.NewEdge(serverID, identityID, "AUTHENTICATES_WITH",
+				addEdge(common.NewEdge(serverID, identityID, "AUTHENTICATES_WITH", "MCPServer", "Identity",
 					common.NewEdgeProps(scanID, 1.0, authWeight)))
-				addEdge(common.NewEdge(identityID, credID, "USES_CREDENTIAL",
+				addEdge(common.NewEdge(identityID, credID, "USES_CREDENTIAL", "Identity", "Credential",
 					common.NewEdgeProps(scanID, 1.0, 0.5)))
 
 				if cred.Type == "hardcoded" || cred.Type == "envVar" {
-					addEdge(common.NewEdge(serverID, credID, "HAS_ENV_VAR",
+					addEdge(common.NewEdge(serverID, credID, "HAS_ENV_VAR", "MCPServer", "Credential",
 						common.DefaultEdgeProps(scanID)))
 				}
 			}
@@ -193,7 +193,7 @@ func (c *ConfigCollector) Collect(ctx context.Context, opts collector.CollectOpt
 			riskWeight = 0.5
 		}
 		for _, agentID := range agentIDs {
-			addEdge(common.NewEdge(agentID, instrID, "LOADS_INSTRUCTIONS",
+			addEdge(common.NewEdge(agentID, instrID, "LOADS_INSTRUCTIONS", "AgentInstance", "InstructionFile",
 				common.NewEdgeProps(scanID, 1.0, riskWeight)))
 		}
 	}

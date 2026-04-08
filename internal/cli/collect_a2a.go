@@ -6,7 +6,7 @@ import (
 	"time"
 
 	a2acollector "github.com/adithyan-ak/agenthound/internal/collector/a2a"
-	collector "github.com/adithyan-ak/agenthound/pkg/collector"
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 	"github.com/spf13/cobra"
 )
 

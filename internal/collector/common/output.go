@@ -59,7 +59,7 @@ func NewNode(id string, kinds []string, props map[string]any) model.Node {
 	}
 }
 
-func NewEdge(source, target, kind string, props map[string]any) model.Edge {
+func NewEdge(source, target, kind, sourceKind, targetKind string, props map[string]any) model.Edge {
 	if props == nil {
 		props = make(map[string]any)
 	}
@@ -67,6 +67,8 @@ func NewEdge(source, target, kind string, props map[string]any) model.Edge {
 		Source:     source,
 		Target:     target,
 		Kind:       kind,
+		SourceKind: sourceKind,
+		TargetKind: targetKind,
 		Properties: props,
 	}
 }

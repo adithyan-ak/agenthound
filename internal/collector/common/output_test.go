@@ -175,7 +175,7 @@ func TestNewNode(t *testing.T) {
 func TestNewEdge(t *testing.T) {
 	t.Run("with properties", func(t *testing.T) {
 		props := map[string]any{"scan_id": "scan-1", "confidence": 0.9}
-		edge := NewEdge("sha256:src", "sha256:tgt", "PROVIDES_TOOL", props)
+		edge := NewEdge("sha256:src", "sha256:tgt", "PROVIDES_TOOL", "MCPServer", "MCPTool", props)
 
 		if edge.Source != "sha256:src" {
 			t.Errorf("Source = %q, want %q", edge.Source, "sha256:src")
@@ -192,7 +192,7 @@ func TestNewEdge(t *testing.T) {
 	})
 
 	t.Run("nil properties creates empty map", func(t *testing.T) {
-		edge := NewEdge("sha256:a", "sha256:b", "TRUSTS_SERVER", nil)
+		edge := NewEdge("sha256:a", "sha256:b", "TRUSTS_SERVER", "AgentInstance", "MCPServer", nil)
 
 		if edge.Properties == nil {
 			t.Fatal("properties should not be nil")

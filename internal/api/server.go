@@ -9,6 +9,7 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/api/handlers"
 	apimw "github.com/adithyan-ak/agenthound/internal/api/middleware"
+	"github.com/adithyan-ak/agenthound/internal/appdb"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 	"github.com/adithyan-ak/agenthound/internal/ingest"
 	"github.com/go-chi/chi/v5"
@@ -21,7 +22,7 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func NewServer(reader *graph.Reader, pgPool *pgxpool.Pool, pipeline *ingest.Pipeline) *Server {
+func NewServer(graphDB graph.GraphDB, reader *graph.Reader, pgPool *pgxpool.Pool, pipeline *ingest.Pipeline, scanStore *appdb.ScanStore) *Server {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -34,6 +35,8 @@ func NewServer(reader *graph.Reader, pgPool *pgxpool.Pool, pipeline *ingest.Pipe
 	graphH := handlers.NewGraphHandler(reader)
 	ingestH := handlers.NewIngestHandler(pipeline)
 	queryH := handlers.NewQueryHandler(reader)
+	analysisH := handlers.NewAnalysisHandler(graphDB)
+	scanH := handlers.NewScanHandler(scanStore)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", healthH.Handle)
@@ -43,6 +46,16 @@ func NewServer(reader *graph.Reader, pgPool *pgxpool.Pool, pipeline *ingest.Pipe
 		r.Get("/graph/edges", graphH.HandleListEdges)
 		r.Post("/ingest", ingestH.Handle)
 		r.Post("/query", queryH.Handle)
+
+		r.Post("/analysis/shortest-path", analysisH.HandleShortestPath)
+		r.Post("/analysis/all-paths", analysisH.HandleAllPaths)
+		r.Post("/analysis/weighted-path", analysisH.HandleWeightedPath)
+		r.Get("/analysis/findings", analysisH.HandleFindings)
+		r.Get("/analysis/prebuilt", analysisH.HandleListPreBuilt)
+		r.Get("/analysis/prebuilt/{id}", analysisH.HandlePreBuilt)
+
+		r.Get("/scans", scanH.HandleList)
+		r.Get("/scans/{id}", scanH.HandleGet)
 	})
 
 	return &Server{router: r}

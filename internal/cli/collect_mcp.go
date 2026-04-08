@@ -6,7 +6,7 @@ import (
 	"time"
 
 	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
-	collector "github.com/adithyan-ak/agenthound/pkg/collector"
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 	"github.com/spf13/cobra"
 )
 

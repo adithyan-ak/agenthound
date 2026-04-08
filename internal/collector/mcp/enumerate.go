@@ -70,7 +70,7 @@ func (c *MCPCollector) enumerateServer(ctx context.Context, spec ServerSpec, sca
 			"is_private": hostInfo.IsPrivate,
 			"is_public":  hostInfo.IsPublic,
 		}))
-		result.Edges = append(result.Edges, common.NewEdge(serverID, hostID, "RUNS_ON",
+		result.Edges = append(result.Edges, common.NewEdge(serverID, hostID, "RUNS_ON", "MCPServer", "Host",
 			common.DefaultEdgeProps(scanID)))
 	}
 
@@ -207,7 +207,7 @@ func (c *MCPCollector) enumerateTools(ctx context.Context, session *mcpsdk.Clien
 		}
 
 		result.nodes = append(result.nodes, common.NewNode(toolID, []string{"MCPTool"}, props))
-		result.edges = append(result.edges, common.NewEdge(serverID, toolID, "PROVIDES_TOOL",
+		result.edges = append(result.edges, common.NewEdge(serverID, toolID, "PROVIDES_TOOL", "MCPServer", "MCPTool",
 			common.NewEdgeProps(scanID, 1.0, 0.1)))
 	}
 
@@ -241,7 +241,7 @@ func (c *MCPCollector) enumerateResources(ctx context.Context, session *mcpsdk.C
 			"uri_scheme":  signals.URIScheme,
 			"sensitivity": signals.Sensitivity,
 		}))
-		result.edges = append(result.edges, common.NewEdge(serverID, resID, "PROVIDES_RESOURCE",
+		result.edges = append(result.edges, common.NewEdge(serverID, resID, "PROVIDES_RESOURCE", "MCPServer", "MCPResource",
 			common.NewEdgeProps(scanID, 1.0, 0.2)))
 	}
 
@@ -275,7 +275,7 @@ func (c *MCPCollector) enumerateResourceTemplates(ctx context.Context, session *
 			"sensitivity": signals.Sensitivity,
 			"is_template": true,
 		}))
-		result.edges = append(result.edges, common.NewEdge(serverID, resID, "PROVIDES_RESOURCE",
+		result.edges = append(result.edges, common.NewEdge(serverID, resID, "PROVIDES_RESOURCE", "MCPServer", "MCPResource",
 			common.NewEdgeProps(scanID, 1.0, 0.2)))
 	}
 
@@ -304,7 +304,7 @@ func (c *MCPCollector) enumeratePrompts(ctx context.Context, session *mcpsdk.Cli
 			"description": prompt.Description,
 			"arguments":   marshalJSON(prompt.Arguments),
 		}))
-		result.edges = append(result.edges, common.NewEdge(serverID, promptID, "PROVIDES_PROMPT",
+		result.edges = append(result.edges, common.NewEdge(serverID, promptID, "PROVIDES_PROMPT", "MCPServer", "MCPPrompt",
 			common.NewEdgeProps(scanID, 1.0, 0.1)))
 	}
 
@@ -414,7 +414,7 @@ func buildHostNodes(serverID, serverURL, scanID string) hostResult {
 		"is_private": hostInfo.IsPrivate,
 		"is_public":  hostInfo.IsPublic,
 	}))
-	result.edges = append(result.edges, common.NewEdge(serverID, hostID, "RUNS_ON",
+	result.edges = append(result.edges, common.NewEdge(serverID, hostID, "RUNS_ON", "MCPServer", "Host",
 		common.DefaultEdgeProps(scanID)))
 
 	return result

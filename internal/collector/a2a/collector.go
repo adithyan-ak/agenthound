@@ -12,7 +12,7 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/collector/common"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	collector "github.com/adithyan-ak/agenthound/pkg/collector"
+	collector "github.com/adithyan-ak/agenthound/internal/collector"
 )
 
 type A2ACollector struct {
@@ -132,14 +132,14 @@ func (c *A2ACollector) Collect(ctx context.Context, opts collector.CollectOption
 		}
 		props := common.NewEdgeProps(scanID, d.Confidence, riskWeight)
 		data.Graph.Edges = append(data.Graph.Edges,
-			common.NewEdge(d.SourceAgentID, d.TargetAgentID, "DELEGATES_TO", props))
+			common.NewEdge(d.SourceAgentID, d.TargetAgentID, "DELEGATES_TO", "A2AAgent", "A2AAgent", props))
 	}
 
 	authDomains := DetectSameAuthDomain(allCards)
 	for _, ad := range authDomains {
 		props := common.NewEdgeProps(scanID, 0.9, 0.0)
 		data.Graph.Edges = append(data.Graph.Edges,
-			common.NewEdge(ad.AgentID1, ad.AgentID2, "SAME_AUTH_DOMAIN", props))
+			common.NewEdge(ad.AgentID1, ad.AgentID2, "SAME_AUTH_DOMAIN", "A2AAgent", "A2AAgent", props))
 	}
 
 	return data, nil
@@ -240,7 +240,7 @@ func buildGraph(card *AgentCardData, scanID string) ([]model.Node, []model.Edge)
 		nodes = append(nodes, common.NewNode(skillID, []string{"A2ASkill"}, skillProps))
 
 		edgeProps := common.NewEdgeProps(scanID, 1.0, 0.1)
-		edges = append(edges, common.NewEdge(agentID, skillID, "ADVERTISES_SKILL", edgeProps))
+		edges = append(edges, common.NewEdge(agentID, skillID, "ADVERTISES_SKILL", "A2AAgent", "A2ASkill", edgeProps))
 	}
 
 	hostInfo := common.ClassifyHost(card.URL)
@@ -260,7 +260,7 @@ func buildGraph(card *AgentCardData, scanID string) ([]model.Node, []model.Edge)
 		nodes = append(nodes, common.NewNode(hostID, []string{"Host"}, hostProps))
 
 		edgeProps := common.NewEdgeProps(scanID, 1.0, 0.0)
-		edges = append(edges, common.NewEdge(agentID, hostID, "RUNS_ON", edgeProps))
+		edges = append(edges, common.NewEdge(agentID, hostID, "RUNS_ON", "A2AAgent", "Host", edgeProps))
 	}
 
 	if card.AuthMethod != "none" {
@@ -272,7 +272,7 @@ func buildGraph(card *AgentCardData, scanID string) ([]model.Node, []model.Edge)
 		nodes = append(nodes, common.NewNode(identityID, []string{"Identity"}, identityProps))
 
 		edgeProps := common.NewEdgeProps(scanID, 1.0, 0.0)
-		edges = append(edges, common.NewEdge(agentID, identityID, "AUTHENTICATES_WITH", edgeProps))
+		edges = append(edges, common.NewEdge(agentID, identityID, "AUTHENTICATES_WITH", "A2AAgent", "Identity", edgeProps))
 	}
 
 	return nodes, edges

@@ -7,9 +7,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/adithyan-ak/agenthound/internal/appdb"
-	"github.com/adithyan-ak/agenthound/internal/graph"
-	"github.com/adithyan-ak/agenthound/internal/ingest"
 	"github.com/adithyan-ak/agenthound/internal/model"
 )
 
@@ -36,30 +33,13 @@ func writeCollectorOutput(data *model.IngestData, outputPath string) error {
 }
 
 func ingestCollectorOutput(ctx context.Context, data *model.IngestData) error {
-	neo4jDriver, err := graph.NewDriver(cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword)
+	infra, cleanup, err := Bootstrap(ctx)
 	if err != nil {
-		return fmt.Errorf("neo4j: %w", err)
+		return err
 	}
-	defer neo4jDriver.Close(ctx)
+	defer cleanup()
 
-	pgPool, err := appdb.NewPool(cfg.PostgresURI)
-	if err != nil {
-		return fmt.Errorf("postgres: %w", err)
-	}
-	defer pgPool.Close()
-
-	if err := graph.InitSchema(ctx, neo4jDriver); err != nil {
-		return fmt.Errorf("neo4j schema: %w", err)
-	}
-	if err := appdb.RunMigrations(ctx, pgPool); err != nil {
-		return fmt.Errorf("postgres migrations: %w", err)
-	}
-
-	writer := graph.NewWriter(neo4jDriver)
-	scanStore := appdb.NewScanStore(pgPool)
-	pipeline := ingest.NewPipeline(writer, scanStore)
-
-	result, err := pipeline.Ingest(ctx, data)
+	result, err := infra.Pipeline.Ingest(ctx, data)
 	if err != nil {
 		return fmt.Errorf("ingest: %w", err)
 	}

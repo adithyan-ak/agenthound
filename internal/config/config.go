@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/pflag"
 )
@@ -45,6 +47,32 @@ func LoadWithFlags(flags *pflag.FlagSet) *Config {
 // Load creates a Config from env vars and defaults (no flags).
 func Load() *Config {
 	return LoadWithFlags(nil)
+}
+
+// Validate checks that all config values are valid.
+func (c *Config) Validate() error {
+	var errs []string
+
+	if c.APIPort < 1 || c.APIPort > 65535 {
+		errs = append(errs, fmt.Sprintf("invalid API port %d: must be 1-65535", c.APIPort))
+	}
+
+	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+	if !validLevels[c.LogLevel] {
+		errs = append(errs, fmt.Sprintf("invalid log level %q: must be debug/info/warn/error", c.LogLevel))
+	}
+
+	if c.Neo4jURI == "" {
+		errs = append(errs, "neo4j URI must not be empty")
+	}
+	if c.PostgresURI == "" {
+		errs = append(errs, "postgres URI must not be empty")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("config validation: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // resolve returns the first non-empty value from: flag, env var, default.
