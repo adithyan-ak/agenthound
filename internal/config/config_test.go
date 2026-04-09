@@ -13,7 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 		"AGENTHOUND_JWT_SECRET", "AGENTHOUND_CORS_ORIGINS", "AGENTHOUND_ADMIN_PASSWORD",
 	} {
 		t.Setenv(key, "")
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	}
 
 	cfg := Load()

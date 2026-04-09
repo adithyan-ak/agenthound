@@ -106,7 +106,7 @@ func TestCanImpersonate_ProcessSimilarAgents(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("WriteEdges called %d times, want 1", len(calls))
 	}
-	edges := calls[0].Args[0].([]model.Edge)
+	edges, _ := calls[0].Args[0].([]model.Edge)
 	if len(edges) != 2 {
 		t.Fatalf("wrote %d edges, want 2", len(edges))
 	}
