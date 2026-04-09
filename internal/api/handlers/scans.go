@@ -74,6 +74,11 @@ func (h *ScanHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		WriteValidationError(w, "collector is required")
 		return
 	}
+	validCollectors := map[string]bool{"mcp": true, "a2a": true, "config": true}
+	if !validCollectors[req.Collector] {
+		WriteValidationError(w, "collector must be one of: mcp, a2a, config")
+		return
+	}
 
 	scan := model.Scan{
 		ID:        uuid.New().String(),

@@ -83,13 +83,13 @@ func (s *UserStore) List(ctx context.Context, limit, offset int) ([]model.User, 
 	return users, rows.Err()
 }
 
-func (s *UserStore) Delete(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx,
+func (s *UserStore) Delete(ctx context.Context, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
 		`DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
-		return fmt.Errorf("delete user: %w", err)
+		return false, fmt.Errorf("delete user: %w", err)
 	}
-	return nil
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *UserStore) Count(ctx context.Context) (int, error) {

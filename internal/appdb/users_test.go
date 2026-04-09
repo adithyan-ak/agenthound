@@ -99,8 +99,12 @@ func TestIntegrationUsersCRUD(t *testing.T) {
 	}
 
 	// Delete
-	if err := store.Delete(ctx, userID); err != nil {
+	deleted, err := store.Delete(ctx, userID)
+	if err != nil {
 		t.Fatalf("delete: %v", err)
+	}
+	if !deleted {
+		t.Error("expected deleted=true for existing user")
 	}
 	_, err = store.GetByID(ctx, userID)
 	if err == nil {

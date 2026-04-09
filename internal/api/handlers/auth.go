@@ -246,8 +246,13 @@ func (h *AuthHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.userStore.Delete(r.Context(), id); err != nil {
+	deleted, err := h.userStore.Delete(r.Context(), id)
+	if err != nil {
 		WriteInternalError(w, r, err)
+		return
+	}
+	if !deleted {
+		WriteNotFound(w, "user not found")
 		return
 	}
 
