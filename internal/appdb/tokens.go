@@ -31,7 +31,7 @@ func (s *TokenStore) GetByHash(ctx context.Context, tokenHash string) (*model.AP
 	token := &model.APIToken{}
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, user_id, token_hash, name, created_at, expires_at, last_used
-		 FROM api_tokens WHERE token_hash = $1`, tokenHash).
+		 FROM api_tokens WHERE token_hash = $1 AND (expires_at IS NULL OR expires_at > NOW())`, tokenHash).
 		Scan(&token.ID, &token.UserID, &token.TokenHash, &token.Name, &token.CreatedAt,
 			&token.ExpiresAt, &token.LastUsed)
 	if err != nil {

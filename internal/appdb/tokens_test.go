@@ -320,3 +320,50 @@ func TestIntegrationTokenDelete(t *testing.T) {
 		t.Fatal("expected error after delete, got nil")
 	}
 }
+
+func TestIntegrationTokenExpiredNotReturned(t *testing.T) {
+	skipIfNoPG(t)
+	ctx := context.Background()
+
+	pool, err := NewPool(os.Getenv("AGENTHOUND_PG_URI"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	if err := RunMigrations(ctx, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	userID := "test-user-tok-expired-" + time.Now().Format("20060102150405.000")
+	_, err = pool.Exec(ctx,
+		`INSERT INTO users (id, username, password_hash, role) VALUES ($1, $2, $3, $4)`,
+		userID, "tokuser-"+userID, "fakehash", "analyst")
+	if err != nil {
+		t.Fatalf("create test user: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = $1", userID)
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	})
+
+	store := NewTokenStore(pool)
+
+	expired := time.Now().UTC().Add(-1 * time.Hour)
+	token := &model.APIToken{
+		ID:        "tok-expired-" + time.Now().Format("20060102150405.000"),
+		UserID:    userID,
+		TokenHash: "sha256-expired-test",
+		Name:      "expired-token",
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: &expired,
+	}
+	if err := store.Create(ctx, token); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	_, err = store.GetByHash(ctx, "sha256-expired-test")
+	if err == nil {
+		t.Fatal("expected error for expired token, got nil — expiry bypass still present")
+	}
+}
