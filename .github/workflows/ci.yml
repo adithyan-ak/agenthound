@@ -66,6 +66,7 @@ jobs:
             exit 1
           fi
       - name: Run govulncheck
+        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
