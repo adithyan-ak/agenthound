@@ -233,6 +233,28 @@ func (h *AuthHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, result)
 }
 
+func (h *AuthHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		WriteValidationError(w, "user id is required")
+		return
+	}
+
+	caller := auth.UserFromContext(r.Context())
+	if caller != nil && caller.ID == id {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "cannot delete your own account")
+		return
+	}
+
+	if err := h.userStore.Delete(r.Context(), id); err != nil {
+		WriteInternalError(w, r, err)
+		return
+	}
+
+	h.auditLog(r, "auth.user_deleted", map[string]any{"deleted_user_id": id})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *AuthHandler) auditLog(r *http.Request, action string, details map[string]any) {
 	if h.audit == nil {
 		return
