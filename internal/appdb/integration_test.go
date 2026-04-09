@@ -120,3 +120,62 @@ func TestIntegrationScansCRUD(t *testing.T) {
 	// Cleanup
 	_, _ = pool.Exec(ctx, "DELETE FROM scans WHERE id = $1", scanID)
 }
+
+func TestIntegrationAuditList_Filters(t *testing.T) {
+	skipIfNoPG(t)
+	ctx := context.Background()
+
+	pool, err := NewPool(os.Getenv("AGENTHOUND_PG_URI"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+
+	if err := RunMigrations(ctx, pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	// Clean pre-existing test entries
+	_, _ = pool.Exec(ctx, "DELETE FROM audit_log WHERE action LIKE 'test.%'")
+
+	store := NewAuditStore(pool)
+
+	if err := store.Log(ctx, "test.alpha", "user-a", nil); err != nil {
+		t.Fatalf("log alpha: %v", err)
+	}
+	if err := store.Log(ctx, "test.beta", "user-b", nil); err != nil {
+		t.Fatalf("log beta: %v", err)
+	}
+	if err := store.Log(ctx, "test.alpha", "user-c", nil); err != nil {
+		t.Fatalf("log alpha2: %v", err)
+	}
+
+	// Filter by action
+	entries, err := store.List(ctx, AuditFilter{Action: "test.alpha"})
+	if err != nil {
+		t.Fatalf("list by action: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("action filter: got %d entries, want 2", len(entries))
+	}
+	for _, e := range entries {
+		if e.Action != "test.alpha" {
+			t.Errorf("unexpected action: %q", e.Action)
+		}
+	}
+
+	// Filter by user_id
+	entries, err = store.List(ctx, AuditFilter{UserID: "user-b"})
+	if err != nil {
+		t.Fatalf("list by user: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("user filter: got %d entries, want 1", len(entries))
+	}
+	if len(entries) > 0 && entries[0].UserID != "user-b" {
+		t.Errorf("user_id: got %q, want user-b", entries[0].UserID)
+	}
+
+	// Cleanup
+	_, _ = pool.Exec(ctx, "DELETE FROM audit_log WHERE action LIKE 'test.%'")
+}
