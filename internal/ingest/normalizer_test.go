@@ -157,3 +157,39 @@ func TestNormalizerEdgeProperties(t *testing.T) {
 		t.Error("nil edge properties not initialized")
 	}
 }
+
+func TestIsHomogeneous_AllBool(t *testing.T) {
+	if !isHomogeneous([]any{true, false, true}) {
+		t.Error("expected homogeneous for all-bool slice")
+	}
+}
+
+func TestIsHomogeneous_AllFloat64(t *testing.T) {
+	if !isHomogeneous([]any{1.0, 2.0}) {
+		t.Error("expected homogeneous for all-float64 slice")
+	}
+}
+
+func TestIsHomogeneous_AllString(t *testing.T) {
+	if !isHomogeneous([]any{"a", "b"}) {
+		t.Error("expected homogeneous for all-string slice")
+	}
+}
+
+func TestIsHomogeneous_AllInt64(t *testing.T) {
+	if !isHomogeneous([]any{int64(1), int64(2)}) {
+		t.Error("expected homogeneous for all-int64 slice")
+	}
+}
+
+func TestIsHomogeneous_Mixed(t *testing.T) {
+	if isHomogeneous([]any{"a", 1.0}) {
+		t.Error("expected non-homogeneous for mixed-type slice")
+	}
+}
+
+func TestIsHomogeneous_Empty(t *testing.T) {
+	if !isHomogeneous([]any{}) {
+		t.Error("expected homogeneous for empty slice")
+	}
+}

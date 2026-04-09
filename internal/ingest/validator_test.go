@@ -150,6 +150,20 @@ func TestValidatorAcceptsEmptyGraph(t *testing.T) {
 	}
 }
 
+func TestValidationError_Error(t *testing.T) {
+	ve := &ValidationError{
+		Errors: []FieldError{
+			{Path: "meta.version", Message: "must be 1"},
+			{Path: "meta.type", Message: "must be 'agenthound-ingest'"},
+			{Path: "meta.scan_id", Message: "must not be empty"},
+		},
+	}
+	got := ve.Error()
+	if got != "validation failed: 3 errors" {
+		t.Errorf("Error() = %q, want %q", got, "validation failed: 3 errors")
+	}
+}
+
 func assertValidationError(t *testing.T, err error, expectedPath string) {
 	t.Helper()
 	if err == nil {
