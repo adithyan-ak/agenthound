@@ -70,6 +70,7 @@ func NewServer(deps ServerDeps) *Server {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public routes
 		r.Get("/health", healthH.Handle)
+		r.Get("/docs", handlers.HandleOpenAPIDocs)
 		r.Post("/auth/login", authH.HandleLogin)
 
 		// Authenticated routes — viewer+

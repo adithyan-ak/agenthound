@@ -1,0 +1,1187 @@
+openapi: 3.0.3
+info:
+  title: AgentHound API
+  description: >-
+    REST API for AgentHound — a graph-based security tool that enumerates MCP
+    servers and A2A agents, builds trust graphs in Neo4j, and discovers attack
+    paths across protocol boundaries.
+  version: "0.1.0"
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: /api/v1
+    description: Default
+
+security: []
+
+components:
+  securitySchemes:
+    BearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtained from /auth/login (expires 24h)
+    APIToken:
+      type: http
+      scheme: bearer
+      description: API token with ah_ prefix, created via /auth/tokens
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: description of the problem
+        details:
+          description: Additional error context (validation errors, etc.)
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        neo4j:
+          type: string
+          enum: [ok, unavailable]
+        postgres:
+          type: string
+          enum: [ok, unavailable]
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/UserInfo"
+
+    UserInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, analyst, viewer]
+
+    CreateUserRequest:
+      type: object
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, analyst, viewer]
+
+    CreateTokenRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    CreateTokenResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        token:
+          type: string
+          description: Full token value (only returned at creation time)
+
+    APIToken:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_used:
+          type: string
+          format: date-time
+
+    GraphStats:
+      type: object
+      properties:
+        node_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        edge_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        total_nodes:
+          type: integer
+        total_edges:
+          type: integer
+
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+        kinds:
+          type: array
+          items:
+            type: string
+        properties:
+          type: object
+          additionalProperties: true
+
+    Edge:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        kind:
+          type: string
+        source_kind:
+          type: string
+        target_kind:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+
+    NodeDetail:
+      type: object
+      properties:
+        node:
+          $ref: "#/components/schemas/Node"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Edge"
+
+    PathRequest:
+      type: object
+      required: [source, source_kind]
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        source_kind:
+          type: string
+        target_kind:
+          type: string
+        max_hops:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 20
+        limit:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 100
+
+    PathNode:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kinds:
+          type: array
+          items:
+            type: string
+
+    PathEdge:
+      type: object
+      properties:
+        kind:
+          type: string
+        source:
+          type: string
+        target:
+          type: string
+        risk_weight:
+          type: number
+
+    PathResult:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/PathNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/PathEdge"
+        hops:
+          type: integer
+        weight:
+          type: number
+
+    PathResponse:
+      type: object
+      properties:
+        paths:
+          type: array
+          items:
+            $ref: "#/components/schemas/PathResult"
+        algorithm:
+          type: string
+          description: Only present for weighted-path responses
+
+    Finding:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        category:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        edge_kind:
+          type: string
+        source_id:
+          type: string
+        source_name:
+          type: string
+        source_kind:
+          type: string
+        target_id:
+          type: string
+        target_name:
+          type: string
+        target_kind:
+          type: string
+        confidence:
+          type: number
+        owasp_map:
+          type: array
+          items:
+            type: string
+
+    PreBuiltQuery:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+        owasp_map:
+          type: array
+          items:
+            type: string
+
+    PreBuiltResult:
+      type: object
+      properties:
+        query:
+          $ref: "#/components/schemas/PreBuiltQuery"
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    IngestResult:
+      type: object
+      properties:
+        scan_id:
+          type: string
+        nodes_written:
+          type: integer
+        edges_written:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        post_processing_stats:
+          type: array
+          items:
+            type: object
+            properties:
+              processor_name:
+                type: string
+        duration:
+          type: integer
+          description: Duration in nanoseconds
+
+    Scan:
+      type: object
+      properties:
+        id:
+          type: string
+        collector:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        node_count:
+          type: integer
+        edge_count:
+          type: integer
+        error:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CreateScanRequest:
+      type: object
+      required: [collector]
+      properties:
+        collector:
+          type: string
+          enum: [mcp, a2a, config]
+        metadata:
+          type: object
+          additionalProperties: true
+
+    QueryRequest:
+      type: object
+      required: [cypher]
+      properties:
+        cypher:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+
+    QueryResponse:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        timestamp:
+          type: string
+          format: date-time
+        action:
+          type: string
+        user_id:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Insufficient role
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns Neo4j and PostgreSQL connectivity status.
+      operationId: getHealth
+      tags: [Public]
+      responses:
+        "200":
+          description: All services healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: One or more services unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/login:
+    post:
+      summary: Authenticate
+      description: Exchange username/password for a JWT (24h expiry).
+      operationId: login
+      tags: [Public]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /docs:
+    get:
+      summary: OpenAPI specification
+      description: Returns this OpenAPI 3.0.3 specification as YAML.
+      operationId: getDocs
+      tags: [Public]
+      responses:
+        "200":
+          description: OpenAPI spec
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /graph/stats:
+    get:
+      summary: Graph statistics
+      description: Returns node and edge counts grouped by kind.
+      operationId: getGraphStats
+      tags: [Graph]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      responses:
+        "200":
+          description: Stats retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /graph/nodes:
+    get:
+      summary: List nodes
+      description: List graph nodes with optional kind filter.
+      operationId: listNodes
+      tags: [Graph]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+          description: Filter by node label (e.g. MCPServer, MCPTool)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 10000
+      responses:
+        "200":
+          description: Nodes list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Node"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /graph/nodes/{id}:
+    get:
+      summary: Get node
+      description: Returns a single node with all connected edges.
+      operationId: getNode
+      tags: [Graph]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Node with edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /graph/edges:
+    get:
+      summary: List edges
+      description: List graph edges with optional filters.
+      operationId: listEdges
+      tags: [Graph]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+          description: Filter by edge kind (e.g. TRUSTS_SERVER, CAN_REACH)
+        - name: source
+          in: query
+          schema:
+            type: string
+          description: Filter by source node ID
+        - name: target
+          in: query
+          schema:
+            type: string
+          description: Filter by target node ID
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 10000
+      responses:
+        "200":
+          description: Edges list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Edge"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ingest:
+    post:
+      summary: Ingest collector output
+      description: >-
+        Upload collector JSON. Runs the full pipeline: validate, normalize,
+        deduplicate, write to Neo4j, post-process composite edges.
+        Rate limited to 20 requests/minute. Max body 100 MB.
+      operationId: ingest
+      tags: [Ingest]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Collector JSON output (see graph model docs)
+      responses:
+        "200":
+          description: Ingest successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /analysis/shortest-path:
+    post:
+      summary: Shortest path
+      description: Find the shortest path between two nodes in the graph.
+      operationId: shortestPath
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PathRequest"
+      responses:
+        "200":
+          description: Paths found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PathResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /analysis/all-paths:
+    post:
+      summary: All paths
+      description: Enumerate all paths between two nodes (bounded by max_hops and limit).
+      operationId: allPaths
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PathRequest"
+      responses:
+        "200":
+          description: Paths found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PathResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /analysis/weighted-path:
+    post:
+      summary: Weighted (lowest-risk) path
+      description: >-
+        Find the lowest-risk-weight path using Dijkstra (APOC) or
+        shortestPath+reduce fallback. Response includes the algorithm used.
+      operationId: weightedPath
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PathRequest"
+      responses:
+        "200":
+          description: Weighted path found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PathResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /analysis/findings:
+    get:
+      summary: Security findings
+      description: List all composite edges as security findings.
+      operationId: getFindings
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+      responses:
+        "200":
+          description: Findings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Finding"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /analysis/prebuilt:
+    get:
+      summary: List pre-built queries
+      description: Returns metadata for all 17 pre-built security queries.
+      operationId: listPreBuilt
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      responses:
+        "200":
+          description: Query list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PreBuiltQuery"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /analysis/prebuilt/{id}:
+    get:
+      summary: Execute pre-built query
+      description: Run a pre-built query by ID and return results.
+      operationId: runPreBuilt
+      tags: [Analysis]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreBuiltResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /scans:
+    get:
+      summary: List scans
+      description: List scan history with pagination.
+      operationId: listScans
+      tags: [Scans]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Scan list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Scan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create scan
+      description: Register a new scan.
+      operationId: createScan
+      tags: [Scans]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScanRequest"
+      responses:
+        "201":
+          description: Scan created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scan"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /scans/{id}:
+    get:
+      summary: Get scan
+      description: Get scan details by ID.
+      operationId: getScan
+      tags: [Scans]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /query:
+    post:
+      summary: Raw Cypher query
+      description: >-
+        Execute a raw Cypher query against Neo4j. Admin only.
+        Rate limited to 10 requests/minute.
+      operationId: rawQuery
+      tags: [Admin]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/tokens:
+    post:
+      summary: Create API token
+      description: >-
+        Create an API token (ah_ prefix) for programmatic access.
+        The full token value is only returned at creation time.
+      operationId: createToken
+      tags: [Auth]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+      responses:
+        "201":
+          description: Token created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTokenResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    get:
+      summary: List API tokens
+      description: List API tokens for the current user.
+      operationId: listTokens
+      tags: [Auth]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/APIToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/tokens/{id}:
+    delete:
+      summary: Revoke API token
+      operationId: deleteToken
+      tags: [Auth]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Token revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/users:
+    post:
+      summary: Create user
+      description: Create a new user account. Admin only.
+      operationId: createUser
+      tags: [Admin]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List users
+      description: List all users. Admin only.
+      operationId: listUsers
+      tags: [Admin]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/users/{id}:
+    delete:
+      summary: Delete user
+      description: Delete a user account. Admin only. Cannot delete yourself.
+      operationId: deleteUser
+      tags: [Admin]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /audit:
+    get:
+      summary: Audit log
+      description: >-
+        View audit log entries (login events, ingest operations, query
+        executions, token management). Admin only.
+      operationId: getAuditLog
+      tags: [Admin]
+      security:
+        - BearerJWT: []
+        - APIToken: []
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action (e.g. auth.login_success)
+        - name: user_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start time (RFC3339)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End time (RFC3339)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
