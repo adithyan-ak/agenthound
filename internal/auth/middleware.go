@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/appdb"
 	"github.com/adithyan-ak/agenthound/internal/model"
@@ -67,9 +70,12 @@ func (m *Middleware) resolveAPIToken(r *http.Request, raw string) (*model.User, 
 		return nil, err
 	}
 
-	// Update last_used asynchronously — don't block the request
 	go func() {
-		_ = m.tokenStore.UpdateLastUsed(r.Context(), apiToken.ID)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := m.tokenStore.UpdateLastUsed(ctx, apiToken.ID); err != nil {
+			slog.Warn("failed to update token last_used", "token_id", apiToken.ID, "error", err)
+		}
 	}()
 
 	user, err := m.userStore.GetByID(r.Context(), apiToken.UserID)
