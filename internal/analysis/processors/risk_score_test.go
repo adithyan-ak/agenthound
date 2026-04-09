@@ -62,7 +62,7 @@ func TestRiskScore_ProcessSuccess(t *testing.T) {
 		t.Fatalf("UpdateNodeProperties called %d times, want 3", len(updateCalls))
 	}
 	for _, c := range updateCalls {
-		props := c.Args[1].(map[string]any)
+		props, _ := c.Args[1].(map[string]any)
 		if _, ok := props["risk_score"]; !ok {
 			t.Error("expected risk_score property in update")
 		}

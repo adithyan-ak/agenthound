@@ -152,7 +152,7 @@ func TestValidateErrors(t *testing.T) {
 
 func TestCORSOriginsEmpty(t *testing.T) {
 	t.Setenv("AGENTHOUND_CORS_ORIGINS", "")
-	os.Unsetenv("AGENTHOUND_CORS_ORIGINS")
+	_ = os.Unsetenv("AGENTHOUND_CORS_ORIGINS")
 
 	cfg := Load()
 	if len(cfg.CORSOrigins) != 1 || cfg.CORSOrigins[0] != "http://localhost:8080" {

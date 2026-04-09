@@ -44,7 +44,7 @@ func TestHasAccessTo_ProcessSuccess(t *testing.T) {
 		t.Errorf("ExecuteWrite called %d times, want 3", len(calls))
 	}
 	for _, c := range calls {
-		params := c.Args[1].(map[string]any)
+		params, _ := c.Args[1].(map[string]any)
 		if params["scan_id"] != "scan-1" {
 			t.Errorf("scan_id = %v, want scan-1", params["scan_id"])
 		}
