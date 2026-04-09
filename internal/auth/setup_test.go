@@ -29,8 +29,9 @@ func TestEnsureAdminUser_CreatesDefault(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// Clean slate
-	_, _ = pool.Exec(ctx, "DELETE FROM users")
+	// Remove only the admin user to avoid interfering with parallel tests
+	_, _ = pool.Exec(ctx, "DELETE FROM api_tokens WHERE user_id IN (SELECT id FROM users WHERE username = 'admin')")
+	_, _ = pool.Exec(ctx, "DELETE FROM users WHERE username = 'admin'")
 
 	userStore := appdb.NewUserStore(pool)
 	if err := EnsureAdminUser(ctx, userStore, "testpass"); err != nil {
@@ -52,6 +53,7 @@ func TestEnsureAdminUser_CreatesDefault(t *testing.T) {
 	}
 
 	// Cleanup
+	_, _ = pool.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = $1", user.ID)
 	_, _ = pool.Exec(ctx, "DELETE FROM users WHERE username = 'admin'")
 }
 
@@ -69,7 +71,9 @@ func TestEnsureAdminUser_Idempotent(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	_, _ = pool.Exec(ctx, "DELETE FROM users")
+	// Remove only the admin user
+	_, _ = pool.Exec(ctx, "DELETE FROM api_tokens WHERE user_id IN (SELECT id FROM users WHERE username = 'admin')")
+	_, _ = pool.Exec(ctx, "DELETE FROM users WHERE username = 'admin'")
 
 	userStore := appdb.NewUserStore(pool)
 
@@ -77,18 +81,22 @@ func TestEnsureAdminUser_Idempotent(t *testing.T) {
 		t.Fatalf("first call: %v", err)
 	}
 
+	// EnsureAdminUser checks count > 0, so second call should be a no-op
+	// regardless of how many other test users exist
 	if err := EnsureAdminUser(ctx, userStore, "otherpass"); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 
-	count, err := userStore.Count(ctx)
+	// Verify admin still exists with original password
+	user, err := userStore.GetByUsername(ctx, "admin")
 	if err != nil {
-		t.Fatalf("count: %v", err)
+		t.Fatalf("GetByUsername after idempotent call: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("user count: got %d, want 1", count)
+	if err := CheckPassword(user.PasswordHash, "testpass"); err != nil {
+		t.Errorf("password should be from first call, not second: %v", err)
 	}
 
 	// Cleanup
+	_, _ = pool.Exec(ctx, "DELETE FROM api_tokens WHERE user_id = $1", user.ID)
 	_, _ = pool.Exec(ctx, "DELETE FROM users WHERE username = 'admin'")
 }
