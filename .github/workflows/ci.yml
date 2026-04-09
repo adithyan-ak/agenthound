@@ -10,6 +10,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
+      - name: Create UI embed stub
+        run: mkdir -p internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > internal/api/ui/dist/index.html
       - uses: golangci/golangci-lint-action@v7
         with:
           version: "v2.11"
@@ -46,6 +48,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
+      - name: Create UI embed stub
+        run: mkdir -p internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > internal/api/ui/dist/index.html
       - run: go test ./... -v -race -coverprofile=coverage.out
         env:
           AGENTHOUND_NEO4J_URI: bolt://localhost:7687
