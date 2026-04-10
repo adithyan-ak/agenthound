@@ -32,6 +32,16 @@ const CAPABILITY_ICONS: Record<string, ElementType> = {
   email_send: Mail,
 };
 
+const CAPABILITY_DANGER_ORDER = [
+  "shell_access",
+  "code_execution",
+  "network_outbound",
+  "database_access",
+  "email_send",
+  "file_write",
+  "file_read",
+];
+
 export function ToolNode({
   data,
   selected,
@@ -40,24 +50,25 @@ export function ToolNode({
     return (
       <div
         className={cn(
-          "rounded-lg border px-3 py-2 shadow-sm transition-all cursor-pointer",
-          "bg-[#1a1f2e]/60 border-[#2a2f3e] border-dashed",
-          selected && "ring-2 ring-offset-1 ring-offset-[#0a0f1e]",
+          "rounded-full border border-dashed px-2 py-0.5 shadow-sm transition-all cursor-pointer",
+          "bg-[#1a1f2e]/60 border-[#2a2f3e]",
+          "flex items-center justify-center",
+          selected && "ring-1 ring-offset-1 ring-offset-[#0a0f1e]",
         )}
-        style={{ width: 180, borderLeftWidth: 4, borderLeftColor: "#F5A623" }}
+        style={{ width: 110, height: 26 }}
       >
         <Handle
           type="target"
           position={Position.Left}
-          className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+          className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
         />
-        <span className="text-[11px] text-gray-500 italic">
-          {data.overflowCount ?? 0} more tools...
+        <span className="text-[10px] text-gray-500 italic truncate">
+          +{data.overflowCount ?? 0} more
         </span>
         <Handle
           type="source"
           position={Position.Right}
-          className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+          className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
         />
       </div>
     );
@@ -67,53 +78,51 @@ export function ToolNode({
     ? (data.properties.capability_surface as string[])
     : [];
 
+  const topCap = CAPABILITY_DANGER_ORDER.find((c) => capabilities.includes(c));
+  const TopIcon = topCap ? CAPABILITY_ICONS[topCap] : null;
+
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2 shadow-sm transition-all",
+        "rounded-full border px-2 py-0.5 shadow-sm transition-all",
         "bg-[#1a1f2e] border-[#2a2f3e]",
-        selected && "ring-2 ring-offset-1 ring-offset-[#0a0f1e]",
+        "flex items-center gap-1",
+        selected && "ring-1 ring-offset-1 ring-offset-[#0a0f1e]",
       )}
-      style={{
-        width: 180,
-        borderLeftWidth: 4,
-        borderLeftColor: "#F5A623",
-      }}
+      style={{ width: 110, height: 26 }}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+        className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
       />
 
       <span
-        className="text-xs text-white truncate block"
+        className="flex-shrink-0"
+        style={{
+          width: 4,
+          height: 4,
+          borderRadius: "50%",
+          backgroundColor: "#F5A623",
+          display: "inline-block",
+        }}
+      />
+      <span
+        className="text-[10px] text-white truncate flex-1 min-w-0"
         title={data.label}
       >
         {data.label}
       </span>
-
-      {capabilities.length > 0 && (
-        <div className="flex items-center gap-1 mt-1">
-          {capabilities.map((cap) => {
-            const Icon = CAPABILITY_ICONS[cap];
-            if (!Icon) return null;
-            return (
-              <span key={cap} title={cap}>
-                <Icon
-                  size={12}
-                  className="text-[#F5A623]/70"
-                />
-              </span>
-            );
-          })}
-        </div>
+      {TopIcon && (
+        <span title={topCap} className="flex-shrink-0">
+          <TopIcon size={10} className="text-[#F5A623]/70" />
+        </span>
       )}
 
       <Handle
         type="source"
         position={Position.Right}
-        className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+        className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
       />
     </div>
   );

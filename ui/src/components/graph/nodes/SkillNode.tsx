@@ -18,24 +18,31 @@ export function SkillNode({
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-1.5 shadow-sm transition-all",
+        "rounded-full border px-2 py-0.5 shadow-sm transition-all",
         "bg-[#1a1f2e] border-[#2a2f3e]",
-        selected && "ring-2 ring-offset-1 ring-offset-[#0a0f1e]",
+        "flex items-center gap-1",
+        selected && "ring-1 ring-offset-1 ring-offset-[#0a0f1e]",
       )}
-      style={{
-        width: 160,
-        borderLeftWidth: 4,
-        borderLeftColor: "#9B59B6",
-      }}
+      style={{ width: 110, height: 26 }}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+        className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
       />
 
       <span
-        className="text-xs text-white truncate block"
+        className="flex-shrink-0"
+        style={{
+          width: 4,
+          height: 4,
+          borderRadius: "50%",
+          backgroundColor: "#9B59B6",
+          display: "inline-block",
+        }}
+      />
+      <span
+        className="text-[10px] text-white truncate flex-1 min-w-0"
         title={data.label}
       >
         {data.label}
@@ -44,7 +51,7 @@ export function SkillNode({
       <Handle
         type="source"
         position={Position.Right}
-        className="!bg-[#4a4f5e] !w-2 !h-2 !border-0"
+        className="!bg-[#4a4f5e] !w-1.5 !h-1.5 !border-0"
       />
     </div>
   );
