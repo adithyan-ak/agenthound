@@ -22,6 +22,26 @@ function isTokenExpired(token: string): boolean {
   return Date.now() >= payload["exp"] * 1000;
 }
 
+function loadInitialState(): { token: string | null; user: UserInfo | null; isAuthenticated: boolean } {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token || isTokenExpired(token)) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    return { token: null, user: null, isAuthenticated: false };
+  }
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    const user = raw ? (JSON.parse(raw) as UserInfo) : null;
+    return { token, user, isAuthenticated: true };
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    return { token: null, user: null, isAuthenticated: false };
+  }
+}
+
+const initialState = loadInitialState();
+
 interface AuthState {
   token: string | null;
   user: UserInfo | null;
@@ -35,9 +55,9 @@ interface AuthActions {
 }
 
 export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
-  token: null,
-  user: null,
-  isAuthenticated: false,
+  token: initialState.token,
+  user: initialState.user,
+  isAuthenticated: initialState.isAuthenticated,
 
   login: async (username, password) => {
     const resp = await apiLogin(username, password);
