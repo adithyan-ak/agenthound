@@ -20,7 +20,6 @@ import { useGraphStore } from "@/store/graph";
 import { GraphFilters } from "./GraphFilters";
 import { GraphLegend } from "./GraphLegend";
 
-import { AgentZoneNode } from "./nodes/AgentZoneNode";
 import { ServerNode } from "./nodes/ServerNode";
 import { ToolNode } from "./nodes/ToolNode";
 import { ResourceNode } from "./nodes/ResourceNode";
@@ -32,7 +31,6 @@ import { TrustEdge } from "./edges/TrustEdge";
 import { StructureEdge } from "./edges/StructureEdge";
 
 const nodeTypes = {
-  agentZone: AgentZoneNode,
   server: ServerNode,
   tool: ToolNode,
   resource: ResourceNode,
@@ -82,7 +80,6 @@ function GraphCanvas() {
       const d = n.data as Record<string, unknown>;
       const kind = d?.kind as string;
       const riskScore = (d?.riskScore as number) ?? 0;
-      if (n.type === "agentZone") return n;
       const hidden =
         !filters.nodeKinds.has(kind) || riskScore < filters.minRiskScore;
       let style = n.style;
@@ -116,7 +113,6 @@ function GraphCanvas() {
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
-      if (node.type === "agentZone") return;
       selectNode(node.id);
     },
     [selectNode],

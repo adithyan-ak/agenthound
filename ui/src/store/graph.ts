@@ -18,7 +18,7 @@ const ALL_NODE_KINDS: NodeKind[] = [
   "TrustZone",
 ];
 
-const ALL_EDGE_KINDS: EdgeKind[] = [
+export const ALL_EDGE_KINDS: EdgeKind[] = [
   "TRUSTS_SERVER",
   "PROVIDES_TOOL",
   "PROVIDES_RESOURCE",
@@ -78,7 +78,17 @@ export const useGraphStore = create<GraphState & GraphActions>()((set) => ({
   hoveredNodeId: null,
   activeFilters: {
     nodeKinds: new Set<string>(ALL_NODE_KINDS),
-    edgeKinds: new Set<string>(ALL_EDGE_KINDS),
+    edgeKinds: new Set<string>([
+      "TRUSTS_SERVER",
+      "PROVIDES_TOOL",
+      "PROVIDES_RESOURCE",
+      "PROVIDES_PROMPT",
+      "ADVERTISES_SKILL",
+      "DELEGATES_TO",
+      "SHADOWS",
+      "POISONED_DESCRIPTION",
+      "POISONED_INSTRUCTIONS",
+    ]),
     minRiskScore: 0,
   },
   highlightedPath: null,
