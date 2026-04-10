@@ -15,7 +15,7 @@ export function PathResults({ paths }: PathResultsProps) {
   const navigate = useNavigate();
   const highlightPath = useGraphStore((s) => s.highlightPath);
 
-  if (paths.length === 0) {
+  if (!paths || paths.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
         No paths found

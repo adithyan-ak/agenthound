@@ -122,6 +122,40 @@ func TestParseTarget(t *testing.T) {
 	}
 }
 
+func TestIsObjectID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "valid sha256 hex", value: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", want: true},
+		{name: "with sha256 prefix", value: "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", want: true},
+		{name: "human name", value: "claude-desktop", want: false},
+		{name: "empty", value: "", want: false},
+		{name: "too short hex", value: "a1b2c3", want: false},
+		{name: "uppercase hex", value: "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2", want: false},
+		{name: "non-hex chars", value: "g1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isObjectID(tt.value)
+			if got != tt.want {
+				t.Errorf("isObjectID(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNodeMatchProp(t *testing.T) {
+	if got := nodeMatchProp("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"); got != "objectid" {
+		t.Errorf("expected objectid for hex hash, got %s", got)
+	}
+	if got := nodeMatchProp("claude-desktop"); got != "name" {
+		t.Errorf("expected name for human string, got %s", got)
+	}
+}
+
 func TestClamp(t *testing.T) {
 	tests := []struct {
 		name       string

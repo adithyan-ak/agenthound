@@ -65,7 +65,7 @@ export function PathSelector({ onResults }: PathSelectorProps) {
 
       const req = {
         source: sourceName.trim(),
-        target: targetName.trim() || "*",
+        target: targetName.trim(),
         source_kind: sourceKind,
         ...(targetKind && { target_kind: targetKind }),
         max_hops: maxHops,

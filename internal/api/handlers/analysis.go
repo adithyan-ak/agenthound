@@ -72,41 +72,48 @@ func (h *AnalysisHandler) HandleShortestPath(w http.ResponseWriter, r *http.Requ
 
 	maxHops := clamp(req.MaxHops, 1, 20, 10)
 
+	srcProp := nodeMatchProp(req.Source)
 	var cypher string
 	params := map[string]any{
-		"source":   req.Source,
-		"max_hops": maxHops,
+		"source": req.Source,
 	}
 
+	const pathReturn = `RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, ` +
+		`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, ` +
+		`length(p) AS hops ORDER BY hops ASC LIMIT 10`
+
 	if targetKind != "" && targetName != "" {
+		tgtProp := nodeMatchProp(targetName)
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt:%s {name: $target}), `+
-				`p = shortestPath((src)-[*1..%d]->(tgt)) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT 10`,
-			req.SourceKind, targetKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt:%s {%s: $target}), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
+				pathReturn,
+			req.SourceKind, srcProp, targetKind, tgtProp, maxHops,
 		)
 		params["target"] = targetName
-	} else if targetKind != "" {
+	} else if targetKind != "" && targetName == "" {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt:%s), `+
-				`p = shortestPath((src)-[*1..%d]->(tgt)) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT 10`,
-			req.SourceKind, targetKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt:%s), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
+				pathReturn,
+			req.SourceKind, srcProp, targetKind, maxHops,
 		)
+	} else if targetName != "" {
+		tgtProp := nodeMatchProp(targetName)
+		cypher = fmt.Sprintf(
+			`MATCH (src:%s {%s: $source}), (tgt {%s: $target}), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
+				pathReturn,
+			req.SourceKind, srcProp, tgtProp, maxHops,
+		)
+		params["target"] = targetName
 	} else {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt {name: $target}), `+
-				`p = shortestPath((src)-[*1..%d]->(tgt)) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT 10`,
-			req.SourceKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
+				pathReturn,
+			req.SourceKind, srcProp, maxHops,
 		)
-		params["target"] = targetName
 	}
 
 	rows, err := h.graphDB.Query(r.Context(), cypher, params)
@@ -141,41 +148,49 @@ func (h *AnalysisHandler) HandleAllPaths(w http.ResponseWriter, r *http.Request)
 	maxHops := clamp(req.MaxHops, 1, 20, 10)
 	limit := clamp(req.Limit, 1, 100, 10)
 
+	srcProp := nodeMatchProp(req.Source)
 	var cypher string
 	params := map[string]any{
 		"source": req.Source,
 		"limit":  limit,
 	}
 
+	const allPathReturn = `RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, ` +
+		`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, ` +
+		`length(p) AS hops ORDER BY hops ASC LIMIT $limit`
+
 	if targetKind != "" && targetName != "" {
+		tgtProp := nodeMatchProp(targetName)
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt:%s {name: $target}), `+
-				`p = (src)-[*1..%d]->(tgt) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT $limit`,
-			req.SourceKind, targetKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt:%s {%s: $target}), `+
+				`p = (src)-[*1..%d]-(tgt) WHERE src <> tgt `+
+				allPathReturn,
+			req.SourceKind, srcProp, targetKind, tgtProp, maxHops,
 		)
 		params["target"] = targetName
-	} else if targetKind != "" {
+	} else if targetKind != "" && targetName == "" {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt:%s), `+
-				`p = (src)-[*1..%d]->(tgt) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT $limit`,
-			req.SourceKind, targetKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt:%s), `+
+				`p = (src)-[*1..%d]-(tgt) WHERE src <> tgt `+
+				allPathReturn,
+			req.SourceKind, srcProp, targetKind, maxHops,
 		)
+	} else if targetName != "" {
+		tgtProp := nodeMatchProp(targetName)
+		cypher = fmt.Sprintf(
+			`MATCH (src:%s {%s: $source}), (tgt {%s: $target}), `+
+				`p = (src)-[*1..%d]-(tgt) WHERE src <> tgt `+
+				allPathReturn,
+			req.SourceKind, srcProp, tgtProp, maxHops,
+		)
+		params["target"] = targetName
 	} else {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt {name: $target}), `+
-				`p = (src)-[*1..%d]->(tgt) `+
-				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
-				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid}] AS edges, `+
-				`length(p) AS hops ORDER BY hops ASC LIMIT $limit`,
-			req.SourceKind, maxHops,
+			`MATCH (src:%s {%s: $source}), (tgt), `+
+				`p = (src)-[*1..%d]-(tgt) WHERE src <> tgt `+
+				allPathReturn,
+			req.SourceKind, srcProp, maxHops,
 		)
-		params["target"] = targetName
 	}
 
 	rows, err := h.graphDB.Query(r.Context(), cypher, params)
@@ -216,6 +231,9 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 	maxHops := clamp(req.MaxHops, 1, 20, 10)
 	ctx := r.Context()
 
+	srcProp := nodeMatchProp(req.Source)
+	tgtProp := nodeMatchProp(targetName)
+
 	if h.graphDB.HasAPOC(ctx) {
 		var cypher string
 		params := map[string]any{
@@ -225,21 +243,21 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 
 		if targetKind != "" {
 			cypher = fmt.Sprintf(
-				`MATCH (src:%s {name: $source}), (tgt:%s {name: $target}) `+
+				`MATCH (src:%s {%s: $source}), (tgt:%s {%s: $target}) `+
 					`CALL apoc.algo.dijkstra(src, tgt, '%s', 'risk_weight') YIELD path, weight `+
 					`RETURN [n IN nodes(path) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
 					`[r IN relationships(path) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid, risk_weight: r.risk_weight}] AS edges, `+
 					`weight LIMIT 10`,
-				req.SourceKind, targetKind, dijkstraRelTypes,
+				req.SourceKind, srcProp, targetKind, tgtProp, dijkstraRelTypes,
 			)
 		} else {
 			cypher = fmt.Sprintf(
-				`MATCH (src:%s {name: $source}), (tgt {name: $target}) `+
+				`MATCH (src:%s {%s: $source}), (tgt {%s: $target}) `+
 					`CALL apoc.algo.dijkstra(src, tgt, '%s', 'risk_weight') YIELD path, weight `+
 					`RETURN [n IN nodes(path) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
 					`[r IN relationships(path) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid, risk_weight: r.risk_weight}] AS edges, `+
 					`weight LIMIT 10`,
-				req.SourceKind, dijkstraRelTypes,
+				req.SourceKind, srcProp, tgtProp, dijkstraRelTypes,
 			)
 		}
 
@@ -261,23 +279,23 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 
 	if targetKind != "" {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt:%s {name: $target}), `+
-				`p = shortestPath((src)-[*1..%d]->(tgt)) `+
+			`MATCH (src:%s {%s: $source}), (tgt:%s {%s: $target}), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
 				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
 				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid, risk_weight: r.risk_weight}] AS edges, `+
 				`reduce(w = 0.0, r IN relationships(p) | w + coalesce(r.risk_weight, 1.0)) AS weight, `+
 				`length(p) AS hops ORDER BY weight ASC LIMIT 10`,
-			req.SourceKind, targetKind, maxHops,
+			req.SourceKind, srcProp, targetKind, tgtProp, maxHops,
 		)
 	} else {
 		cypher = fmt.Sprintf(
-			`MATCH (src:%s {name: $source}), (tgt {name: $target}), `+
-				`p = shortestPath((src)-[*1..%d]->(tgt)) `+
+			`MATCH (src:%s {%s: $source}), (tgt {%s: $target}), `+
+				`p = shortestPath((src)-[*1..%d]-(tgt)) WHERE src <> tgt `+
 				`RETURN [n IN nodes(p) | {id: n.objectid, name: n.name, kinds: labels(n)}] AS nodes, `+
 				`[r IN relationships(p) | {kind: type(r), source: startNode(r).objectid, target: endNode(r).objectid, risk_weight: r.risk_weight}] AS edges, `+
 				`reduce(w = 0.0, r IN relationships(p) | w + coalesce(r.risk_weight, 1.0)) AS weight, `+
 				`length(p) AS hops ORDER BY weight ASC LIMIT 10`,
-			req.SourceKind, maxHops,
+			req.SourceKind, srcProp, tgtProp, maxHops,
 		)
 	}
 
@@ -337,6 +355,30 @@ func parseTarget(target, targetKind string) (string, string) {
 		return parts[0], parts[1]
 	}
 	return targetKind, target
+}
+
+// isObjectID returns true if value looks like a SHA-256 objectid (hex string
+// with optional "sha256:" prefix) rather than a human-readable name.
+func isObjectID(value string) bool {
+	v := strings.TrimPrefix(value, "sha256:")
+	if len(v) != 64 {
+		return false
+	}
+	for _, c := range v {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+// nodeMatchProp returns the property key to use for matching: "objectid" for
+// SHA-256 IDs, "name" for human-readable values.
+func nodeMatchProp(value string) string {
+	if isObjectID(value) {
+		return "objectid"
+	}
+	return "name"
 }
 
 func clamp(val, min, max, defaultVal int) int {
