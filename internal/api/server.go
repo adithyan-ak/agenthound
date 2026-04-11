@@ -79,8 +79,10 @@ func NewServer(deps ServerDeps) *Server {
 			r.Use(auth.RequireRole(auth.RoleViewer))
 
 			r.Get("/graph/stats", graphH.HandleStats)
+			r.Get("/graph/search", graphH.HandleSearch)
 			r.Get("/graph/nodes", graphH.HandleListNodes)
 			r.Get("/graph/nodes/{id}", graphH.HandleGetNode)
+			r.Get("/graph/nodes/{id}/neighborhood", graphH.HandleNeighborhood)
 			r.Get("/graph/edges", graphH.HandleListEdges)
 			r.Get("/analysis/findings", analysisH.HandleFindings)
 			r.Get("/analysis/prebuilt", analysisH.HandleListPreBuilt)

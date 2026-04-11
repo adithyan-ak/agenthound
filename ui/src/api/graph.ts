@@ -24,9 +24,36 @@ export async function fetchNode(
 
 export async function fetchEdges(
   kind?: string,
-  limit = 50000,
+  limit = 100000,
 ): Promise<APIEdge[]> {
   const params: Record<string, string> = { limit: String(limit) };
   if (kind) params["kind"] = kind;
   return api.get("graph/edges", { searchParams: params }).json<APIEdge[]>();
+}
+
+export interface SearchResult {
+  id: string;
+  name: string;
+  kind: string;
+}
+
+export async function searchNodes(
+  q: string,
+  limit = 20,
+): Promise<SearchResult[]> {
+  const params: Record<string, string> = { q, limit: String(limit) };
+  return api
+    .get("graph/search", { searchParams: params })
+    .json<SearchResult[]>();
+}
+
+export async function fetchNeighborhood(
+  id: string,
+  depth = 1,
+): Promise<{ nodes: APINode[]; edges: APIEdge[] }> {
+  return api
+    .get(`graph/nodes/${encodeURIComponent(id)}/neighborhood`, {
+      searchParams: { depth: String(depth) },
+    })
+    .json<{ nodes: APINode[]; edges: APIEdge[] }>();
 }

@@ -3,21 +3,21 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Network,
-  Route,
   ScanSearch,
   BookOpen,
   Shield,
   LogOut,
+  PanelRight,
 } from "lucide-react";
 import { api } from "@/api/client";
 import type { HealthResponse } from "@/api/types";
 import { useAuthStore } from "@/store/auth";
+import { useUIStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/graph", label: "Graph", icon: Network },
-  { to: "/pathfinder", label: "Pathfinder", icon: Route },
   { to: "/scans", label: "Scans", icon: ScanSearch },
   { to: "/queries", label: "Queries", icon: BookOpen },
 ];
@@ -26,6 +26,8 @@ export function NavBar() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: () => api.get("health").json<HealthResponse>(),
@@ -66,6 +68,16 @@ export function NavBar() {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-4">
+        <button
+          onClick={toggleSidebar}
+          className={cn(
+            "flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground transition-colors hover:text-foreground hover:bg-accent",
+            sidebarOpen && "text-primary bg-primary/10",
+          )}
+          title="Toggle Inspector (i)"
+        >
+          <PanelRight className="h-4 w-4" />
+        </button>
         <div className="flex items-center gap-2">
           <div
             className={cn(

@@ -63,7 +63,7 @@ func (w *Writer) writeNodesBatched(ctx context.Context, nodes []model.Node, scan
 	for kind, kindNodes := range grouped {
 		cypher := fmt.Sprintf(`UNWIND $nodes AS node
 MERGE (n:%s {objectid: node.id})
-ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.last_seen = datetime()
+ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.first_seen = datetime(), n.last_seen = datetime()
 ON MATCH SET n.previous_description_hash = n.description_hash, n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()
 RETURN count(*) AS written`, kind)
 

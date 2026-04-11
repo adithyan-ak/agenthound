@@ -65,19 +65,72 @@ func (h *GraphHandler) HandleListEdges(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	source := r.URL.Query().Get("source")
 	target := r.URL.Query().Get("target")
-	limit := parseIntParam(r, "limit", 100)
+	limit := parseIntParamWithMax(r, "limit", 100, maxEdgeQueryLimit)
 
 	edges, err := h.reader.ListEdges(r.Context(), kind, source, target, limit)
 	if err != nil {
 		WriteInternalError(w, r, fmt.Errorf("list edges: %w", err))
 		return
 	}
+	if len(edges) >= limit {
+		w.Header().Set("X-Truncated", "true")
+	}
 	WriteJSON(w, http.StatusOK, edges)
 }
 
-const maxQueryLimit = 10000
+func (h *GraphHandler) HandleSearch(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	if len(q) < 2 {
+		WriteValidationError(w, "q must be at least 2 characters")
+		return
+	}
+	limit := parseIntParamWithMax(r, "limit", 20, 100)
+
+	results, err := h.reader.SearchNodes(r.Context(), q, limit)
+	if err != nil {
+		WriteInternalError(w, r, fmt.Errorf("search nodes: %w", err))
+		return
+	}
+	if results == nil {
+		results = []graph.SearchResult{}
+	}
+	WriteJSON(w, http.StatusOK, results)
+}
+
+func (h *GraphHandler) HandleNeighborhood(w http.ResponseWriter, r *http.Request) {
+	raw := chi.URLParam(r, "id")
+	id, err := url.PathUnescape(raw)
+	if err != nil {
+		WriteValidationError(w, "invalid node id")
+		return
+	}
+	depth := parseIntParamWithMax(r, "depth", 1, 3)
+
+	nodes, edges, err := h.reader.GetNeighborhood(r.Context(), id, depth)
+	if err != nil {
+		WriteInternalError(w, r, fmt.Errorf("get neighborhood: %w", err))
+		return
+	}
+	if nodes == nil {
+		WriteNotFound(w, "node not found")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"nodes": nodes,
+		"edges": edges,
+	})
+}
+
+const (
+	maxQueryLimit     = 10000
+	maxEdgeQueryLimit = 100000
+)
 
 func parseIntParam(r *http.Request, key string, defaultVal int) int {
+	return parseIntParamWithMax(r, key, defaultVal, maxQueryLimit)
+}
+
+func parseIntParamWithMax(r *http.Request, key string, defaultVal, maxVal int) int {
 	s := r.URL.Query().Get(key)
 	if s == "" {
 		return defaultVal
@@ -86,8 +139,8 @@ func parseIntParam(r *http.Request, key string, defaultVal int) int {
 	if err != nil || v <= 0 {
 		return defaultVal
 	}
-	if v > maxQueryLimit {
-		return maxQueryLimit
+	if v > maxVal {
+		return maxVal
 	}
 	return v
 }
