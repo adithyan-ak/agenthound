@@ -595,7 +595,7 @@ func (r *Reader) GetBlastRadius(ctx context.Context, objectID, direction string,
 
 	expandCypher := fmt.Sprintf(
 		`UNWIND $ids AS id
-MATCH (a {objectid: id})%sb
+MATCH (a {objectid: id})%s(b)
 WHERE NOT b.objectid IN $visited
 RETURN DISTINCT b`, arrow)
 
