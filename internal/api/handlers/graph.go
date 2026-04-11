@@ -121,6 +121,46 @@ func (h *GraphHandler) HandleNeighborhood(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (h *GraphHandler) HandleBlastRadius(w http.ResponseWriter, r *http.Request) {
+	raw := chi.URLParam(r, "id")
+	id, err := url.PathUnescape(raw)
+	if err != nil {
+		WriteValidationError(w, "invalid node id")
+		return
+	}
+
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = "out"
+	}
+	switch direction {
+	case "out", "in", "both":
+	default:
+		WriteValidationError(w, "direction must be one of: out, in, both")
+		return
+	}
+
+	maxHops := parseIntParamWithMax(r, "max_hops", 6, 10)
+
+	result, err := h.reader.GetBlastRadius(r.Context(), id, direction, maxHops)
+	if err != nil {
+		WriteInternalError(w, r, fmt.Errorf("get blast radius: %w", err))
+		return
+	}
+	if result == nil {
+		WriteNotFound(w, "node not found")
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, map[string]any{
+		"nodes":     result.Nodes,
+		"edges":     result.Edges,
+		"rings":     result.Rings,
+		"direction": direction,
+		"max_hops":  maxHops,
+	})
+}
+
 const (
 	maxQueryLimit     = 10000
 	maxEdgeQueryLimit = 100000

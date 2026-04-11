@@ -523,6 +523,257 @@ RETURN a.objectid AS source, b.objectid AS target, type(r) AS kind, properties(r
 	return nr.nodes, nr.edges, nil
 }
 
+// BlastRadiusResult holds the reachable subgraph from a source node, with nodes
+// grouped by their BFS hop distance for concentric ring rendering.
+type BlastRadiusResult struct {
+	Nodes []model.Node     `json:"nodes"`
+	Edges []model.Edge     `json:"edges"`
+	Rings map[int][]string `json:"rings"` // hop distance -> []objectid
+}
+
+// GetBlastRadius returns all nodes reachable from the given source node within
+// maxHops, along with the edges that form the reachable subgraph and a ring map
+// grouping nodes by hop distance.
+//
+// direction:
+//
+//	"out"  — follow outgoing edges only (default; blast radius semantics)
+//	"in"   — follow incoming edges only (inbound reach)
+//	"both" — undirected (equivalent to full neighborhood)
+//
+// maxHops is clamped to [1, 10].
+func (r *Reader) GetBlastRadius(ctx context.Context, objectID, direction string, maxHops int) (*BlastRadiusResult, error) {
+	if maxHops < 1 {
+		maxHops = 1
+	}
+	if maxHops > 10 {
+		maxHops = 10
+	}
+	switch direction {
+	case "out", "in", "both":
+	default:
+		direction = "out"
+	}
+
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	// Verify the source node exists first. Empty result => nil (not found).
+	centerCypher := "MATCH (center {objectid: $id}) RETURN count(center) AS c"
+	centerExists, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, centerCypher, map[string]any{"id": objectID})
+		if err != nil {
+			return false, err
+		}
+		if !res.Next(ctx) {
+			return false, res.Err()
+		}
+		c, _ := res.Record().Values[0].(int64)
+		return c > 0, res.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("blast radius center check: %w", err)
+	}
+	if exists, _ := centerExists.(bool); !exists {
+		return nil, nil
+	}
+
+	// BFS expansion per hop. We issue one query per hop level using the
+	// current frontier as the starting set. This is bounded (maxHops <= 10)
+	// and avoids Neo4j's pathological variable-length pattern materialization
+	// on dense graphs while giving us exact ring-level grouping.
+	arrow := "-->"
+	if direction == "in" {
+		arrow = "<--"
+	} else if direction == "both" {
+		arrow = "--"
+	}
+
+	visited := map[string]model.Node{}
+	rings := map[int][]string{0: {objectID}}
+	frontier := []string{objectID}
+
+	expandCypher := fmt.Sprintf(
+		`UNWIND $ids AS id
+MATCH (a {objectid: id})%sb
+WHERE NOT b.objectid IN $visited
+RETURN DISTINCT b`, arrow)
+
+	for hop := 1; hop <= maxHops && len(frontier) > 0; hop++ {
+		visitedIDs := make([]string, 0, len(visited)+1)
+		visitedIDs = append(visitedIDs, objectID)
+		for id := range visited {
+			visitedIDs = append(visitedIDs, id)
+		}
+
+		params := map[string]any{"ids": frontier, "visited": visitedIDs}
+		hopResult, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			res, err := tx.Run(ctx, expandCypher, params)
+			if err != nil {
+				return nil, err
+			}
+			var nodes []model.Node
+			for res.Next(ctx) {
+				record := res.Record()
+				neoNode, ok := record.Values[0].(neo4j.Node)
+				if !ok {
+					continue
+				}
+				oid, _ := neoNode.Props["objectid"].(string)
+				if oid == "" {
+					continue
+				}
+				kinds := make([]string, 0, len(neoNode.Labels))
+				kinds = append(kinds, neoNode.Labels...)
+				nodes = append(nodes, model.Node{
+					ID:         oid,
+					Kinds:      kinds,
+					Properties: neoNode.Props,
+				})
+			}
+			return nodes, res.Err()
+		})
+		if err != nil {
+			return nil, fmt.Errorf("blast radius hop %d: %w", hop, err)
+		}
+		newNodes, _ := hopResult.([]model.Node)
+
+		nextFrontier := make([]string, 0, len(newNodes))
+		ringIDs := make([]string, 0, len(newNodes))
+		for _, n := range newNodes {
+			if _, seen := visited[n.ID]; seen {
+				continue
+			}
+			visited[n.ID] = n
+			nextFrontier = append(nextFrontier, n.ID)
+			ringIDs = append(ringIDs, n.ID)
+		}
+		if len(ringIDs) > 0 {
+			rings[hop] = ringIDs
+		}
+		frontier = nextFrontier
+	}
+
+	// Collect the center node and all visited nodes in a single slice.
+	centerNodeCypher := "MATCH (center {objectid: $id}) RETURN center, labels(center) AS kinds"
+	centerResult, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, centerNodeCypher, map[string]any{"id": objectID})
+		if err != nil {
+			return nil, err
+		}
+		if !res.Next(ctx) {
+			return nil, res.Err()
+		}
+		record := res.Record()
+		neoNode, ok := record.Values[0].(neo4j.Node)
+		if !ok {
+			return nil, res.Err()
+		}
+		kindsVal, _ := record.Values[1].([]any)
+		kindStrs := make([]string, 0, len(kindsVal))
+		for _, k := range kindsVal {
+			if s, ok := k.(string); ok {
+				kindStrs = append(kindStrs, s)
+			}
+		}
+		return model.Node{
+			ID:         objectID,
+			Kinds:      kindStrs,
+			Properties: neoNode.Props,
+		}, res.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("blast radius center fetch: %w", err)
+	}
+
+	nodes := make([]model.Node, 0, len(visited)+1)
+	if center, ok := centerResult.(model.Node); ok {
+		nodes = append(nodes, center)
+	}
+	for _, n := range visited {
+		nodes = append(nodes, n)
+	}
+
+	// Edge collection: match edges where BOTH endpoints are in the visited set,
+	// respecting directionality consistent with the BFS.
+	scope := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		scope = append(scope, n.ID)
+	}
+	var edgeCypher string
+	switch direction {
+	case "in":
+		edgeCypher = `MATCH (a)-[r]->(b)
+WHERE a.objectid IN $scope AND b.objectid IN $scope
+RETURN a.objectid AS source, b.objectid AS target, type(r) AS kind, properties(r) AS props, labels(a)[0] AS source_kind, labels(b)[0] AS target_kind`
+	case "both":
+		edgeCypher = `MATCH (a)-[r]->(b)
+WHERE a.objectid IN $scope AND b.objectid IN $scope
+RETURN a.objectid AS source, b.objectid AS target, type(r) AS kind, properties(r) AS props, labels(a)[0] AS source_kind, labels(b)[0] AS target_kind`
+	default: // "out"
+		edgeCypher = `MATCH (a)-[r]->(b)
+WHERE a.objectid IN $scope AND b.objectid IN $scope
+RETURN a.objectid AS source, b.objectid AS target, type(r) AS kind, properties(r) AS props, labels(a)[0] AS source_kind, labels(b)[0] AS target_kind`
+	}
+
+	edgeResult, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, edgeCypher, map[string]any{"scope": scope})
+		if err != nil {
+			return nil, err
+		}
+		seen := make(map[string]bool)
+		var edges []model.Edge
+		for res.Next(ctx) {
+			rec := res.Record()
+			srcVal, _ := rec.Get("source")
+			tgtVal, _ := rec.Get("target")
+			kindVal, _ := rec.Get("kind")
+			propsVal, _ := rec.Get("props")
+			srcKindVal, _ := rec.Get("source_kind")
+			tgtKindVal, _ := rec.Get("target_kind")
+
+			src, _ := srcVal.(string)
+			tgt, _ := tgtVal.(string)
+			kindStr, _ := kindVal.(string)
+			if src == "" || tgt == "" || kindStr == "" {
+				continue
+			}
+			key := fmt.Sprintf("%s->%s:%s", src, tgt, kindStr)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			e := model.Edge{
+				Source: src,
+				Target: tgt,
+				Kind:   kindStr,
+			}
+			if sk, ok := srcKindVal.(string); ok {
+				e.SourceKind = sk
+			}
+			if tk, ok := tgtKindVal.(string); ok {
+				e.TargetKind = tk
+			}
+			if p, ok := propsVal.(map[string]any); ok {
+				e.Properties = p
+			}
+			edges = append(edges, e)
+		}
+		return edges, res.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("blast radius edges: %w", err)
+	}
+	edges, _ := edgeResult.([]model.Edge)
+
+	return &BlastRadiusResult{
+		Nodes: nodes,
+		Edges: edges,
+		Rings: rings,
+	}, nil
+}
+
 func (r *Reader) Query(ctx context.Context, cypher string, params map[string]any) ([]map[string]any, error) {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
