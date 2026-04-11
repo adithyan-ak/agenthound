@@ -25,6 +25,7 @@ import {
 import { computeExplorerLayout } from "@/lib/explorer/layout";
 import { HexNode } from "./nodes/HexNode";
 import { LensEdge } from "./edges/LensEdge";
+import { SelfLoopEdge } from "./edges/SelfLoopEdge";
 import { getHexConfig } from "@/lib/explorer/hex-config";
 
 const nodeTypes = {
@@ -34,6 +35,7 @@ const nodeTypes = {
 const edgeTypes = {
   lens: LensEdge,
   "lens-cross": LensEdge,
+  "self-loop": SelfLoopEdge,
 };
 
 function minimapColor(node: Node): string {

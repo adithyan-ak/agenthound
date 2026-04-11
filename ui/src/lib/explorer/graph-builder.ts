@@ -278,11 +278,18 @@ export function buildExplorerGraph(
     touchedNodeIds.add(primary.source);
     touchedNodeIds.add(primary.target);
 
+    const isSelfLoop = primary.source === primary.target;
+    const edgeType = isSelfLoop
+      ? "self-loop"
+      : crossProtocol
+        ? "lens-cross"
+        : "lens";
+
     rfEdges.push({
       id: `${key}:${primary.kind}${group.length > 1 ? `+${group.length}` : ""}`,
       source: primary.source,
       target: primary.target,
-      type: crossProtocol ? "lens-cross" : "lens",
+      type: edgeType,
       sourceHandle: "h-right",
       targetHandle: "h-left",
       data: {
