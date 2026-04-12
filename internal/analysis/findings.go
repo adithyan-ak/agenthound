@@ -2,11 +2,20 @@ package analysis
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"github.com/adithyan-ak/agenthound/internal/graph"
 )
+
+// findingFingerprint returns a stable 16-char hex fingerprint for a finding
+// based on its edge kind and endpoints. Same logical finding across scans
+// gets the same ID so triage workflows can track state.
+func findingFingerprint(edgeKind, sourceID, targetID string) string {
+	h := sha256.Sum256([]byte(edgeKind + "|" + sourceID + "|" + targetID))
+	return hex.EncodeToString(h[:])[:16]
+}
 
 // Finding represents a security finding derived from a composite edge.
 type Finding struct {
@@ -105,7 +114,7 @@ func QueryFindings(ctx context.Context, db graph.GraphDB, severity string) ([]Fi
 	}
 
 	var findings []Finding
-	for i, row := range rows {
+	for _, row := range rows {
 		edgeKind := stringVal(row, "edge_kind")
 		sourceID := stringVal(row, "source_id")
 		sourceName := stringVal(row, "source_name")
@@ -142,7 +151,7 @@ func QueryFindings(ctx context.Context, db graph.GraphDB, severity string) ([]Fi
 		}
 
 		findings = append(findings, Finding{
-			ID:          fmt.Sprintf("F-%s-%d", strings.ReplaceAll(edgeKind, "_", "-"), i),
+			ID:          findingFingerprint(edgeKind, sourceID, targetID),
 			Severity:    sev,
 			Category:    meta.category,
 			Title:       meta.title,

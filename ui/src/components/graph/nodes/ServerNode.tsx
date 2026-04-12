@@ -1,6 +1,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Server } from "lucide-react";
+import { Server, Target, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGraphStore } from "@/store/graph";
 
 type ServerNodeData = {
   label: string;
@@ -22,18 +23,23 @@ const AUTH_DOTS: Record<string, { color: string; label: string }> = {
 };
 
 export function ServerNode({
+  id,
   data,
   selected,
 }: NodeProps<ServerNodeType>) {
   const authMethod = String(data.properties.auth_method ?? "none");
   const dot = AUTH_DOTS[authMethod] ?? AUTH_DOTS["none"]!;
+  const isOwned = useGraphStore((s) => s.ownedNodeIds.includes(id));
+  const isHighValue = useGraphStore((s) => s.highValueNodeIds.includes(id));
 
   return (
     <div
       className={cn(
-        "rounded-lg border px-2.5 py-1.5 shadow-sm transition-all",
+        "relative rounded-lg border px-2.5 py-1.5 shadow-sm transition-all",
         "bg-[#1a1f2e] border-[#2a2f3e]",
         selected && "ring-2 ring-offset-1 ring-offset-[#0a0f1e]",
+        isOwned && "ring-2 ring-red-500 shadow-red-900/50 shadow-lg",
+        isHighValue && "ring-2 ring-yellow-400 shadow-yellow-900/50 shadow-lg",
       )}
       style={{
         width: 180,
@@ -41,6 +47,16 @@ export function ServerNode({
         borderLeftColor: "#50C878",
       }}
     >
+      {isOwned && (
+        <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-600 flex items-center justify-center shadow-md">
+          <Target className="h-2.5 w-2.5 text-white" />
+        </div>
+      )}
+      {isHighValue && !isOwned && (
+        <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-yellow-500 flex items-center justify-center shadow-md">
+          <Crown className="h-2.5 w-2.5 text-black" />
+        </div>
+      )}
       <Handle
         type="target"
         position={Position.Left}

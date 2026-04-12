@@ -127,12 +127,28 @@ export function buildReactFlowGraph(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const sourceKind =
+      edge.source_kind ?? nodeMap.get(edge.source)?.kinds[0] ?? "";
+    const targetKind =
+      edge.target_kind ?? nodeMap.get(edge.target)?.kinds[0] ?? "";
+    const isCrossProtocol =
+      (sourceKind.startsWith("A2A") && targetKind.startsWith("MCP")) ||
+      (sourceKind.startsWith("MCP") && targetKind.startsWith("A2A")) ||
+      (sourceKind.startsWith("A2A") && targetKind === "Host") ||
+      (sourceKind.startsWith("MCP") && targetKind.startsWith("A2A"));
+
     edges.push({
       id: key,
       source: edge.source,
       target: edge.target,
       type: getEdgeCategory(edge.kind),
-      data: { kind: edge.kind, properties: edge.properties },
+      data: {
+        kind: edge.kind,
+        properties: edge.properties,
+        sourceKind,
+        targetKind,
+        isCrossProtocol,
+      },
     });
   }
 

@@ -51,6 +51,27 @@ const config: Config = {
           config: "#95A5A6",
           host: "#2C3E50",
         },
+        severity: {
+          critical: "#EF4444",
+          high: "#F97316",
+          medium: "#EAB308",
+          low: "#94A3B8",
+          info: "#64748B",
+        },
+      },
+      keyframes: {
+        "slide-in-from-bottom-4": {
+          "0%": { transform: "translateY(16px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+      },
+      animation: {
+        "slide-in-from-bottom-4": "slide-in-from-bottom-4 200ms ease-out",
+        "fade-in": "fade-in 150ms ease-out",
       },
       borderRadius: {
         lg: "var(--radius)",

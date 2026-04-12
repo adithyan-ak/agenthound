@@ -1,7 +1,10 @@
-import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
+import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk-api.js";
+import ElkWorker from "elkjs/lib/elk-worker.min.js?worker";
 import type { Node, Edge } from "@xyflow/react";
 
-const elk = new ELK();
+const elk = new ELK({
+  workerFactory: () => new ElkWorker() as unknown as Worker,
+});
 
 const TIER1_TYPES = new Set(["server", "a2aAgent"]);
 const TIER3_TYPES = new Set(["infra"]);
