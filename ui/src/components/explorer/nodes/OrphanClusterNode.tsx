@@ -11,6 +11,8 @@ import {
 import { useExplorerStore } from "@/store/explorer";
 import { cn } from "@/lib/utils";
 
+const HOVER_CLOSE_DELAY_MS = 160;
+
 function OrphanClusterNodeComponent({ data }: NodeProps) {
   const d = data as OrphanClusterData;
   const config = getHexConfig(d.kind);
@@ -20,8 +22,7 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
   const openDrawer = useExplorerStore((s) => s.openDrawer);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -30,23 +31,33 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
   }, [d.orphanNodes, search]);
 
   useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      const t = e.target as Node;
-      if (popoverRef.current?.contains(t)) return;
-      if (triggerRef.current?.contains(t)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+      }
     };
-  }, [open]);
+  }, []);
+
+  function cancelClose() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  function scheduleClose() {
+    if (closeTimerRef.current) return;
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      setSearch("");
+      closeTimerRef.current = null;
+    }, HOVER_CLOSE_DELAY_MS);
+  }
+
+  function handleEnter() {
+    cancelClose();
+    setOpen(true);
+  }
 
   const strokeColor = config.strokeColor;
 
@@ -54,14 +65,11 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
     <div
       className="relative flex flex-col items-center select-none"
       style={{ width: HEX_NODE_WIDTH }}
+      onMouseEnter={handleEnter}
+      onMouseLeave={scheduleClose}
     >
-      <button
-        ref={triggerRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="relative cursor-pointer transition-transform duration-150 hover:scale-[1.08] focus:outline-none"
+      <div
+        className="relative cursor-pointer transition-transform duration-150 hover:scale-[1.08]"
         style={{ width: HEX_NODE_WIDTH, height: HEX_NODE_HEIGHT }}
         aria-label={`${d.count} unconnected ${d.kindTag}`}
       >
@@ -114,18 +122,26 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
             {d.count}
           </div>
         </div>
-      </button>
+      </div>
 
       {open && (
-        <div
-          ref={popoverRef}
-          className={cn(
-            "absolute left-full top-0 ml-3 w-[300px] rounded-lg border border-slate-700/80 bg-slate-950/98 shadow-2xl backdrop-blur-md",
-            "z-[60] overflow-hidden",
-            "animate-in fade-in zoom-in-95 duration-150",
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <>
+          <div
+            className="absolute left-1/2 -translate-x-1/2 h-4 w-[180px]"
+            style={{ bottom: "100%", pointerEvents: "auto" }}
+            onMouseEnter={handleEnter}
+            onMouseLeave={scheduleClose}
+          />
+          <div
+            className={cn(
+              "absolute left-1/2 -translate-x-1/2 w-[300px] rounded-lg border border-slate-700/80 bg-slate-950/98 shadow-2xl backdrop-blur-md",
+              "z-[60] overflow-hidden",
+              "animate-in fade-in zoom-in-95 duration-150",
+            )}
+            style={{ bottom: "calc(100% + 14px)" }}
+            onMouseEnter={handleEnter}
+            onMouseLeave={scheduleClose}
+          >
           <div
             className="flex items-center gap-2 border-b border-slate-800 px-3 py-2.5"
             style={{ borderTopColor: strokeColor, borderTopWidth: 2 }}
@@ -192,9 +208,10 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
           </div>
 
           <div className="border-t border-slate-800 bg-slate-900/40 px-3 py-1.5 text-[9px] uppercase tracking-widest text-slate-600">
-            Click a row to inspect
+            Hover to browse · click a row to inspect
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       <div className="mt-1 flex flex-col items-center text-center">

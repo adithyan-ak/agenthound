@@ -36,11 +36,28 @@ export interface LayoutResult<T extends Node = Node> {
 }
 
 /**
- * Compute left-to-right column layout for hex nodes. Each node is tagged
- * with its target column (0..4) based on its data.kind (via HEX_CONFIG),
- * then ELK's partitioning layering places it exactly on that column.
- * Within each column, ELK minimizes edge crossings. Accepts both regular
- * hex nodes and orphan-cluster nodes — both carry `data.kind`.
+ * Gap between the bottom of the connected graph and the cluster strip.
+ */
+const CLUSTER_STRIP_GAP = 120;
+
+/**
+ * Horizontal spacing between cluster hexes inside the bottom strip.
+ * Larger than normal column spacing to give the labels room to breathe.
+ */
+const CLUSTER_STRIP_SPACING = 150;
+
+/**
+ * Compute left-to-right column layout for hex nodes, with orphan-cluster
+ * nodes placed in a dedicated horizontal strip BELOW the main graph.
+ *
+ * Connected (type="hex") nodes are laid out by ELK's layered algorithm
+ * with per-kind partitioning so they land in strict left-to-right
+ * columns. Orphan-cluster (type="orphan-cluster") nodes are removed
+ * from the ELK input entirely and manually positioned in a horizontal
+ * strip anchored to the bottom of the connected graph's bounding box.
+ * This keeps the main graph layout stable when showOrphans is toggled
+ * on/off, and gives the unconnected nodes a clear visual "parking lot"
+ * separate from the active attack graph.
  */
 export async function computeExplorerLayout<T extends Node = Node>(
   nodes: T[],
@@ -48,52 +65,89 @@ export async function computeExplorerLayout<T extends Node = Node>(
 ): Promise<LayoutResult<T>> {
   if (nodes.length === 0) return { nodes, bounds: { width: 0, height: 0 } };
 
-  const elkChildren: ElkNode[] = nodes.map((n) => {
-    const data = n.data as Record<string, unknown> | undefined;
-    const kind = typeof data?.kind === "string" ? data.kind : "";
-    const config = getHexConfig(kind);
-    return {
-      id: n.id,
-      width: HEX_NODE_WIDTH,
-      height: HEX_TOTAL_HEIGHT,
-      layoutOptions: {
-        "elk.partitioning.partition": String(config.column),
-      },
-    };
-  });
-
-  const nodeIds = new Set(nodes.map((n) => n.id));
-  const elkEdges: ElkExtendedEdge[] = [];
-  const seen = new Set<string>();
-
-  for (const e of edges) {
-    if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue;
-    const key = `${e.source}->${e.target}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    elkEdges.push({
-      id: e.id,
-      sources: [e.source],
-      targets: [e.target],
-    });
+  const connectedNodes: T[] = [];
+  const clusterNodes: T[] = [];
+  for (const n of nodes) {
+    if (n.type === "orphan-cluster") clusterNodes.push(n);
+    else connectedNodes.push(n);
   }
 
-  const result = await elk.layout({
-    id: "explorer-root",
-    layoutOptions: ELK_OPTIONS,
-    children: elkChildren,
-    edges: elkEdges,
-  });
-
   const positions = new Map<string, { x: number; y: number }>();
-  let maxX = 0;
-  let maxY = 0;
-  for (const child of result.children ?? []) {
-    const x = child.x ?? 0;
-    const y = child.y ?? 0;
-    positions.set(child.id, { x, y });
-    if (x + HEX_NODE_WIDTH > maxX) maxX = x + HEX_NODE_WIDTH;
-    if (y + HEX_TOTAL_HEIGHT > maxY) maxY = y + HEX_TOTAL_HEIGHT;
+  let mainMaxX = 0;
+  let mainMaxY = 0;
+  let mainMinX = Number.POSITIVE_INFINITY;
+
+  if (connectedNodes.length > 0) {
+    const elkChildren: ElkNode[] = connectedNodes.map((n) => {
+      const data = n.data as Record<string, unknown> | undefined;
+      const kind = typeof data?.kind === "string" ? data.kind : "";
+      const config = getHexConfig(kind);
+      return {
+        id: n.id,
+        width: HEX_NODE_WIDTH,
+        height: HEX_TOTAL_HEIGHT,
+        layoutOptions: {
+          "elk.partitioning.partition": String(config.column),
+        },
+      };
+    });
+
+    const connectedIds = new Set(connectedNodes.map((n) => n.id));
+    const elkEdges: ElkExtendedEdge[] = [];
+    const seen = new Set<string>();
+    for (const e of edges) {
+      if (!connectedIds.has(e.source) || !connectedIds.has(e.target)) continue;
+      const key = `${e.source}->${e.target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      elkEdges.push({
+        id: e.id,
+        sources: [e.source],
+        targets: [e.target],
+      });
+    }
+
+    const result = await elk.layout({
+      id: "explorer-root",
+      layoutOptions: ELK_OPTIONS,
+      children: elkChildren,
+      edges: elkEdges,
+    });
+
+    for (const child of result.children ?? []) {
+      const x = child.x ?? 0;
+      const y = child.y ?? 0;
+      positions.set(child.id, { x, y });
+      if (x < mainMinX) mainMinX = x;
+      if (x + HEX_NODE_WIDTH > mainMaxX) mainMaxX = x + HEX_NODE_WIDTH;
+      if (y + HEX_TOTAL_HEIGHT > mainMaxY) mainMaxY = y + HEX_TOTAL_HEIGHT;
+    }
+  } else {
+    mainMinX = 0;
+    mainMaxX = 0;
+    mainMaxY = 0;
+  }
+
+  // Place cluster nodes in a horizontal strip below the connected graph.
+  // The strip is horizontally centered on the connected graph's midpoint
+  // so it reads as "unconnected inventory" sitting directly under the
+  // active graph.
+  let finalMaxX = mainMaxX;
+  let finalMaxY = mainMaxY;
+  if (clusterNodes.length > 0) {
+    const stripY = mainMaxY + CLUSTER_STRIP_GAP;
+    const stripTotalWidth = clusterNodes.length * CLUSTER_STRIP_SPACING;
+    const mainMidX = (mainMinX + mainMaxX) / 2;
+    const stripStartX = mainMidX - stripTotalWidth / 2;
+    for (let i = 0; i < clusterNodes.length; i++) {
+      const n = clusterNodes[i]!;
+      const x = stripStartX + i * CLUSTER_STRIP_SPACING;
+      positions.set(n.id, { x, y: stripY });
+      if (x + HEX_NODE_WIDTH > finalMaxX) {
+        finalMaxX = x + HEX_NODE_WIDTH;
+      }
+    }
+    finalMaxY = stripY + HEX_TOTAL_HEIGHT;
   }
 
   const positioned = nodes.map((n) => {
@@ -102,5 +156,8 @@ export async function computeExplorerLayout<T extends Node = Node>(
     return { ...n, position: pos };
   });
 
-  return { nodes: positioned, bounds: { width: maxX, height: maxY } };
+  return {
+    nodes: positioned,
+    bounds: { width: finalMaxX, height: finalMaxY },
+  };
 }

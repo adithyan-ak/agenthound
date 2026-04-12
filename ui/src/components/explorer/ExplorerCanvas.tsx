@@ -71,6 +71,7 @@ export function ExplorerCanvas() {
   const reactFlowRef = useRef(reactFlow);
   reactFlowRef.current = reactFlow;
   const hasInitialLayoutRef = useRef(false);
+  const prevShowOrphansRef = useRef(showOrphans);
 
   const built = useMemo(() => {
     if (!data) return null;
@@ -136,6 +137,34 @@ export function ExplorerCanvas() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [clearSelection]);
+
+  // When the user toggles "show clusters" on, pan/zoom to the cluster strip
+  // once the layout has rendered the new cluster nodes. Transition detected
+  // via prevShowOrphansRef; we wait for the `nodes` state to actually
+  // contain the cluster nodes before firing fitView so the animation
+  // lands on real DOM positions.
+  useEffect(() => {
+    const wasOff = !prevShowOrphansRef.current;
+    const nowOn = showOrphans;
+    if (!layoutReady) return;
+    if (wasOff && nowOn) {
+      const clusters = nodes.filter((n) => n.type === "orphan-cluster");
+      if (clusters.length > 0) {
+        prevShowOrphansRef.current = true;
+        const timer = setTimeout(() => {
+          reactFlowRef.current.fitView({
+            nodes: clusters.map((n) => ({ id: n.id })),
+            padding: 0.45,
+            duration: 700,
+            maxZoom: 1.0,
+          });
+        }, 80);
+        return () => clearTimeout(timer);
+      }
+    } else if (!nowOn) {
+      prevShowOrphansRef.current = false;
+    }
+  }, [nodes, showOrphans, layoutReady]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
