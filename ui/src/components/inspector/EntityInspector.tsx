@@ -1,19 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair } from "lucide-react";
+import { Crosshair, Crown, Target } from "lucide-react";
 import { fetchNode } from "@/api/graph";
 import { useGraphStore } from "@/store/graph";
 import { NODE_COLORS } from "@/lib/node-styles";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { NodeProperties } from "./NodeProperties";
 import { NodeConnections } from "./NodeConnections";
 import { RiskBreakdown } from "./RiskBreakdown";
 import { NodeFindings } from "./NodeFindings";
+import { EdgeEvidence } from "./EdgeEvidence";
 
 export function EntityInspector() {
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const selectedEdgeId = useGraphStore((s) => s.selectedEdgeId);
+  const ownedNodeIds = useGraphStore((s) => s.ownedNodeIds);
+  const highValueNodeIds = useGraphStore((s) => s.highValueNodeIds);
+  const toggleOwned = useGraphStore((s) => s.toggleOwned);
+  const toggleHighValue = useGraphStore((s) => s.toggleHighValue);
+
+  // Edge inspection takes precedence if an edge is selected
+  if (selectedEdgeId) {
+    return (
+      <div className="p-4">
+        <div className="mb-3">
+          <Badge variant="outline" className="text-[10px]">
+            EDGE
+          </Badge>
+          <h3 className="text-sm font-semibold text-foreground mt-1">
+            Edge Evidence
+          </h3>
+        </div>
+        <EdgeEvidence edgeId={selectedEdgeId} />
+      </div>
+    );
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["node", selectedNodeId],
@@ -26,7 +50,16 @@ export function EntityInspector() {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <Crosshair className="h-8 w-8 text-muted-foreground/50 mb-3" />
-        <p className="text-sm text-muted-foreground">Click a node to inspect it</p>
+        <p className="text-sm text-muted-foreground">
+          Click a node or edge to inspect it
+        </p>
+        <p className="text-[11px] text-muted-foreground/70 mt-1">
+          Press{" "}
+          <kbd className="px-1 py-0.5 rounded bg-muted text-foreground text-[10px]">
+            /
+          </kbd>{" "}
+          to search
+        </p>
       </div>
     );
   }
@@ -62,6 +95,8 @@ export function EntityInspector() {
       node.id.slice(0, 12),
   );
   const riskScore = Number(node.properties.risk_score ?? 0);
+  const isOwned = ownedNodeIds.includes(node.id);
+  const isHighValue = highValueNodeIds.includes(node.id);
 
   return (
     <div className="p-4">
@@ -74,6 +109,16 @@ export function EntityInspector() {
           <Badge variant="secondary" className="text-[10px]">
             {kind}
           </Badge>
+          {isOwned && (
+            <Badge className="text-[10px] bg-red-600 hover:bg-red-600">
+              OWNED
+            </Badge>
+          )}
+          {isHighValue && (
+            <Badge className="text-[10px] bg-yellow-500 text-black hover:bg-yellow-500">
+              HIGH VALUE
+            </Badge>
+          )}
         </div>
         <h3 className="text-sm font-semibold text-foreground break-all">
           {name}
@@ -96,18 +141,46 @@ export function EntityInspector() {
                 style={{ width: `${Math.min(riskScore, 100)}%` }}
               />
             </div>
-            <span className="text-xs text-foreground">{riskScore.toFixed(0)}</span>
+            <span className="text-xs text-foreground">
+              {riskScore.toFixed(0)}
+            </span>
           </div>
         )}
+        <div className="mt-2 flex gap-1.5">
+          <Button
+            size="sm"
+            variant={isOwned ? "default" : "outline"}
+            className={cn(
+              "h-7 text-[11px] flex-1",
+              isOwned && "bg-red-600 hover:bg-red-700",
+            )}
+            onClick={() => toggleOwned(node.id)}
+          >
+            <Target className="h-3 w-3 mr-1" />
+            {isOwned ? "Owned" : "Mark Owned"}
+          </Button>
+          <Button
+            size="sm"
+            variant={isHighValue ? "default" : "outline"}
+            className={cn(
+              "h-7 text-[11px] flex-1",
+              isHighValue && "bg-yellow-500 hover:bg-yellow-600 text-black",
+            )}
+            onClick={() => toggleHighValue(node.id)}
+          >
+            <Crown className="h-3 w-3 mr-1" />
+            {isHighValue ? "High Value" : "Mark HV"}
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="Properties">
         <TabsList className="w-full">
           <TabsTrigger value="Properties" className="flex-1 text-xs">
-            Properties
+            Props
           </TabsTrigger>
           <TabsTrigger value="Connections" className="flex-1 text-xs">
-            Connections
+            Links
           </TabsTrigger>
           <TabsTrigger value="Risk" className="flex-1 text-xs">
             Risk

@@ -16,6 +16,7 @@ export function GraphFilters() {
   const filters = useGraphStore((s) => s.activeFilters);
   const toggleNodeKind = useGraphStore((s) => s.toggleNodeKind);
   const toggleEdgeKind = useGraphStore((s) => s.toggleEdgeKind);
+  const setNodeKinds = useGraphStore((s) => s.setNodeKinds);
   const setMinRiskScore = useGraphStore((s) => s.setMinRiskScore);
 
   return (
@@ -37,9 +38,27 @@ export function GraphFilters() {
       {expanded && (
         <div className="mt-1 w-64 rounded-md border bg-card p-3 shadow-md max-h-[70vh] overflow-y-auto">
           <div className="mb-3">
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">
-              NODE TYPES
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-medium text-muted-foreground">
+                NODE TYPES
+              </h4>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setNodeKinds(NODE_KINDS)}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-accent"
+                  title="Show all kinds"
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setNodeKinds([])}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-accent"
+                  title="Hide all kinds"
+                >
+                  None
+                </button>
+              </div>
+            </div>
             <div className="space-y-1">
               {NODE_KINDS.map((kind) => (
                 <label

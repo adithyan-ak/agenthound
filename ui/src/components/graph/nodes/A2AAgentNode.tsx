@@ -1,6 +1,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Bot, AlertTriangle } from "lucide-react";
+import { Bot, AlertTriangle, Target, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGraphStore } from "@/store/graph";
 
 type A2AAgentNodeData = {
   label: string;
@@ -22,6 +23,7 @@ const AUTH_DOTS: Record<string, { color: string; label: string }> = {
 };
 
 export function A2AAgentNode({
+  id,
   data,
   selected,
 }: NodeProps<A2AAgentNodeType>) {
@@ -30,13 +32,17 @@ export function A2AAgentNode({
   const skillCount = Number(data.properties.skill_count ?? 0);
   const isSigned = data.properties.is_signed;
   const unsigned = isSigned === false;
+  const isOwned = useGraphStore((s) => s.ownedNodeIds.includes(id));
+  const isHighValue = useGraphStore((s) => s.highValueNodeIds.includes(id));
 
   return (
     <div
       className={cn(
-        "rounded-lg border px-2.5 py-1.5 shadow-sm transition-all",
+        "relative rounded-lg border px-2.5 py-1.5 shadow-sm transition-all",
         "bg-[#1a1f2e] border-[#2a2f3e]",
         selected && "ring-2 ring-offset-1 ring-offset-[#0a0f1e]",
+        isOwned && "ring-2 ring-red-500 shadow-red-900/50 shadow-lg",
+        isHighValue && "ring-2 ring-yellow-400 shadow-yellow-900/50 shadow-lg",
       )}
       style={{
         width: 180,
@@ -44,6 +50,16 @@ export function A2AAgentNode({
         borderLeftColor: "#7B68EE",
       }}
     >
+      {isOwned && (
+        <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-600 flex items-center justify-center shadow-md">
+          <Target className="h-2.5 w-2.5 text-white" />
+        </div>
+      )}
+      {isHighValue && !isOwned && (
+        <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-yellow-500 flex items-center justify-center shadow-md">
+          <Crown className="h-2.5 w-2.5 text-black" />
+        </div>
+      )}
       <Handle
         type="target"
         position={Position.Left}
