@@ -302,4 +302,89 @@ describe("buildExplorerGraph", () => {
     expect(result.metrics.visibleEdgeCount).toBeGreaterThan(0);
     expect(result.metrics.criticalCount).toBeGreaterThanOrEqual(2);
   });
+
+  it("hides orphans by default in non-dim lenses and reports orphanCount", () => {
+    const orphan = n("isolated-tool", "MCPTool");
+    const nodes = [...FIXTURE_NODES, orphan];
+    const lens = getLens("attack-surface");
+    const result = buildExplorerGraph(
+      { nodes, edges: FIXTURE_EDGES },
+      {
+        lens,
+        activeLensId: "attack-surface",
+        subPresets: [...lens.edgeKinds],
+        findings: FIXTURE_FINDINGS,
+      },
+    );
+    // Orphan should not appear as an individual hex
+    const hexNodeIds = result.nodes
+      .filter((n) => n.type === "hex")
+      .map((n) => n.id);
+    expect(hexNodeIds).not.toContain("isolated-tool");
+    // Metrics should count the orphan
+    expect(result.metrics.orphanCount).toBeGreaterThanOrEqual(1);
+    expect(result.metrics.orphanByKind["MCPTool"]).toBeGreaterThanOrEqual(1);
+    // No cluster emitted when showOrphans=false
+    const clusters = result.nodes.filter((n) => n.type === "orphan-cluster");
+    expect(clusters.length).toBe(0);
+  });
+
+  it("emits one cluster node per kind when showOrphans is true", () => {
+    const nodes = [
+      ...FIXTURE_NODES,
+      n("isolated-tool-1", "MCPTool"),
+      n("isolated-tool-2", "MCPTool"),
+      n("isolated-host-1", "Host"),
+    ];
+    const lens = getLens("attack-surface");
+    const result = buildExplorerGraph(
+      { nodes, edges: FIXTURE_EDGES },
+      {
+        lens,
+        activeLensId: "attack-surface",
+        subPresets: [...lens.edgeKinds],
+        findings: FIXTURE_FINDINGS,
+        showOrphans: true,
+      },
+    );
+    const clusters = result.nodes.filter((n) => n.type === "orphan-cluster");
+    const clusterKinds = clusters.map(
+      (c) => (c.data as { kind: string }).kind,
+    );
+    // Should have clusters for MCPTool and Host at minimum, not two Tool clusters
+    expect(clusterKinds).toContain("MCPTool");
+    expect(clusterKinds).toContain("Host");
+    // One cluster per kind, not one per node
+    const toolClusters = clusters.filter(
+      (c) => (c.data as { kind: string }).kind === "MCPTool",
+    );
+    expect(toolClusters.length).toBe(1);
+    // Cluster carries the correct member count
+    const toolCluster = toolClusters[0]!;
+    expect((toolCluster.data as { count: number }).count).toBe(2);
+    // Cluster contains the orphan node ids for drill-in
+    const orphanIds = (
+      toolCluster.data as { orphanNodes: Array<{ id: string }> }
+    ).orphanNodes.map((o) => o.id);
+    expect(orphanIds).toContain("isolated-tool-1");
+    expect(orphanIds).toContain("isolated-tool-2");
+  });
+
+  it("does not cluster orphans in dim-others lenses (Critical)", () => {
+    const nodes = [...FIXTURE_NODES, n("isolated-tool", "MCPTool")];
+    const lens = getLens("critical");
+    const result = buildExplorerGraph(
+      { nodes, edges: FIXTURE_EDGES },
+      {
+        lens,
+        activeLensId: "critical",
+        subPresets: [],
+        findings: FIXTURE_FINDINGS,
+        showOrphans: true,
+      },
+    );
+    // Critical uses dim-others behavior, no clustering
+    const clusters = result.nodes.filter((n) => n.type === "orphan-cluster");
+    expect(clusters.length).toBe(0);
+  });
 });

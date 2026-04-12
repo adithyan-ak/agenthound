@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { EyeOff, Eye } from "lucide-react";
 import { useExplorerStore } from "@/store/explorer";
 import { useExplorerGraph } from "@/hooks/useExplorerGraph";
 import { getLens } from "@/lib/explorer/lens-config";
@@ -9,6 +10,8 @@ export function InfoCard() {
   const { data } = useExplorerGraph();
   const activeLens = useExplorerStore((s) => s.activeLens);
   const subPresets = useExplorerStore((s) => s.subPresets[activeLens] ?? []);
+  const showOrphans = useExplorerStore((s) => s.showOrphans);
+  const toggleShowOrphans = useExplorerStore((s) => s.toggleShowOrphans);
 
   const metrics = useMemo(() => {
     if (!data) return null;
@@ -20,10 +23,11 @@ export function InfoCard() {
         activeLensId: activeLens,
         subPresets,
         findings: data.findings,
+        showOrphans,
       },
     );
     return built.metrics;
-  }, [data, activeLens, subPresets]);
+  }, [data, activeLens, subPresets, showOrphans]);
 
   const lens = getLens(activeLens);
 
@@ -93,6 +97,36 @@ export function InfoCard() {
           />
         )}
       </div>
+
+      {metrics.orphanCount > 0 && !lens.dimOthers && (
+        <button
+          onClick={toggleShowOrphans}
+          className={cn(
+            "mt-3 flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-[10px] transition-colors",
+            showOrphans
+              ? "border-blue-700/60 bg-blue-950/40 text-blue-300 hover:bg-blue-900/50"
+              : "border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-white",
+          )}
+          aria-label={
+            showOrphans
+              ? "Hide unconnected node clusters"
+              : "Show unconnected node clusters"
+          }
+        >
+          <span className="flex items-center gap-1.5">
+            {showOrphans ? (
+              <Eye className="h-3 w-3" strokeWidth={2.25} />
+            ) : (
+              <EyeOff className="h-3 w-3" strokeWidth={2.25} />
+            )}
+            <span className="tabular-nums">{metrics.orphanCount}</span>
+            <span>unconnected</span>
+          </span>
+          <span className="font-semibold text-[9px] uppercase tracking-widest">
+            {showOrphans ? "hide" : "show clusters"}
+          </span>
+        </button>
+      )}
 
       <div className="mt-3 border-t border-slate-800/80 pt-2 text-[10px] leading-relaxed text-slate-400">
         {lens.description}

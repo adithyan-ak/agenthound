@@ -16,6 +16,17 @@ export interface HexNodeData extends Record<string, unknown> {
   sizeMultiplier: number;
 }
 
+export interface OrphanClusterData extends Record<string, unknown> {
+  kind: string;
+  kindTag: string;
+  count: number;
+  orphanNodes: Array<{
+    id: string;
+    name: string;
+    kind: string;
+  }>;
+}
+
 export interface LensEdgeData extends Record<string, unknown> {
   kind: string;
   sourceKind: string;
@@ -40,7 +51,7 @@ export interface BundledEdge {
 }
 
 export interface BuildResult {
-  nodes: Node<HexNodeData>[];
+  nodes: Node[];
   edges: Edge<LensEdgeData>[];
   metrics: LensMetrics;
 }
@@ -52,6 +63,10 @@ export interface LensMetrics {
   highCount: number;
   mediumCount: number;
   lowCount: number;
+  /** Count of nodes that don't participate in any visible edge under the current lens. */
+  orphanCount: number;
+  /** Per-kind orphan breakdown (only populated when orphanCount > 0). */
+  orphanByKind: Record<string, number>;
 }
 
 const MCP_NODE_KINDS = new Set([
@@ -164,6 +179,12 @@ export interface BuildOptions {
    * For the Chokepoints lens: a map of nodeId -> size multiplier (1.0 .. 2.5).
    */
   chokepoints?: Map<string, number>;
+  /**
+   * When true, orphan nodes (no visible edge under the current lens) are
+   * aggregated into per-kind cluster placeholder nodes. When false, they
+   * are hidden entirely. Only applies to lenses with dimOthers=false.
+   */
+  showOrphans?: boolean;
 }
 
 /**
@@ -175,7 +196,15 @@ export function buildExplorerGraph(
   raw: { nodes: APINode[]; edges: APIEdge[] },
   opts: BuildOptions,
 ): BuildResult {
-  const { lens, activeLensId, subPresets, findings, blastRadius, chokepoints } = opts;
+  const {
+    lens,
+    activeLensId,
+    subPresets,
+    findings,
+    blastRadius,
+    chokepoints,
+    showOrphans = false,
+  } = opts;
   const findingIndex = buildFindingIndex(findings);
 
   // Map node kinds by ID for fast source/target lookup.
@@ -311,19 +340,26 @@ export function buildExplorerGraph(
   }
 
   // --- NODE BUILD PHASE ---
-  const rfNodes: Node<HexNodeData>[] = [];
+  // A node is "in scope" if it's touched by at least one visible edge OR
+  // it is the blast radius source. Lenses with dimOthers=true render orphans
+  // as dimmed context (existing behavior). Lenses with dimOthers=false
+  // aggressively filter orphans: by default they're hidden entirely, and
+  // when the user toggles showOrphans they are collected into per-kind
+  // cluster placeholder nodes rendered as a single hex per kind.
+  const rfNodes: Node[] = [];
+  const orphanByKind: Record<string, APINode[]> = {};
+  let orphanCount = 0;
+
   for (const n of raw.nodes) {
     const kind = n.kinds[0] ?? "Unknown";
     const touched = touchedNodeIds.has(n.id);
+    const isBlastSource = blastRadius?.sourceId === n.id;
+    const inScope = touched || isBlastSource;
 
-    // Nodes not touched by any visible edge are dimmed IF the lens has
-    // dimOthers=false AND the lens filters edges. For Topology we still
-    // want to show isolated nodes prominently.
     let dim = false;
     let emphasized = false;
 
     if (activeLensId === "critical") {
-      // Only highlight nodes that participate in at least one critical edge.
       const hasCriticalEdge = rfEdges.some(
         (e) =>
           (e.source === n.id || e.target === n.id) &&
@@ -334,8 +370,8 @@ export function buildExplorerGraph(
       dim = !touched;
     } else if (activeLensId === "blast-radius") {
       if (blastRadius) {
-        const inScope = blastRadius.nodeIds.has(n.id);
-        dim = !inScope;
+        const nodeInScope = blastRadius.nodeIds.has(n.id);
+        dim = !nodeInScope;
         emphasized = n.id === blastRadius.sourceId;
       } else {
         dim = false;
@@ -344,15 +380,23 @@ export function buildExplorerGraph(
       dim = !touched && !isPoisonedSource(n);
     }
 
+    // Orphan handling: only for lenses with dimOthers=false. For dimOthers=true
+    // lenses we keep the existing dim behavior so the ghost-context is preserved.
+    if (!inScope && !lens.dimOthers) {
+      orphanCount++;
+      if (!orphanByKind[kind]) orphanByKind[kind] = [];
+      orphanByKind[kind].push(n);
+      continue; // skip emitting an individual hex for this orphan
+    }
+
     const severity = computeNodeSeverity(n, rfEdges);
     const riskScore = Number((n.properties as Record<string, unknown>)?.risk_score ?? 0);
-
     const sizeMultiplier = chokepoints?.get(n.id) ?? 1;
 
     rfNodes.push({
       id: n.id,
       type: "hex",
-      position: { x: 0, y: 0 }, // filled in by layout pass later
+      position: { x: 0, y: 0 },
       data: {
         id: n.id,
         kind,
@@ -364,18 +408,59 @@ export function buildExplorerGraph(
         dim,
         emphasized,
         sizeMultiplier,
-      },
+      } satisfies HexNodeData,
     });
   }
 
+  // --- ORPHAN CLUSTER EMISSION ---
+  // When showOrphans is true, emit one cluster placeholder node per kind.
+  // These render as a distinct "stacked hex" visual with a count badge and
+  // open a popover listing their members on click. Skipped entirely when
+  // showOrphans is false (user hasn't asked to see them).
+  //
+  // Cluster nodes are UNSHIFTED to the front of the node array so that
+  // ELK's `considerModelOrder` hint places them above the connected nodes
+  // within each column.
+  if (showOrphans && orphanCount > 0 && !lens.dimOthers) {
+    const clusterNodes: Node[] = [];
+    for (const [kind, members] of Object.entries(orphanByKind)) {
+      const orphanNodes = members.map((m) => ({
+        id: m.id,
+        name: nodeLabel(m),
+        kind,
+      }));
+      clusterNodes.push({
+        id: `orphan-cluster-${kind}`,
+        type: "orphan-cluster",
+        position: { x: 0, y: 0 },
+        data: {
+          kind,
+          kindTag: kindTag(kind),
+          count: members.length,
+          orphanNodes,
+        } satisfies OrphanClusterData,
+      });
+    }
+    rfNodes.unshift(...clusterNodes);
+  }
+
   // --- METRICS ---
+  const orphanByKindCounts: Record<string, number> = {};
+  for (const [kind, members] of Object.entries(orphanByKind)) {
+    orphanByKindCounts[kind] = members.length;
+  }
+
   const metrics: LensMetrics = {
-    visibleNodeCount: rfNodes.filter((n) => !(n.data as HexNodeData).dim).length,
+    visibleNodeCount: rfNodes.filter(
+      (n) => n.type === "hex" && !(n.data as HexNodeData).dim,
+    ).length,
     visibleEdgeCount: rfEdges.filter((e) => !(e.data as LensEdgeData).dim).length,
     criticalCount: 0,
     highCount: 0,
     mediumCount: 0,
     lowCount: 0,
+    orphanCount,
+    orphanByKind: orphanByKindCounts,
   };
   for (const e of rfEdges) {
     const sev = (e.data as LensEdgeData).severity;

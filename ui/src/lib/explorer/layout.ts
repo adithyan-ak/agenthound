@@ -37,17 +37,20 @@ export interface LayoutResult<T extends Node = Node> {
 
 /**
  * Compute left-to-right column layout for hex nodes. Each node is tagged
- * with its target column (0..4) based on its kind via HEX_CONFIG, then
- * ELK's partitioning layering places it exactly on that column. Within
- * each column, ELK minimizes edge crossings.
+ * with its target column (0..4) based on its data.kind (via HEX_CONFIG),
+ * then ELK's partitioning layering places it exactly on that column.
+ * Within each column, ELK minimizes edge crossings. Accepts both regular
+ * hex nodes and orphan-cluster nodes — both carry `data.kind`.
  */
-export async function computeExplorerLayout<
-  T extends Node<{ kind: string }> = Node<{ kind: string }>,
->(nodes: T[], edges: Edge[]): Promise<LayoutResult<T>> {
+export async function computeExplorerLayout<T extends Node = Node>(
+  nodes: T[],
+  edges: Edge[],
+): Promise<LayoutResult<T>> {
   if (nodes.length === 0) return { nodes, bounds: { width: 0, height: 0 } };
 
   const elkChildren: ElkNode[] = nodes.map((n) => {
-    const kind = (n.data?.kind as string) ?? "";
+    const data = n.data as Record<string, unknown> | undefined;
+    const kind = typeof data?.kind === "string" ? data.kind : "";
     const config = getHexConfig(kind);
     return {
       id: n.id,

@@ -19,7 +19,6 @@ import { useExplorerStore } from "@/store/explorer";
 import { getLens } from "@/lib/explorer/lens-config";
 import {
   buildExplorerGraph,
-  type HexNodeData,
   type LensEdgeData,
 } from "@/lib/explorer/graph-builder";
 import {
@@ -28,11 +27,13 @@ import {
 } from "@/lib/explorer/chokepoints";
 import { computeExplorerLayout } from "@/lib/explorer/layout";
 import { HexNode } from "./nodes/HexNode";
+import { OrphanClusterNode } from "./nodes/OrphanClusterNode";
 import { LensEdge } from "./edges/LensEdge";
 import { SelfLoopEdge } from "./edges/SelfLoopEdge";
 
 const nodeTypes = {
   hex: HexNode,
+  "orphan-cluster": OrphanClusterNode,
 };
 
 const edgeTypes = {
@@ -54,6 +55,7 @@ export function ExplorerCanvas() {
   const blastRadiusSourceId = useExplorerStore((s) => s.blastRadiusSourceId);
   const blastDirection = useExplorerStore((s) => s.blastRadiusDirection);
   const blastMaxHops = useExplorerStore((s) => s.blastRadiusMaxHops);
+  const showOrphans = useExplorerStore((s) => s.showOrphans);
 
   const { data: blastData } = useBlastRadius(
     activeLens === "blast-radius" ? blastRadiusSourceId : null,
@@ -61,7 +63,7 @@ export function ExplorerCanvas() {
     blastMaxHops,
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<HexNodeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LensEdgeData>>([]);
   const [layoutReady, setLayoutReady] = useState(false);
 
@@ -97,9 +99,10 @@ export function ExplorerCanvas() {
         findings: data.findings,
         blastRadius,
         chokepoints: chokepointMap,
+        showOrphans,
       },
     );
-  }, [data, activeLens, subPresets, blastData, blastRadiusSourceId]);
+  }, [data, activeLens, subPresets, blastData, blastRadiusSourceId, showOrphans]);
 
   useEffect(() => {
     if (!built) return;

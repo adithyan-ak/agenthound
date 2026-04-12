@@ -29,6 +29,7 @@ interface ExplorerState {
   blastRadiusSourceId: string | null;
   blastRadiusDirection: BlastDirection;
   blastRadiusMaxHops: number;
+  showOrphans: boolean;
 }
 
 interface ExplorerActions {
@@ -46,6 +47,7 @@ interface ExplorerActions {
   setBlastRadiusDirection: (direction: BlastDirection) => void;
   setBlastRadiusMaxHops: (hops: number) => void;
   clearBlastRadius: () => void;
+  toggleShowOrphans: () => void;
 }
 
 const DEFAULT_SUB_PRESETS: Record<LensId, string[]> = {
@@ -85,6 +87,7 @@ export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
     blastRadiusSourceId: null,
     blastRadiusDirection: "out",
     blastRadiusMaxHops: 6,
+    showOrphans: false,
 
     setActiveLens: (lens) => set({ activeLens: lens }),
 
@@ -136,5 +139,8 @@ export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
       set({ blastRadiusMaxHops: Math.max(1, Math.min(10, hops)) }),
 
     clearBlastRadius: () => set({ blastRadiusSourceId: null }),
+
+    toggleShowOrphans: () =>
+      set((state) => ({ showOrphans: !state.showOrphans })),
   }),
 );
