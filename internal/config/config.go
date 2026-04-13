@@ -22,6 +22,13 @@ type Config struct {
 	JWTSecret     string
 	CORSOrigins   []string
 	AdminPassword string
+	dbExplicit    bool
+}
+
+// HasExplicitDBConfig returns true if the user explicitly set Neo4j or PG
+// connection config via environment variables or CLI flags (not just defaults).
+func (c *Config) HasExplicitDBConfig() bool {
+	return c.dbExplicit
 }
 
 // LoadWithFlags creates a Config using flag values → env vars → defaults (in priority order).
@@ -39,6 +46,9 @@ func LoadWithFlags(flags *pflag.FlagSet) *Config {
 	cfg.Neo4jUser = resolve(flags, "neo4j-user", "AGENTHOUND_NEO4J_USER", cfg.Neo4jUser)
 	cfg.Neo4jPassword = resolve(flags, "neo4j-password", "AGENTHOUND_NEO4J_PASSWORD", cfg.Neo4jPassword)
 	cfg.PostgresURI = resolve(flags, "pg-uri", "AGENTHOUND_PG_URI", cfg.PostgresURI)
+
+	cfg.dbExplicit = os.Getenv("AGENTHOUND_NEO4J_URI") != "" || os.Getenv("AGENTHOUND_PG_URI") != "" ||
+		flagChanged(flags, "neo4j-uri") || flagChanged(flags, "pg-uri")
 	cfg.LogLevel = resolve(flags, "log-level", "AGENTHOUND_LOG_LEVEL", cfg.LogLevel)
 	cfg.JWTSecret = resolve(flags, "jwt-secret", "AGENTHOUND_JWT_SECRET", "")
 	cfg.AdminPassword = resolve(flags, "admin-password", "AGENTHOUND_ADMIN_PASSWORD", "agenthound")
@@ -102,6 +112,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config validation: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func flagChanged(flags *pflag.FlagSet, name string) bool {
+	if flags == nil {
+		return false
+	}
+	f := flags.Lookup(name)
+	return f != nil && f.Changed
 }
 
 // resolve returns the first non-empty value from: flag, env var, default.

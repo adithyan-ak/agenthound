@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/adithyan-ak/agenthound/internal/graph"
+	"github.com/adithyan-ak/agenthound/internal/model"
 )
 
 // findingFingerprint returns a stable 16-char hex fingerprint for a finding
@@ -17,23 +18,8 @@ func findingFingerprint(edgeKind, sourceID, targetID string) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// Finding represents a security finding derived from a composite edge.
-type Finding struct {
-	ID          string   `json:"id"`
-	Severity    string   `json:"severity"`
-	Category    string   `json:"category"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	EdgeKind    string   `json:"edge_kind"`
-	SourceID    string   `json:"source_id"`
-	SourceName  string   `json:"source_name"`
-	SourceKind  string   `json:"source_kind"`
-	TargetID    string   `json:"target_id"`
-	TargetName  string   `json:"target_name"`
-	TargetKind  string   `json:"target_kind"`
-	Confidence  float64  `json:"confidence"`
-	OWASPMap    []string `json:"owasp_map,omitempty"`
-}
+// Finding is an alias for model.Finding so existing callers (analysis.Finding) keep working.
+type Finding = model.Finding
 
 var findingsMeta = map[string]struct {
 	category string

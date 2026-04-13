@@ -39,6 +39,8 @@ func init() {
 	rootCmd.PersistentFlags().String("neo4j-password", "", "Neo4j password (env: AGENTHOUND_NEO4J_PASSWORD)")
 	rootCmd.PersistentFlags().String("pg-uri", "", "PostgreSQL connection URI (env: AGENTHOUND_PG_URI)")
 	rootCmd.PersistentFlags().String("log-level", "", "Log level: debug, info, warn, error (env: AGENTHOUND_LOG_LEVEL)")
+	rootCmd.PersistentFlags().String("server-url", "", "AgentHound server URL for API mode (env: AGENTHOUND_SERVER_URL)")
+	rootCmd.PersistentFlags().String("api-token", "", "API token for server authentication (env: AGENTHOUND_API_TOKEN)")
 }
 
 func setupLogger(level string) {

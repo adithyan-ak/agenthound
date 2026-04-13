@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/analysis"
+	"github.com/adithyan-ak/agenthound/internal/apiclient"
 	collector "github.com/adithyan-ak/agenthound/internal/collector"
 	a2acollector "github.com/adithyan-ak/agenthound/internal/collector/a2a"
 	configcollector "github.com/adithyan-ak/agenthound/internal/collector/config"
 	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
+	"github.com/adithyan-ak/agenthound/internal/config"
 	"github.com/adithyan-ak/agenthound/internal/model"
 	"github.com/spf13/cobra"
 )
@@ -121,6 +123,19 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if output != "" {
 		return runScanExport(ctx, runConfig, runMCP, runA2A, path, paths, projectDir, includeCredValues,
 			url, target, targets, targetsFile, authToken, concurrency, timeout, insecure, output)
+	}
+
+	if !cfg.HasExplicitDBConfig() {
+		clientCfg, err := config.LoadClientConfig(cmd.Root().PersistentFlags())
+		if err != nil {
+			return err
+		}
+		if clientCfg != nil {
+			return runScanAPI(ctx, clientCfg, start, failOn,
+				runConfig, runMCP, runA2A, path, paths, projectDir, includeCredValues,
+				url, target, targets, targetsFile, authToken, concurrency, timeout, insecure)
+		}
+		return fmt.Errorf("no server configured\n\nRun 'agenthound setup' to connect to a server, or set AGENTHOUND_NEO4J_URI for direct database access")
 	}
 
 	infra, cleanup, err := Bootstrap(ctx)
@@ -278,6 +293,112 @@ func runScanExport(ctx context.Context, runConfig, runMCP, runA2A bool,
 
 	_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges\n", len(merged.Graph.Nodes), len(merged.Graph.Edges))
 	return writeCollectorOutput(merged, output)
+}
+
+func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.Time, failOn string,
+	runConfig, runMCP, runA2A bool,
+	path string, paths []string, projectDir string, includeCredValues bool,
+	url, target string, targets []string, targetsFile, authToken string,
+	concurrency int, timeout time.Duration, insecure bool) error {
+
+	client := apiclient.New(clientCfg.ServerURL, clientCfg.APIToken)
+
+	if err := client.Health(ctx); err != nil {
+		return fmt.Errorf("server check: %w", err)
+	}
+
+	merged := &model.IngestData{
+		Meta: model.IngestMeta{
+			Version:          1,
+			Type:             "agenthound-ingest",
+			Collector:        "scan",
+			CollectorVersion: "0.1.0",
+			Timestamp:        time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+
+	var collectorNames []string
+
+	if runConfig {
+		data, err := collectConfig(ctx, path, paths, projectDir, includeCredValues)
+		if err != nil {
+			slog.Error("config collector failed", "error", err)
+		} else {
+			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
+			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
+			collectorNames = append(collectorNames, "config")
+		}
+	}
+
+	if runMCP {
+		data, err := collectMCP(ctx, url, concurrency, timeout, insecure)
+		if err != nil {
+			slog.Error("mcp collector failed", "error", err)
+		} else {
+			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
+			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
+			collectorNames = append(collectorNames, "mcp")
+		}
+	}
+
+	if runA2A {
+		data, err := collectA2A(ctx, target, targets, targetsFile, authToken, concurrency, timeout, insecure)
+		if err != nil {
+			slog.Error("a2a collector failed", "error", err)
+		} else {
+			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
+			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
+			collectorNames = append(collectorNames, "a2a")
+		}
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges → shipping to %s\n",
+		len(merged.Graph.Nodes), len(merged.Graph.Edges), clientCfg.ServerURL)
+
+	result, err := client.Ingest(ctx, merged)
+	if err != nil {
+		return fmt.Errorf("ingest via API: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete (%.1fs)\n\n", time.Since(start).Seconds())
+	_, _ = fmt.Fprintf(os.Stderr, "  %-8s  %d nodes, %d edges\n", "Graph", result.NodesWritten, result.EdgesWritten)
+
+	var processorCount, compositeEdges int
+	for _, ps := range result.PostProcessingStats {
+		processorCount++
+		compositeEdges += ps.EdgesCreated
+	}
+	if processorCount > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "  %-8s  %d processors, %d composite edges\n", "Analysis", processorCount, compositeEdges)
+	}
+
+	findings, err := client.GetFindings(ctx, "")
+	if err != nil {
+		slog.Warn("failed to fetch findings", "error", err)
+	} else if len(findings) > 0 {
+		counts := countFindingsBySeverity(findings)
+		_, _ = fmt.Fprintf(os.Stderr, "\n  Findings %d critical, %d high, %d medium, %d low\n",
+			counts["critical"], counts["high"], counts["medium"], counts["low"])
+	}
+
+	_, _ = fmt.Fprintln(os.Stderr)
+
+	if failOn != "" {
+		threshold := severityRank[failOn]
+		if findings == nil {
+			findings, err = client.GetFindings(ctx, "")
+			if err != nil {
+				return fmt.Errorf("query findings for --fail-on: %w", err)
+			}
+		}
+		count := countAtOrAbove(findings, threshold)
+		if count > 0 {
+			_, _ = fmt.Fprintf(os.Stderr, "Failed: %d finding(s) at severity %q or above\n", count, failOn)
+			os.Exit(1)
+		}
+	}
+
+	return nil
 }
 
 func collectConfig(ctx context.Context, path string, paths []string, projectDir string, includeCredValues bool) (*model.IngestData, error) {
