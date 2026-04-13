@@ -1,4 +1,4 @@
-.PHONY: build test lint docker up down clean seed demo release ui-build ui-dev ui-test
+.PHONY: build test lint docker up down clean seed demo release ui-build ui-dev ui-test allinone allinone-run allinone-stop
 
 ui-build:
 	cd ui && npm install && npm run build
@@ -41,3 +41,12 @@ demo:
 
 release:
 	goreleaser release --clean --snapshot
+
+allinone:
+	docker build -f docker/Dockerfile.allinone -t agenthound:allinone .
+
+allinone-run:
+	docker run -d --name agenthound -p 8080:8080 -v agenthound-data:/data --restart unless-stopped agenthound:allinone
+
+allinone-stop:
+	docker stop agenthound && docker rm agenthound

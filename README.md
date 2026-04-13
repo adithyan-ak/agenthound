@@ -43,12 +43,28 @@ All 17 findings are available as pre-built queries from the CLI and UI.
 
 ## Quick Start
 
-### Prerequisites
+### One-line install (recommended)
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- [Go 1.25+](https://go.dev/dl/) (for building from source)
+Requires [Docker](https://docs.docker.com/get-docker/) (or Podman). No other dependencies.
 
-### 1. Start the infrastructure
+```bash
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
+```
+
+This pulls a single all-in-one Docker image (Neo4j + PostgreSQL + AgentHound), starts it, and prints the URL when ready. Data persists in a Docker volume across restarts.
+
+```
+  AgentHound is running!
+
+  URL:     http://localhost:8080
+  Login:   admin / agenthound
+```
+
+Custom port: `AGENTHOUND_PORT=9090 sh -c "$(curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh)"`
+
+### Multi-container setup (production)
+
+For multi-user production deployments with separate database containers:
 
 ```bash
 git clone https://github.com/adithyan-ak/agenthound.git
@@ -56,9 +72,7 @@ cd agenthound
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-This starts Neo4j (graph database), PostgreSQL (application database), and the AgentHound server on port 8080.
-
-### 2. Build from source
+### Build from source
 
 ```bash
 make build
@@ -71,7 +85,7 @@ Or install directly:
 go install github.com/adithyan-ak/agenthound/cmd/agenthound@latest
 ```
 
-### 3. Scan your infrastructure
+### Scan your infrastructure
 
 ```bash
 # Discover all MCP client configs (Claude Desktop, Cursor, VS Code, etc.)
@@ -120,7 +134,7 @@ agenthound query --findings --severity critical
          |                     |
     +---------+         +-------------+
     | REST API|         |   React UI  |
-    | (chi)   |         | (Sigma.js)  |
+    | (chi)   |         |(React Flow) |
     +---------+         +-------------+
 ```
 
@@ -265,14 +279,14 @@ agenthound query --findings --format json
 
 ## Web UI
 
-The embedded React UI provides five main views:
+The embedded React UI provides:
 
 - **Dashboard** -- node/edge counts, risk distribution, top findings, auth coverage stats
-- **Graph Explorer** -- interactive Sigma.js visualization (handles 100K+ nodes), click to inspect, filter by node type
-- **Pathfinder** -- find shortest, all, or weighted (Dijkstra) paths between any two nodes with highlighted path overlay
-- **Entity Inspector** -- detailed view of any node's properties, connections, and risk score breakdown
-- **Query Library** -- run any of the 17 pre-built queries with results table
-- **Scan Manager** -- view scan history, trigger new scans
+- **Graph** -- interactive force-directed graph visualization, click to inspect, filter by node type
+- **Explorer** -- lens-based graph visualization with 8 analysis lenses (Topology, Attack Surface, Critical, Cross-Protocol, Credentials, Poisoning, Blast Radius, Chokepoints). Hexagonal nodes, click-to-highlight with flowing dot animation, right-click context menu, bottom drawer with properties/connections/evidence/remediation tabs
+- **Findings** -- filterable/sortable list of all security findings. Click any finding to see the detail page with a horizontal attack path diagram (card-wrapped hex nodes), per-hop evidence timeline, impact assessment with attack cost meter, remediation steps with copy-paste commands, and OWASP reference links
+- **Scans** -- view scan history, trigger new scans
+- **Queries** -- run any of the 17 pre-built queries with results table
 
 Access at `http://localhost:8080` after starting the server. Default credentials: `admin` / `agenthound`.
 
@@ -293,6 +307,7 @@ Full machine-readable spec available at `GET /api/v1/docs` (OpenAPI 3.0).
 | `/graph/nodes/{id}` | GET | Viewer+ | Node detail + connections |
 | `/graph/edges` | GET | Viewer+ | List/filter edges |
 | `/analysis/findings` | GET | Viewer+ | All findings with severity |
+| `/analysis/findings/{id}` | GET | Viewer+ | Finding detail with attack path, remediation, impact |
 | `/analysis/prebuilt` | GET | Viewer+ | List pre-built queries |
 | `/analysis/prebuilt/{id}` | GET | Viewer+ | Run pre-built query |
 | `/analysis/shortest-path` | POST | Analyst+ | Shortest path query |
@@ -343,7 +358,23 @@ All configuration is via environment variables:
 
 ## Deployment
 
-### Docker Compose (recommended)
+### All-in-one Docker (quickest)
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
+```
+
+Single container bundles Neo4j 4.4 + PostgreSQL 13 + AgentHound. Data persists in Docker volume `agenthound-data`. Requires 2 CPU, 2GB RAM minimum.
+
+Manage it:
+```bash
+docker stop agenthound      # Stop
+docker start agenthound     # Restart (data persists)
+docker logs -f agenthound   # View logs
+docker rm -f agenthound     # Remove (keeps data volume)
+```
+
+### Docker Compose (production, multi-user)
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
