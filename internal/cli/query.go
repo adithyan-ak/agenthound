@@ -10,6 +10,8 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/analysis"
 	"github.com/adithyan-ak/agenthound/internal/analysis/prebuilt"
+	"github.com/adithyan-ak/agenthound/internal/apiclient"
+	"github.com/adithyan-ak/agenthound/internal/config"
 	"github.com/adithyan-ak/agenthound/internal/model"
 	"github.com/spf13/cobra"
 )
@@ -114,6 +116,17 @@ func runPrebuilt(ctx context.Context, id, format string) error {
 	_, _ = fmt.Fprintf(os.Stderr, "[%s] %s\n", q.Severity, q.Name)
 	_, _ = fmt.Fprintf(os.Stderr, "%s\n\n", q.Description)
 
+	if !cfg.HasExplicitDBConfig() {
+		clientCfg, err := config.LoadClientConfig(rootCmd.PersistentFlags())
+		if err != nil {
+			return err
+		}
+		if clientCfg != nil {
+			return runPrebuiltAPI(ctx, clientCfg, id, format)
+		}
+		return fmt.Errorf("no server configured\n\nRun 'agenthound setup' to connect to a server, or set AGENTHOUND_NEO4J_URI for direct database access")
+	}
+
 	infra, cleanup, err := Bootstrap(ctx)
 	if err != nil {
 		return err
@@ -135,6 +148,17 @@ func runFindings(ctx context.Context, severity, format, failOn string) error {
 		default:
 			return fmt.Errorf("invalid severity %q: must be critical, high, medium, or low", severity)
 		}
+	}
+
+	if !cfg.HasExplicitDBConfig() {
+		clientCfg, err := config.LoadClientConfig(rootCmd.PersistentFlags())
+		if err != nil {
+			return err
+		}
+		if clientCfg != nil {
+			return runFindingsAPI(ctx, clientCfg, severity, format, failOn)
+		}
+		return fmt.Errorf("no server configured\n\nRun 'agenthound setup' to connect to a server, or set AGENTHOUND_NEO4J_URI for direct database access")
 	}
 
 	infra, cleanup, err := Bootstrap(ctx)
@@ -333,4 +357,65 @@ func printPrebuiltList() {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", q.ID, q.Category, q.Severity, q.Name)
 	}
 	_ = w.Flush()
+}
+
+func runFindingsAPI(ctx context.Context, clientCfg *config.ClientConfig, severity, format, failOn string) error {
+	client := apiclient.New(clientCfg.ServerURL, clientCfg.APIToken)
+
+	findings, err := client.GetFindings(ctx, severity)
+	if err != nil {
+		return fmt.Errorf("query findings: %w", err)
+	}
+
+	if len(findings) == 0 {
+		fmt.Println("No findings found.")
+		return nil
+	}
+
+	if format == "json" {
+		return printJSON(findings)
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "ID\tSEVERITY\tCATEGORY\tTITLE\tSOURCE\tTARGET")
+	for _, f := range findings {
+		srcLabel := f.SourceName
+		if srcLabel == "" {
+			srcLabel = f.SourceID
+		}
+		tgtLabel := f.TargetName
+		if tgtLabel == "" {
+			tgtLabel = f.TargetID
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			f.ID, f.Severity, f.Category, f.Title, srcLabel, tgtLabel)
+	}
+	_ = w.Flush()
+
+	_, _ = fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
+
+	if failOn != "" {
+		threshold, ok := severityRank[failOn]
+		if !ok {
+			return fmt.Errorf("invalid --fail-on value %q: must be critical, high, medium, or low", failOn)
+		}
+		count := countAtOrAbove(findings, threshold)
+		if count > 0 {
+			_, _ = fmt.Fprintf(os.Stderr, "Failed: %d finding(s) at severity %q or above\n", count, failOn)
+			os.Exit(1)
+		}
+	}
+
+	return nil
+}
+
+func runPrebuiltAPI(ctx context.Context, clientCfg *config.ClientConfig, id, format string) error {
+	client := apiclient.New(clientCfg.ServerURL, clientCfg.APIToken)
+
+	rows, err := client.GetPrebuilt(ctx, id)
+	if err != nil {
+		return fmt.Errorf("query %s: %w", id, err)
+	}
+
+	return printRows(rows, format)
 }
