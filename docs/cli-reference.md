@@ -38,98 +38,56 @@ Graceful shutdown on SIGINT/SIGTERM with a 10-second drain timeout.
 
 ---
 
-## `agenthound collect config`
+## `agenthound scan`
 
-Parse MCP client configuration files to discover agent-server trust relationships, credentials, and instruction files.
+Discover and enumerate MCP servers, A2A agents, and client configurations, then analyze the trust graph for attack paths.
 
 ```bash
-agenthound collect config [flags]
+agenthound scan [flags]
 ```
+
+By default, runs config discovery + MCP enumeration + ingest + post-processing analysis. Use `--config`, `--mcp`, or `--a2a` to run individual collectors.
+
+### Collector selection
+
+| Flag | Description |
+|------|-------------|
+| `--config` | Run config collector only |
+| `--mcp` | Run MCP collector only |
+| `--a2a` | Run A2A collector only |
+
+When none of `--config`, `--mcp`, or `--a2a` are specified, runs config + MCP (the default workflow).
+
+### Config collector flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--discover` | `false` | Auto-discover all known MCP client config files |
-| `--path` | | Path to a single config file |
+| `--path` | | Path to a single config file (overrides auto-discovery) |
 | `--paths` | | Comma-separated paths to multiple config files |
-| `--output` | stdout | Write JSON output to file |
-| `--ingest` | `false` | Ingest directly into graph database (requires running Neo4j + PG) |
-| `--include-credential-values` | `false` | Include raw credential values instead of SHA-256 hashes |
 | `--project-dir` | | Project directory for instruction file discovery |
+| `--include-credential-values` | `false` | Include raw credential values instead of SHA-256 hashes |
 
-At least one of `--discover`, `--path`, or `--paths` is required.
+**Supported clients (12):** Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment.
 
-### Supported clients
+**What it produces:** ConfigFile, AgentInstance, MCPServer, Identity, Credential, Host, InstructionFile nodes plus trust/auth/config edges.
 
-Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment.
+**Security signals:** Unpinned packages, hardcoded secrets (Shannon entropy), instruction file poisoning.
 
-### What it produces
-
-- **ConfigFile** nodes for each config file found
-- **AgentInstance** nodes for each MCP client
-- **MCPServer** nodes for each configured server
-- **Identity** and **Credential** nodes for auth configuration
-- **Host** nodes extracted from server endpoints
-- **InstructionFile** nodes for discovered instruction/rules files
-- Trust, auth, and config edges between all nodes
-
-### Security signals detected
-
-- Unpinned packages (`npx -y @pkg` without version pin)
-- Hardcoded secrets (Shannon entropy > 4.5 for base64, > 3.0 for hex)
-- Instruction file poisoning (imperative overrides, exfiltration patterns, hidden Unicode)
-
----
-
-## `agenthound collect mcp`
-
-Connect to MCP servers and enumerate their capabilities.
-
-```bash
-agenthound collect mcp [flags]
-```
+### MCP collector flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--discover` | `false` | Enumerate all servers from discovered config files |
-| `--config` | | Path to MCP client config file |
-| `--url` | | URL of a single HTTP MCP server |
-| `--output` | stdout | Write JSON output to file |
-| `--ingest` | `false` | Ingest directly into graph database |
-| `--concurrency` | `5` | Max parallel server connections |
-| `--timeout` | `120s` | Timeout per server |
-| `--insecure` | `false` | Skip TLS verification for HTTP servers |
-
-At least one of `--discover`, `--config`, or `--url` is required.
-
-### What it enumerates
-
-- `tools/list` -- tool names, descriptions, input schemas, annotations
-- `resources/list` and `resources/templates/list` -- resource URIs, types, sizes
-- `prompts/list` -- prompt names, descriptions, arguments
+| `--url` | | URL of a single HTTP MCP server (overrides auto-discovery) |
 
 AgentHound never calls `tools/call` or `resources/read`. It is read-only and safe to run against production servers.
 
-### Transport support
+**Enumerates:** `tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`.
 
-- **stdio** -- launches server process via `mcp.CommandTransport`
-- **Streamable HTTP** -- connects via `mcp.StreamableClientTransport`, falls back to legacy SSE on 400/404/405
+**Transports:** stdio (`mcp.CommandTransport`) and Streamable HTTP (with legacy SSE fallback).
 
-### Security signals per tool
+**Security signals per tool:** description hashing (rug pull detection), injection pattern scanning, cross-reference detection, capability surface classification.
 
-- **description_hash** -- SHA-256 of canonical description for rug pull detection
-- **injection_patterns** -- prompt injection markers in descriptions
-- **cross_references** -- references to other tools/servers in descriptions
-- **capability_surface** -- classified into: shell_access, file_read, file_write, network_outbound, database_access, email_send, code_execution, credential_access
-
----
-
-## `agenthound collect a2a`
-
-Fetch A2A Agent Cards and collect agent/skill data.
-
-```bash
-agenthound collect a2a [flags]
-```
+### A2A collector flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -137,30 +95,44 @@ agenthound collect a2a [flags]
 | `--targets` | | Comma-separated URLs of multiple agents |
 | `--targets-file` | | File with agent URLs (one per line) |
 | `--discover-domain` | | Domains to probe for well-known agent cards |
-| `--output` | stdout | Write JSON output to file |
-| `--ingest` | `false` | Ingest directly into graph database |
 | `--auth-token` | | Bearer token for authenticated agents |
-| `--insecure` | `false` | Skip TLS verification |
-| `--concurrency` | `5` | Max parallel agent fetches |
-| `--timeout` | `15s` | Timeout per agent |
 
-At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain` is required.
-
-### Domain discovery
+At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain` is required when using `--a2a`.
 
 `--discover-domain example.com` probes `https://example.com/.well-known/agent-card.json`.
 
-### Version support
+**Version support:** v1.0 (detected by `supportedInterfaces`), v0.3.0 (detected by top-level `url`), legacy fallback to `/.well-known/agent.json`.
 
-- **v1.0** -- detected by presence of `supportedInterfaces` field
-- **v0.3.0** -- detected by top-level `url` field
-- **Legacy** -- falls back to `/.well-known/agent.json` if the v0.3.0+ path returns 404
+**Security signals:** JWS signature verification (RFC 7515), auth posture scoring (none=100 ... mTLS=10), unsigned card flagging.
 
-### Security signals
+### Shared flags
 
-- JWS signature verification (RFC 7515) when `signatures` field is present
-- Auth posture scoring: none=100, apiKey=70, bearer=50, oauth=25, oidc=20, mTLS=10
-- Unsigned cards are flagged
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--concurrency` | `5` | Max parallel connections |
+| `--timeout` | `120s` | Timeout per server/agent |
+| `--insecure` | `false` | Skip TLS verification |
+
+### Output flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output` | | Export merged JSON to file (skips ingest and analysis) |
+| `--fail-on` | | Exit 1 if findings at or above severity: `critical`, `high`, `medium`, `low` |
+
+### Examples
+
+```bash
+agenthound scan                                        # Full scan (config + MCP)
+agenthound scan --config                               # Config files only (offline)
+agenthound scan --config --path ~/.cursor/mcp.json     # Single config file
+agenthound scan --mcp                                  # MCP servers only
+agenthound scan --mcp --url https://mcp.example.com    # Single HTTP MCP server
+agenthound scan --a2a --target https://agent.example.com
+agenthound scan --a2a --discover-domain example.com
+agenthound scan --output scan.json                     # Export without ingesting
+agenthound scan --fail-on critical                     # CI/CD gate
+```
 
 ---
 
@@ -216,6 +188,7 @@ Run `agenthound query --prebuilt ""` to see available query IDs (the command pri
 
 ```bash
 agenthound query --findings [--severity critical|high|medium|low]
+agenthound query --findings --fail-on critical         # CI: exit 1 if critical findings
 ```
 
 Lists all composite edges as security findings with severity classification.
@@ -233,6 +206,7 @@ Node references use `Kind:name` format, e.g., `AgentInstance:claude-desktop` or 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--format` | `table` | Output format: `table` or `json` |
+| `--fail-on` | | Exit 1 if findings at or above severity: `critical`, `high`, `medium`, `low` (applies to `--findings` mode) |
 
 ### Pre-built query IDs
 
