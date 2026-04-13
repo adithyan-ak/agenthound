@@ -582,11 +582,14 @@ func (r *Reader) GetBlastRadius(ctx context.Context, objectID, direction string,
 	// current frontier as the starting set. This is bounded (maxHops <= 10)
 	// and avoids Neo4j's pathological variable-length pattern materialization
 	// on dense graphs while giving us exact ring-level grouping.
-	arrow := "-->"
-	if direction == "in" {
+	var arrow string
+	switch direction {
+	case "in":
 		arrow = "<--"
-	} else if direction == "both" {
+	case "both":
 		arrow = "--"
+	default:
+		arrow = "-->"
 	}
 
 	visited := map[string]model.Node{}
