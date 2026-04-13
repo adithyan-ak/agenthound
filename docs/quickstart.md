@@ -34,40 +34,32 @@ make build
 
 The binary is at `bin/agenthound`.
 
-## 3. Collect data
+## 3. Scan your infrastructure
 
-### Discover MCP client configurations
-
-Scans your system for all known MCP client config files (Claude Desktop, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment):
+Run a full scan that discovers configs, enumerates MCP servers, ingests into the graph, and computes attack paths:
 
 ```bash
-agenthound collect config --discover --output config-scan.json
+agenthound scan
 ```
 
-### Enumerate MCP servers
-
-Connects to each discovered MCP server and enumerates tools, resources, and prompts:
-
-```bash
-agenthound collect mcp --discover --output mcp-scan.json
-```
+This auto-discovers all MCP client config files (Claude Desktop, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment), connects to each configured MCP server, and runs post-processing to compute composite attack paths and risk scores.
 
 ### (Optional) Scan A2A agents
 
 If you have A2A agents running:
 
 ```bash
-agenthound collect a2a --target https://agent.example.com --output a2a-scan.json
+agenthound scan --a2a --target https://agent.example.com
 ```
 
-## 4. Ingest into the graph
+### Export without ingesting
+
+To review the raw collector output before ingesting:
 
 ```bash
-agenthound ingest config-scan.json
-agenthound ingest mcp-scan.json
+agenthound scan --output scan.json
+agenthound ingest scan.json
 ```
-
-Each ingest builds graph nodes and edges in Neo4j, then runs post-processing to compute composite attack paths (CAN_REACH, CAN_EXFILTRATE_VIA, SHADOWS, etc.) and risk scores.
 
 ## 5. Open the UI
 
@@ -107,16 +99,20 @@ agenthound query --shortest-path \
 agenthound query "MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s) RETURN a.name, s.name"
 ```
 
-## Quick collect-and-ingest
+## Quick scan tips
 
-Collectors support `--ingest` to skip the JSON file and write directly to the graph:
+Run individual collectors when you only need partial data:
 
 ```bash
-agenthound collect config --discover --ingest
-agenthound collect mcp --discover --ingest
+agenthound scan --config                           # Config files only (offline, no network)
+agenthound scan --mcp --url https://mcp.example.com  # Single MCP server
 ```
 
-This requires a running Neo4j and PostgreSQL (via Docker or configured via environment variables).
+Use `--fail-on` for CI/CD pipelines:
+
+```bash
+agenthound scan --fail-on critical                 # Exit 1 if critical findings exist
+```
 
 ## Environment variables
 

@@ -35,6 +35,7 @@ func init() {
 	queryCmd.Flags().String("from", "", "Source node in Kind:name format (e.g. AgentInstance:my-agent)")
 	queryCmd.Flags().String("to", "", "Target node in Kind:name format (e.g. MCPResource:postgres://prod)")
 	queryCmd.Flags().String("format", "table", "Output format: table or json")
+	queryCmd.Flags().String("fail-on", "", "Exit 1 if findings at or above severity: critical, high, medium, low")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -46,6 +47,8 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	fromNode, _ := cmd.Flags().GetString("from")
 	toNode, _ := cmd.Flags().GetString("to")
 	format, _ := cmd.Flags().GetString("format")
+
+	failOn, _ := cmd.Flags().GetString("fail-on")
 
 	if format != "table" && format != "json" {
 		return fmt.Errorf("invalid format %q: must be table or json", format)
@@ -75,7 +78,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 
 	switch {
 	case findings:
-		return runFindings(ctx, severity, format)
+		return runFindings(ctx, severity, format, failOn)
 	case prebuiltID != "":
 		return runPrebuilt(ctx, prebuiltID, format)
 	case shortestPath:
@@ -125,7 +128,7 @@ func runPrebuilt(ctx context.Context, id, format string) error {
 	return printRows(rows, format)
 }
 
-func runFindings(ctx context.Context, severity, format string) error {
+func runFindings(ctx context.Context, severity, format, failOn string) error {
 	if severity != "" {
 		switch severity {
 		case "critical", "high", "medium", "low":
@@ -171,6 +174,19 @@ func runFindings(ctx context.Context, severity, format string) error {
 	_ = w.Flush()
 
 	_, _ = fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
+
+	if failOn != "" {
+		threshold, ok := severityRank[failOn]
+		if !ok {
+			return fmt.Errorf("invalid --fail-on value %q: must be critical, high, medium, or low", failOn)
+		}
+		count := countAtOrAbove(findings, threshold)
+		if count > 0 {
+			_, _ = fmt.Fprintf(os.Stderr, "Failed: %d finding(s) at severity %q or above\n", count, failOn)
+			os.Exit(1)
+		}
+	}
+
 	return nil
 }
 

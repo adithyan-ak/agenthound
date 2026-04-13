@@ -88,14 +88,19 @@ go install github.com/adithyan-ak/agenthound/cmd/agenthound@latest
 ### Scan your infrastructure
 
 ```bash
-# Discover all MCP client configs (Claude Desktop, Cursor, VS Code, etc.)
-agenthound collect config --discover --ingest
+# Full scan: discover configs + enumerate MCP servers + ingest + analyze
+agenthound scan
 
-# Connect to each server and enumerate tools, resources, prompts
-agenthound collect mcp --discover --ingest
+# Or target specific collectors
+agenthound scan --config                              # Config files only (offline)
+agenthound scan --mcp --url https://mcp.example.com   # Single MCP server
+agenthound scan --a2a --targets url1,url2              # A2A agents
 
-# (Optional) Scan A2A agents
-agenthound collect a2a --target https://agent.example.com --ingest
+# Export without ingesting (for review or CI artifacts)
+agenthound scan --output scan.json
+
+# CI/CD gate: exit 1 on critical findings
+agenthound scan --fail-on critical
 ```
 
 ### 4. Find attack paths
@@ -167,10 +172,9 @@ Every node gets a risk score (0--100) based on weighted factors:
 Parses MCP client configuration files -- no network access required. Discovers trust relationships, credentials, and instruction files.
 
 ```bash
-agenthound collect config --discover                    # Auto-discover all configs
-agenthound collect config --path ~/.cursor/mcp.json     # Single file
-agenthound collect config --discover --output scan.json  # Save to file
-agenthound collect config --discover --ingest            # Write directly to graph
+agenthound scan --config                               # Auto-discover all configs
+agenthound scan --config --path ~/.cursor/mcp.json     # Single file
+agenthound scan --config --output scan.json            # Save to file
 ```
 
 **Supported clients (12):** Claude Desktop, Claude Code, Cursor, VS Code (Copilot), Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment
@@ -182,9 +186,8 @@ agenthound collect config --discover --ingest            # Write directly to gra
 Connects to MCP servers via the [official Go SDK](https://github.com/modelcontextprotocol/go-sdk) and enumerates capabilities. Read-only -- never calls `tools/call` or `resources/read`.
 
 ```bash
-agenthound collect mcp --discover                       # All servers from configs
-agenthound collect mcp --config ~/.cursor/mcp.json      # Servers from one config
-agenthound collect mcp --url https://mcp.example.com    # Single HTTP server
+agenthound scan --mcp                                  # All servers from configs
+agenthound scan --mcp --url https://mcp.example.com    # Single HTTP server
 ```
 
 **Enumerates:** `tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`
@@ -198,10 +201,10 @@ agenthound collect mcp --url https://mcp.example.com    # Single HTTP server
 Fetches [A2A Agent Cards](https://google.github.io/A2A/) via HTTP and analyzes agent security posture.
 
 ```bash
-agenthound collect a2a --target https://agent.example.com
-agenthound collect a2a --targets url1,url2,url3
-agenthound collect a2a --discover-domain example.com      # Probe well-known path
-agenthound collect a2a --targets-file agents.txt
+agenthound scan --a2a --target https://agent.example.com
+agenthound scan --a2a --targets url1,url2,url3
+agenthound scan --a2a --discover-domain example.com       # Probe well-known path
+agenthound scan --a2a --targets-file agents.txt
 ```
 
 **Supports:** A2A v1.0 and v0.3.0 Agent Card formats with automatic version detection
@@ -212,7 +215,18 @@ agenthound collect a2a --targets-file agents.txt
 
 ## CLI Reference
 
-### Scan management
+### Scanning
+
+```bash
+agenthound scan                                        # Full scan (config + MCP discovery)
+agenthound scan --config                               # Config collector only (offline)
+agenthound scan --mcp                                  # MCP collector only
+agenthound scan --a2a --targets url1,url2              # A2A collector
+agenthound scan --output scan.json                     # Export without ingesting
+agenthound scan --fail-on critical                     # CI/CD: exit 1 on critical findings
+```
+
+### Server
 
 ```bash
 agenthound serve                          # Start API server + UI on :8080
@@ -233,6 +247,7 @@ The pipeline validates, normalizes (camelCase to snake_case), deduplicates by no
 # Security findings
 agenthound query --findings
 agenthound query --findings --severity critical
+agenthound query --findings --fail-on critical         # CI: exit 1 if critical findings
 
 # Pre-built queries (17 available)
 agenthound query --prebuilt agents-shell-access
