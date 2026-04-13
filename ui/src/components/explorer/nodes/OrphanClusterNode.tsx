@@ -128,7 +128,7 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
         <>
           <div
             className="absolute left-1/2 -translate-x-1/2 h-4 w-[180px]"
-            style={{ bottom: "100%", pointerEvents: "auto" }}
+            style={{ top: "100%", pointerEvents: "auto" }}
             onMouseEnter={handleEnter}
             onMouseLeave={scheduleClose}
           />
@@ -138,7 +138,7 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
               "z-[60] overflow-hidden",
               "animate-in fade-in zoom-in-95 duration-150",
             )}
-            style={{ bottom: "calc(100% + 14px)" }}
+            style={{ top: "calc(100% + 14px)" }}
             onMouseEnter={handleEnter}
             onMouseLeave={scheduleClose}
           >
