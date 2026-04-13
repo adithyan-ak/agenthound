@@ -317,8 +317,6 @@ func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.
 		},
 	}
 
-	var collectorNames []string
-
 	if runConfig {
 		data, err := collectConfig(ctx, path, paths, projectDir, includeCredValues)
 		if err != nil {
@@ -326,7 +324,6 @@ func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.
 		} else {
 			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
 			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
-			collectorNames = append(collectorNames, "config")
 		}
 	}
 
@@ -337,7 +334,6 @@ func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.
 		} else {
 			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
 			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
-			collectorNames = append(collectorNames, "mcp")
 		}
 	}
 
@@ -348,7 +344,6 @@ func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.
 		} else {
 			merged.Graph.Nodes = append(merged.Graph.Nodes, data.Graph.Nodes...)
 			merged.Graph.Edges = append(merged.Graph.Edges, data.Graph.Edges...)
-			collectorNames = append(collectorNames, "a2a")
 		}
 	}
 

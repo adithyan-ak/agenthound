@@ -155,3 +155,55 @@ func TestClientConfigPathExpected(t *testing.T) {
 		t.Errorf("ClientConfigPath() = %q, want %q", path, want)
 	}
 }
+
+func TestClientConfigPath_XDG(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	path := ClientConfigPath()
+	want := filepath.Join(tmp, "agenthound", "config.yaml")
+	if path != want {
+		t.Errorf("ClientConfigPath() = %q, want %q", path, want)
+	}
+}
+
+func TestLoadClientConfig_PartialEnv(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", tmp)
+
+	t.Setenv("AGENTHOUND_SERVER_URL", "http://partial:9090")
+	t.Setenv("AGENTHOUND_API_TOKEN", "")
+
+	cfg, err := LoadClientConfig(nil)
+	if err != nil {
+		t.Fatalf("LoadClientConfig() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadClientConfig() returned nil, want partial config")
+	}
+	if cfg.ServerURL != "http://partial:9090" {
+		t.Errorf("ServerURL = %q, want http://partial:9090", cfg.ServerURL)
+	}
+}
+
+func TestLoadClientConfig_InvalidYAML(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("AGENTHOUND_SERVER_URL", "")
+	t.Setenv("AGENTHOUND_API_TOKEN", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", tmp)
+
+	dir := configDir(tmp)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("not: [valid: yaml: {"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadClientConfig(nil)
+	if err == nil {
+		t.Fatal("expected error on invalid YAML")
+	}
+}

@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestParseNodeRef(t *testing.T) {
@@ -261,5 +264,99 @@ func TestPrintPrebuiltList(t *testing.T) {
 	}
 	if !strings.Contains(out, "agents-shell-access") {
 		t.Errorf("expected %q in output: %q", "agents-shell-access", out)
+	}
+}
+
+// --- runQuery validation tests ---
+
+func newQueryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:  "query",
+		RunE: runQuery,
+	}
+	cmd.Flags().String("prebuilt", "", "")
+	cmd.Flags().Bool("findings", false, "")
+	cmd.Flags().String("severity", "", "")
+	cmd.Flags().Bool("shortest-path", false, "")
+	cmd.Flags().String("from", "", "")
+	cmd.Flags().String("to", "", "")
+	cmd.Flags().String("format", "table", "")
+	cmd.Flags().String("fail-on", "", "")
+	return cmd
+}
+
+func TestRunQuery_InvalidFormat(t *testing.T) {
+	cmd := newQueryCmd()
+	_ = cmd.Flags().Set("format", "xml")
+	err := runQuery(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+	if !strings.Contains(err.Error(), "invalid format") {
+		t.Errorf("error = %q, want to contain 'invalid format'", err.Error())
+	}
+}
+
+func TestRunQuery_NoMode(t *testing.T) {
+	cmd := newQueryCmd()
+	err := runQuery(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error when no mode specified")
+	}
+	if !strings.Contains(err.Error(), "specify a query mode") {
+		t.Errorf("error = %q, want to contain 'specify a query mode'", err.Error())
+	}
+}
+
+func TestRunQuery_MultipleModes(t *testing.T) {
+	cmd := newQueryCmd()
+	_ = cmd.Flags().Set("findings", "true")
+	_ = cmd.Flags().Set("prebuilt", "agents-shell-access")
+	err := runQuery(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error when multiple modes specified")
+	}
+	if !strings.Contains(err.Error(), "specify only one query mode") {
+		t.Errorf("error = %q, want to contain 'specify only one query mode'", err.Error())
+	}
+}
+
+func TestRunFindings_InvalidSeverity(t *testing.T) {
+	err := runFindings(context.Background(), "bogus", "table", "")
+	if err == nil {
+		t.Fatal("expected error for invalid severity")
+	}
+	if !strings.Contains(err.Error(), "invalid severity") {
+		t.Errorf("error = %q, want to contain 'invalid severity'", err.Error())
+	}
+}
+
+func TestRunShortestPath_MissingFlags(t *testing.T) {
+	err := runShortestPath(context.Background(), "", "", "table")
+	if err == nil {
+		t.Fatal("expected error for missing --from/--to")
+	}
+	if !strings.Contains(err.Error(), "requires both") {
+		t.Errorf("error = %q, want to contain 'requires both'", err.Error())
+	}
+}
+
+func TestRunShortestPath_InvalidFrom(t *testing.T) {
+	err := runShortestPath(context.Background(), "badformat", "MCPServer:srv", "table")
+	if err == nil {
+		t.Fatal("expected error for invalid --from")
+	}
+	if !strings.Contains(err.Error(), "--from") {
+		t.Errorf("error = %q, want to contain '--from'", err.Error())
+	}
+}
+
+func TestRunShortestPath_InvalidTo(t *testing.T) {
+	err := runShortestPath(context.Background(), "MCPServer:srv", "badformat", "table")
+	if err == nil {
+		t.Fatal("expected error for invalid --to")
+	}
+	if !strings.Contains(err.Error(), "--to") {
+		t.Errorf("error = %q, want to contain '--to'", err.Error())
 	}
 }
