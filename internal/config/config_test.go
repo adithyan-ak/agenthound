@@ -150,6 +150,43 @@ func TestValidateErrors(t *testing.T) {
 	}
 }
 
+func TestHasExplicitDBConfig_Default(t *testing.T) {
+	for _, key := range []string{
+		"AGENTHOUND_NEO4J_URI", "AGENTHOUND_NEO4J_USER", "AGENTHOUND_NEO4J_PASSWORD",
+		"AGENTHOUND_PG_URI",
+	} {
+		t.Setenv(key, "")
+		_ = os.Unsetenv(key)
+	}
+
+	cfg := Load()
+	if cfg.HasExplicitDBConfig() {
+		t.Error("HasExplicitDBConfig() should be false with defaults only")
+	}
+}
+
+func TestHasExplicitDBConfig_WithEnv(t *testing.T) {
+	t.Setenv("AGENTHOUND_NEO4J_URI", "bolt://custom:7687")
+	cfg := Load()
+	if !cfg.HasExplicitDBConfig() {
+		t.Error("HasExplicitDBConfig() should be true when env var is set")
+	}
+}
+
+func TestHasExplicitDBConfig_WithPG(t *testing.T) {
+	for _, key := range []string{
+		"AGENTHOUND_NEO4J_URI", "AGENTHOUND_NEO4J_USER", "AGENTHOUND_NEO4J_PASSWORD",
+	} {
+		t.Setenv(key, "")
+		_ = os.Unsetenv(key)
+	}
+	t.Setenv("AGENTHOUND_PG_URI", "postgres://custom:5432/db")
+	cfg := Load()
+	if !cfg.HasExplicitDBConfig() {
+		t.Error("HasExplicitDBConfig() should be true when PG env var is set")
+	}
+}
+
 func TestCORSOriginsEmpty(t *testing.T) {
 	t.Setenv("AGENTHOUND_CORS_ORIGINS", "")
 	_ = os.Unsetenv("AGENTHOUND_CORS_ORIGINS")

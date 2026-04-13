@@ -3,6 +3,7 @@ package apiclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -281,5 +282,172 @@ func TestGetPrebuilt_Success(t *testing.T) {
 	}
 	if rows[0]["agent"] != "claude-desktop" {
 		t.Errorf("expected agent 'claude-desktop', got %v", rows[0]["agent"])
+	}
+}
+
+func TestGetPrebuilt_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "token")
+	_, err := c.GetPrebuilt(context.Background(), "agents-shell-access")
+	if err == nil {
+		t.Fatal("expected error on 500")
+	}
+	expected := "server error (500): check server logs"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestHealth_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "")
+	err := c.Health(context.Background())
+	if err == nil {
+		t.Fatal("expected error on 500")
+	}
+	expected := "server error (500): check server logs"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestGetFindings_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "token")
+	_, err := c.GetFindings(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error on 500")
+	}
+	expected := "server error (500): check server logs"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestHandleError_BadRequest_WithMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"validation","message":"missing required field"}}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "")
+	err := c.Health(context.Background())
+	if err == nil {
+		t.Fatal("expected error on 400")
+	}
+	expected := "bad request: missing required field"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestHandleError_BadRequest_PlainText(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`not json`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "")
+	err := c.Health(context.Background())
+	if err == nil {
+		t.Fatal("expected error on 400")
+	}
+	expected := "bad request: not json"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestHandleError_UnexpectedStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`forbidden`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "")
+	err := c.Health(context.Background())
+	if err == nil {
+		t.Fatal("expected error on 403")
+	}
+	expected := "unexpected status 403: forbidden"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestCreateToken_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "expired-jwt")
+	_, err := c.CreateToken(context.Background(), "test-token")
+	if err == nil {
+		t.Fatal("expected error on 401")
+	}
+	expected := "authentication failed: run 'agenthound setup' to reconfigure"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestLogin_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "")
+	_, err := c.Login(context.Background(), "admin", "pass")
+	if err == nil {
+		t.Fatal("expected error on 500")
+	}
+	expected := "server error (500): check server logs"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestNew_TrailingSlash(t *testing.T) {
+	c := New("http://example.com/", "tok")
+	if c.baseURL != "http://example.com" {
+		t.Errorf("baseURL = %q, want trailing slash stripped", c.baseURL)
+	}
+}
+
+func TestIsConnectionRefused(t *testing.T) {
+	tests := []struct {
+		msg  string
+		want bool
+	}{
+		{"dial tcp 127.0.0.1:1: connection refused", true},
+		{"dial tcp: lookup nosuchhost", true},
+		{"no such host found", true},
+		{"timeout exceeded", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.msg, func(t *testing.T) {
+			err := fmt.Errorf("%s", tt.msg)
+			if got := isConnectionRefused(err); got != tt.want {
+				t.Errorf("isConnectionRefused(%q) = %v, want %v", tt.msg, got, tt.want)
+			}
+		})
 	}
 }
