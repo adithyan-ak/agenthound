@@ -63,6 +63,5 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	serveCmd.Flags().Int("port", 8080, "API server port")
 	rootCmd.AddCommand(serveCmd)
 }
