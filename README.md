@@ -43,6 +43,14 @@ All 17 findings are available as pre-built queries from the CLI and UI.
 
 ## Quick Start
 
+### Requirements
+
+| Method | Requirements |
+|--------|-------------|
+| Docker (recommended) | Docker or Podman |
+| Docker Compose | Docker Compose v2 |
+| From source | Go 1.25+, Node 20+, Neo4j 4.4+, PostgreSQL 13+ |
+
 ### One-line install (recommended)
 
 Requires [Docker](https://docs.docker.com/get-docker/) (or Podman). No other dependencies.
@@ -103,7 +111,7 @@ agenthound scan --output scan.json
 agenthound scan --fail-on critical
 ```
 
-### 4. Find attack paths
+### Find attack paths
 
 ```bash
 # Open the web UI
@@ -143,7 +151,7 @@ agenthound query --findings --severity critical
     +---------+         +-------------+
 ```
 
-**Three collectors** enumerate your AI agent infrastructure and produce standardized JSON. The **ingest pipeline** validates, normalizes, and writes nodes/edges to Neo4j, then runs **9 post-processors** that compute composite attack paths (`CAN_REACH`, `CAN_EXFILTRATE_VIA`, `SHADOWS`, etc.) and risk scores. The **REST API** and **React UI** let you explore the graph, run pathfinding, and investigate findings.
+**Three collectors** enumerate your AI agent infrastructure and produce standardized JSON. The **ingest pipeline** validates, normalizes, and writes nodes/edges to Neo4j, then runs **10 post-processors** that compute composite attack paths (`CAN_REACH`, `CAN_EXFILTRATE_VIA`, `SHADOWS`, etc.) and risk scores. The **REST API** and **React UI** let you explore the graph, run pathfinding, and investigate findings.
 
 ### The Graph
 
@@ -226,11 +234,32 @@ agenthound scan --output scan.json                     # Export without ingestin
 agenthound scan --fail-on critical                     # CI/CD: exit 1 on critical findings
 ```
 
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--config` | | Run config collector only (offline, no network) |
+| `--mcp` | | Run MCP collector only |
+| `--a2a` | | Run A2A collector only |
+| `--path` | | Path to a specific config file |
+| `--paths` | | Paths to multiple config files (comma-separated) |
+| `--project-dir` | | Project directory for instruction file discovery |
+| `--include-credential-values` | `false` | Include raw credential values (audit mode) |
+| `--url` | | URL of a single HTTP MCP server |
+| `--target` | | URL of a single A2A agent |
+| `--targets` | | URLs of multiple A2A agents (comma-separated) |
+| `--discover-domain` | | Domains to probe for well-known agent cards |
+| `--targets-file` | | File with A2A agent URLs (one per line) |
+| `--auth-token` | | Bearer token for authenticated A2A agents |
+| `--concurrency` | `5` | Max parallel connections |
+| `--timeout` | `120s` | Timeout per server/agent |
+| `--insecure` | `false` | Skip TLS verification |
+| `--output` | | Export JSON to file (skip ingest) |
+| `--fail-on` | | Exit 1 if findings at or above severity: critical, high, medium, low |
+
 ### Server
 
 ```bash
-agenthound serve                          # Start API server + UI on :8080
-agenthound serve --port 9090              # Custom port
+agenthound serve                                       # Start API server + UI on :8080
+AGENTHOUND_API_PORT=9090 agenthound serve              # Custom port
 ```
 
 ### Ingestion
@@ -239,7 +268,7 @@ agenthound serve --port 9090              # Custom port
 agenthound ingest scan.json               # Ingest collector output file
 ```
 
-The pipeline validates, normalizes (camelCase to snake_case), deduplicates by node ID, batch-writes to Neo4j, then runs all 9 post-processors to compute attack paths and risk scores.
+The pipeline validates, normalizes (camelCase to snake_case), deduplicates by node ID, batch-writes to Neo4j, then runs all 10 post-processors to compute attack paths and risk scores.
 
 ### Querying
 
@@ -264,7 +293,7 @@ agenthound query --shortest-path \
 # Raw Cypher
 agenthound query "MATCH (a:AgentInstance)-[:CAN_REACH]->(r:MCPResource) RETURN a.name, r.uri"
 
-# Output as JSON
+# Output formats: table (default) or json
 agenthound query --findings --format json
 ```
 
@@ -294,10 +323,9 @@ agenthound query --findings --format json
 
 ## Web UI
 
-The embedded React UI provides:
+The embedded React UI provides five views:
 
 - **Dashboard** -- node/edge counts, risk distribution, top findings, auth coverage stats
-- **Graph** -- interactive force-directed graph visualization, click to inspect, filter by node type
 - **Explorer** -- lens-based graph visualization with 8 analysis lenses (Topology, Attack Surface, Critical, Cross-Protocol, Credentials, Poisoning, Blast Radius, Chokepoints). Hexagonal nodes, click-to-highlight with flowing dot animation, right-click context menu, bottom drawer with properties/connections/evidence/remediation tabs
 - **Findings** -- filterable/sortable list of all security findings. Click any finding to see the detail page with a horizontal attack path diagram (card-wrapped hex nodes), per-hop evidence timeline, impact assessment with attack cost meter, remediation steps with copy-paste commands, and OWASP reference links
 - **Scans** -- view scan history, trigger new scans
@@ -311,15 +339,20 @@ Access at `http://localhost:8080` after starting the server. Default credentials
 
 All endpoints are under `/api/v1`. Authentication via JWT (from login) or API token (`ah_` prefix).
 
-Full machine-readable spec available at `GET /api/v1/docs` (OpenAPI 3.0).
+Machine-readable OpenAPI 3.0 spec available at `GET /api/v1/docs` (returns YAML -- import into Swagger Editor or Postman).
+
+**Rate limits:** 100 requests/min global, 20/min for ingest, 10/min for raw Cypher queries. All rate limits are per-IP.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/health` | GET | None | Service health check |
 | `/auth/login` | POST | None | Login, returns JWT |
 | `/graph/stats` | GET | Viewer+ | Node/edge counts by kind |
+| `/graph/search` | GET | Viewer+ | Search nodes by name/property |
 | `/graph/nodes` | GET | Viewer+ | List/filter nodes |
 | `/graph/nodes/{id}` | GET | Viewer+ | Node detail + connections |
+| `/graph/nodes/{id}/neighborhood` | GET | Viewer+ | Node neighborhood subgraph |
+| `/graph/nodes/{id}/blast-radius` | GET | Viewer+ | Blast radius from node |
 | `/graph/edges` | GET | Viewer+ | List/filter edges |
 | `/analysis/findings` | GET | Viewer+ | All findings with severity |
 | `/analysis/findings/{id}` | GET | Viewer+ | Finding detail with attack path, remediation, impact |
@@ -330,7 +363,8 @@ Full machine-readable spec available at `GET /api/v1/docs` (OpenAPI 3.0).
 | `/analysis/weighted-path` | POST | Analyst+ | Dijkstra via APOC |
 | `/ingest` | POST | Analyst+ | Upload collector JSON |
 | `/scans` | GET/POST | Varies | List/create scans |
-| `/auth/tokens` | GET/POST | Analyst+ | Manage API tokens |
+| `/scans/{id}` | GET | Viewer+ | Scan status and details |
+| `/auth/tokens` | GET/POST/DELETE | Analyst+ | Manage API tokens (`DELETE /auth/tokens/{id}`) |
 | `/auth/users` | GET/POST/DELETE | Admin | User management |
 | `/query` | POST | Admin | Raw Cypher execution |
 | `/audit` | GET | Admin | Audit log |
@@ -355,7 +389,9 @@ curl http://localhost:8080/api/v1/analysis/findings \
 
 ## Configuration
 
-All configuration is via environment variables:
+Configuration is resolved in priority order: **CLI flags > environment variables > defaults**.
+
+Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -368,6 +404,16 @@ All configuration is via environment variables:
 | `AGENTHOUND_JWT_SECRET` | *(auto-generated)* | JWT signing secret. Set this for stable sessions across restarts. |
 | `AGENTHOUND_ADMIN_PASSWORD` | `agenthound` | Initial admin password. Change in production. |
 | `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | Comma-separated allowed CORS origins |
+
+Global CLI flags (available on all subcommands):
+
+| Flag | Env Equivalent | Description |
+|------|---------------|-------------|
+| `--neo4j-uri` | `AGENTHOUND_NEO4J_URI` | Neo4j connection URI |
+| `--neo4j-user` | `AGENTHOUND_NEO4J_USER` | Neo4j username |
+| `--neo4j-password` | `AGENTHOUND_NEO4J_PASSWORD` | Neo4j password |
+| `--pg-uri` | `AGENTHOUND_PG_URI` | PostgreSQL connection URI |
+| `--log-level` | `AGENTHOUND_LOG_LEVEL` | Log level (debug/info/warn/error) |
 
 ---
 
@@ -457,6 +503,14 @@ Three roles with hierarchical permissions:
 | **Analyst** | All viewer permissions + ingest data, create scans, manage own API tokens, run pathfinding |
 | **Admin** | All permissions + raw Cypher, user management, audit log access |
 
+An `admin` user is auto-created on first startup using `AGENTHOUND_ADMIN_PASSWORD` (default: `agenthound`). Additional users can be created via the Admin API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/users \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"username": "analyst1", "password": "...", "role": "analyst"}'
+```
+
 ---
 
 ## Documentation
@@ -473,7 +527,7 @@ Three roles with hierarchical permissions:
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](SECURITY.md) | Vulnerability reporting policy |
 
-Machine-readable API spec: `GET /api/v1/docs` (OpenAPI 3.0)
+Machine-readable API spec: `GET /api/v1/docs` (OpenAPI 3.0, YAML format)
 
 ---
 
