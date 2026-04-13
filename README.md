@@ -51,7 +51,7 @@ Requires [Docker](https://docs.docker.com/get-docker/) (or Podman). No other dep
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
 ```
 
-This pulls a single all-in-one Docker image (Neo4j + PostgreSQL + AgentHound), starts it, and prints the URL when ready. Data persists in a Docker volume across restarts.
+This pulls the standard AgentHound Docker image (Neo4j + PostgreSQL + AgentHound bundled), starts it, and prints the URL when ready. Data persists in a Docker volume across restarts.
 
 ```
   AgentHound is running!
@@ -373,7 +373,7 @@ All configuration is via environment variables:
 
 ## Deployment
 
-### All-in-one Docker (quickest)
+### Standard Docker (quickest)
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
