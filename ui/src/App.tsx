@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Dashboard } from "@/components/dashboard/Dashboard";
-import { GraphExplorer } from "@/components/graph/GraphExplorer";
 import { ScanManager } from "@/components/scans/ScanManager";
 import { QueryLibrary } from "@/components/queries/QueryLibrary";
 import { LoginPage } from "@/components/auth/LoginPage";
@@ -48,7 +47,6 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/graph" element={<GraphExplorer />} />
           <Route
             path="/explorer"
             element={
@@ -73,7 +71,7 @@ export function App() {
               </Suspense>
             }
           />
-          <Route path="/pathfinder" element={<Navigate to="/graph" replace />} />
+
           <Route path="/scans" element={<ScanManager />} />
           <Route path="/queries" element={<QueryLibrary />} />
         </Route>

@@ -2,7 +2,6 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
-  Network,
   Compass,
   AlertTriangle,
   ScanSearch,
@@ -19,7 +18,6 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/graph", label: "Graph", icon: Network },
   { to: "/explorer", label: "Explorer", icon: Compass },
   { to: "/findings", label: "Findings", icon: AlertTriangle },
   { to: "/scans", label: "Scans", icon: ScanSearch },

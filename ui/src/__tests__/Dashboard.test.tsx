@@ -4,7 +4,6 @@ import { StatCards } from "@/components/dashboard/StatCards";
 
 vi.mock("@/hooks/useGraph", () => ({
   useGraphStats: vi.fn(),
-  useGraphData: vi.fn(),
 }));
 
 import { useGraphStats } from "@/hooks/useGraph";
