@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { fetchFindings } from "@/api/analysis";
-import { useGraphStore } from "@/store/graph";
 import { cn } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +22,6 @@ const SEVERITY_RANK: Record<string, number> = {
 
 export function TopFindings() {
   const navigate = useNavigate();
-  const highlightPath = useGraphStore((s) => s.highlightPath);
 
   const { data: findings, isLoading } = useQuery({
     queryKey: ["dashboard", "findings"],
@@ -40,14 +38,8 @@ export function TopFindings() {
     )
     .slice(0, 10);
 
-  function openInGraph(f: (typeof top)[number]) {
-    const edgeKey = `${f.source_id}->${f.target_id}:${f.edge_kind}`;
-    highlightPath({
-      nodeIds: [f.source_id, f.target_id],
-      edgeKeys: [edgeKey],
-      title: f.title,
-    });
-    navigate("/graph");
+  function openFinding(f: (typeof top)[number]) {
+    navigate(`/findings/${f.id}`);
   }
 
   return (
@@ -67,7 +59,7 @@ export function TopFindings() {
             {top.map((f) => (
               <li key={f.id}>
                 <button
-                  onClick={() => openInGraph(f)}
+                  onClick={() => openFinding(f)}
                   className="w-full rounded border border-border bg-background/50 px-3 py-2 text-left transition-colors hover:bg-accent hover:border-primary/40 cursor-pointer"
                 >
                   <div className="flex items-start gap-2">
