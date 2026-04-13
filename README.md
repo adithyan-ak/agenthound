@@ -111,6 +111,8 @@ agenthound scan --output scan.json
 agenthound scan --fail-on critical
 ```
 
+The install script sets up the CLI binary and server authentication automatically. Collectors run on your host (accessing local config files and MCP servers), then results are shipped to the server for analysis.
+
 ### Find attack paths
 
 ```bash
