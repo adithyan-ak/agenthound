@@ -39,6 +39,11 @@ export interface LayoutResult<T extends Node = Node> {
 }
 
 /**
+ * Horizontal gap between disconnected graph components after repositioning.
+ */
+const COMPONENT_GAP = 200;
+
+/**
  * Gap between the bottom of the connected graph and the cluster strip.
  */
 const CLUSTER_STRIP_GAP = 120;
@@ -121,9 +126,19 @@ export async function computeExplorerLayout<T extends Node = Node>(
       const x = child.x ?? 0;
       const y = child.y ?? 0;
       positions.set(child.id, { x, y });
-      if (x < mainMinX) mainMinX = x;
-      if (x + HEX_NODE_WIDTH > mainMaxX) mainMaxX = x + HEX_NODE_WIDTH;
-      if (y + HEX_TOTAL_HEIGHT > mainMaxY) mainMaxY = y + HEX_TOTAL_HEIGHT;
+    }
+
+    // Detect disconnected components and reposition side-by-side.
+    // ELK optimizes each component's internal layout correctly but
+    // places disconnected components at arbitrary positions. We detect
+    // them via BFS on the edge list and arrange them left-to-right,
+    // largest first, with a gap between each.
+    repositionDisconnectedComponents(positions, elkEdges, COMPONENT_GAP);
+
+    for (const [, pos] of positions) {
+      if (pos.x < mainMinX) mainMinX = pos.x;
+      if (pos.x + HEX_NODE_WIDTH > mainMaxX) mainMaxX = pos.x + HEX_NODE_WIDTH;
+      if (pos.y + HEX_TOTAL_HEIGHT > mainMaxY) mainMaxY = pos.y + HEX_TOTAL_HEIGHT;
     }
   } else {
     mainMinX = 0;
@@ -163,4 +178,84 @@ export async function computeExplorerLayout<T extends Node = Node>(
     nodes: positioned,
     bounds: { width: finalMaxX, height: finalMaxY },
   };
+}
+
+/**
+ * Detect disconnected components via BFS and reposition them side-by-side.
+ * Largest component stays at its original position, smaller ones are placed
+ * to its right with a gap. Each component's internal layout is preserved —
+ * only the origin (top-left corner) is shifted.
+ */
+function repositionDisconnectedComponents(
+  positions: Map<string, { x: number; y: number }>,
+  edges: { sources: string[]; targets: string[] }[],
+  gap: number,
+): void {
+  const nodeIds = [...positions.keys()];
+  if (nodeIds.length <= 1) return;
+
+  // Build adjacency list (undirected)
+  const adj = new Map<string, Set<string>>();
+  for (const id of nodeIds) adj.set(id, new Set());
+  for (const e of edges) {
+    const s = e.sources[0];
+    const t = e.targets[0];
+    if (s && t && adj.has(s) && adj.has(t)) {
+      adj.get(s)!.add(t);
+      adj.get(t)!.add(s);
+    }
+  }
+
+  // BFS to find connected components
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const id of nodeIds) {
+    if (visited.has(id)) continue;
+    const component: string[] = [];
+    const queue = [id];
+    visited.add(id);
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      component.push(cur);
+      for (const neighbor of adj.get(cur) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    components.push(component);
+  }
+
+  // Single component — nothing to reposition
+  if (components.length <= 1) return;
+
+  // Sort by size descending (largest first)
+  components.sort((a, b) => b.length - a.length);
+
+  // Place each component side-by-side, anchored at y=0
+  let cursorX = 0;
+  for (const comp of components) {
+    // Compute bounding box of this component
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    for (const id of comp) {
+      const pos = positions.get(id)!;
+      if (pos.x < minX) minX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.x + HEX_NODE_WIDTH > maxX) maxX = pos.x + HEX_NODE_WIDTH;
+    }
+
+    // Shift component so its top-left sits at (cursorX, 0)
+    const dx = cursorX - minX;
+    const dy = -minY;
+    for (const id of comp) {
+      const pos = positions.get(id)!;
+      pos.x += dx;
+      pos.y += dy;
+    }
+
+    cursorX = maxX + dx + gap;
+  }
 }
