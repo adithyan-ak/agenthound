@@ -328,7 +328,7 @@ func (h *AnalysisHandler) HandleFindingDetail(w http.ResponseWriter, r *http.Req
 		return
 	}
 	for _, c := range findingID {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			WriteValidationError(w, "finding ID must be a 16-character hex string")
 			return
 		}
@@ -412,7 +412,7 @@ func isObjectID(value string) bool {
 		return false
 	}
 	for _, c := range v {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}
