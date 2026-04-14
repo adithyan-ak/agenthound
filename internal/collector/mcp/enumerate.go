@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"sort"
+	"strings"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -172,7 +174,7 @@ func (c *MCPCollector) enumerateTools(ctx context.Context, session *mcpsdk.Clien
 	count := 0
 	for tool, err := range session.Tools(ctx, nil) {
 		if err != nil {
-			log.Printf("[mcp] tool enumeration error for server %s: %v", serverID, err)
+			logEnumerationError("tool", serverID, err)
 			break
 		}
 		count++
@@ -220,7 +222,7 @@ func (c *MCPCollector) enumerateResources(ctx context.Context, session *mcpsdk.C
 
 	for res, err := range session.Resources(ctx, nil) {
 		if err != nil {
-			log.Printf("[mcp] resource enumeration error for server %s: %v", serverID, err)
+			logEnumerationError("resource", serverID, err)
 			break
 		}
 		count++
@@ -254,7 +256,7 @@ func (c *MCPCollector) enumerateResourceTemplates(ctx context.Context, session *
 
 	for tmpl, err := range session.ResourceTemplates(ctx, nil) {
 		if err != nil {
-			log.Printf("[mcp] resource template enumeration error for server %s: %v", serverID, err)
+			logEnumerationError("resource template", serverID, err)
 			break
 		}
 		count++
@@ -288,7 +290,7 @@ func (c *MCPCollector) enumeratePrompts(ctx context.Context, session *mcpsdk.Cli
 
 	for prompt, err := range session.Prompts(ctx, nil) {
 		if err != nil {
-			log.Printf("[mcp] prompt enumeration error for server %s: %v", serverID, err)
+			logEnumerationError("prompt", serverID, err)
 			break
 		}
 		count++
@@ -429,4 +431,13 @@ func marshalJSON(v any) string {
 		return ""
 	}
 	return string(data)
+}
+
+func logEnumerationError(kind, serverID string, err error) {
+	msg := err.Error()
+	if strings.Contains(msg, "Method not found") || strings.Contains(msg, "method not found") {
+		slog.Debug("server does not support optional method", "method", kind+"/list", "server", serverID)
+		return
+	}
+	log.Printf("[mcp] %s enumeration error for server %s: %v", kind, serverID, err)
 }
