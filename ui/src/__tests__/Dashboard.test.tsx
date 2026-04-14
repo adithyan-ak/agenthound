@@ -1,14 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatCards } from "@/components/dashboard/StatCards";
 
 vi.mock("@/hooks/useGraph", () => ({
   useGraphStats: vi.fn(),
 }));
 
+vi.mock("@/api/analysis", () => ({
+  fetchFindings: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/api/graph", () => ({
+  fetchNodes: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/api/scans", () => ({
+  fetchScans: vi.fn().mockResolvedValue([]),
+}));
+
 import { useGraphStats } from "@/hooks/useGraph";
 
 const mockedUseGraphStats = vi.mocked(useGraphStats);
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
 
 describe("StatCards", () => {
   beforeEach(() => {
@@ -24,7 +48,7 @@ describe("StatCards", () => {
       isPending: true,
     } as unknown as ReturnType<typeof useGraphStats>);
 
-    const { container } = render(<StatCards />);
+    const { container } = render(<StatCards />, { wrapper: createWrapper() });
     const skeletons = container.querySelectorAll('[class*="animate-pulse"]');
     expect(skeletons.length).toBeGreaterThanOrEqual(5);
   });
@@ -48,19 +72,18 @@ describe("StatCards", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useGraphStats>);
 
-    render(<StatCards />);
+    render(<StatCards />, { wrapper: createWrapper() });
 
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("42")).toBeInTheDocument();
 
+    expect(screen.getByText("Exposure")).toBeInTheDocument();
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("A2A Agents")).toBeInTheDocument();
     expect(screen.getByText("Tools")).toBeInTheDocument();
-    expect(screen.getByText("Total Nodes")).toBeInTheDocument();
   });
 
   it("renders zero values when node_counts keys are missing", () => {
@@ -77,7 +100,7 @@ describe("StatCards", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useGraphStats>);
 
-    render(<StatCards />);
+    render(<StatCards />, { wrapper: createWrapper() });
 
     const zeros = screen.getAllByText("0");
     expect(zeros).toHaveLength(5);
