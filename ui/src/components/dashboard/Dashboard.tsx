@@ -1,6 +1,7 @@
 import { StatCards } from "./StatCards";
 import { RiskChart } from "./RiskChart";
 import { AuthCoverage } from "./AuthCoverage";
+import { TopRiskyEntities } from "./TopRiskyEntities";
 import { CredentialExposure } from "./CredentialExposure";
 import { CrossProtocol } from "./CrossProtocol";
 import { TopFindings } from "./TopFindings";
@@ -13,16 +14,17 @@ export function Dashboard() {
       <StatCards />
       <div className="grid gap-6 lg:grid-cols-2">
         <RiskChart />
+        <TopRiskyEntities />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
         <AuthCoverage />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
         <CredentialExposure />
-        <CrossProtocol />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
+        <CrossProtocol />
         <TopFindings />
-        <RecentScans />
       </div>
+      <RecentScans />
     </div>
   );
 }
