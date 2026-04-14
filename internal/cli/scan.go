@@ -15,6 +15,7 @@ import (
 	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
 	"github.com/adithyan-ak/agenthound/internal/config"
 	"github.com/adithyan-ak/agenthound/internal/model"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -258,6 +259,7 @@ func runScanExport(ctx context.Context, runConfig, runMCP, runA2A bool,
 			Collector:        "scan",
 			CollectorVersion: "0.1.0",
 			Timestamp:        time.Now().UTC().Format(time.RFC3339),
+			ScanID:           uuid.New().String(),
 		},
 	}
 
@@ -314,6 +316,7 @@ func runScanAPI(ctx context.Context, clientCfg *config.ClientConfig, start time.
 			Collector:        "scan",
 			CollectorVersion: "0.1.0",
 			Timestamp:        time.Now().UTC().Format(time.RFC3339),
+			ScanID:           uuid.New().String(),
 		},
 	}
 

@@ -74,6 +74,7 @@ var AllowedCollectors = map[string]bool{
 	"mcp":    true,
 	"a2a":    true,
 	"config": true,
+	"scan":   true,
 }
 
 // EdgeEndpoints defines the expected source and target node kinds for an edge kind.
