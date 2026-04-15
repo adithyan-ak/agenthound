@@ -1,0 +1,32 @@
+id: capability-file-write
+name: File Write Capability
+description: >
+  Classifies tools with file writing capability based on keywords in
+  tool name, description, and input schema properties.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP06]
+tags: [capability, file-write]
+matcher:
+  type: keyword
+  keywords: ["write file", file_write, save_file, create_file, write_file, overwrite, append_file, put_file]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: file_write
+tests:
+  - input: "write_file Writes content to a file on disk"
+    should_match: true
+    description: "matches write_file keyword"
+  - input: "save_file saves the current state"
+    should_match: true
+    description: "matches save_file keyword"
+  - input: "Queries the database for records"
+    should_match: false
+    description: "no file write keywords present"

@@ -1,0 +1,32 @@
+id: capability-shell-access
+name: Shell Access Capability
+description: >
+  Classifies tools with shell/command execution capability based on
+  keywords in tool name, description, and input schema properties.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: high
+owasp: [MCP01]
+tags: [capability, shell-access]
+matcher:
+  type: keyword
+  keywords: [shell, bash, terminal, command, exec, subprocess, "sh -c", powershell]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: shell_access
+tests:
+  - input: "run_shell_command Runs a command in the system shell"
+    should_match: true
+    description: "matches shell keyword in tool name"
+  - input: "execute bash script on the server"
+    should_match: true
+    description: "matches bash keyword"
+  - input: "Formats the input text nicely"
+    should_match: false
+    description: "no capability keywords present"

@@ -1,0 +1,37 @@
+id: sensitivity-medium
+name: Medium Sensitivity Resource
+description: >
+  Classifies resource URIs as medium sensitivity. Matches any file:///
+  path, http/https URLs, and cloud storage URIs (s3://, gs://).
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [resource.uri]
+severity: medium
+owasp: [MCP06, ASI08]
+tags: [sensitivity, resource-classification]
+matcher:
+  type: prefix
+  prefixes: ["file:///", "file://localhost/", "http://", "https://", "s3://", "gs://"]
+  case_insensitive: false
+emit:
+  finding_type: sensitivity_classification
+  property_key: sensitivity
+  property_value: medium
+tests:
+  - input: "file:///app/data/report.csv"
+    should_match: true
+    description: "local file path"
+  - input: "https://api.example.com/v1/data"
+    should_match: true
+    description: "HTTPS URL"
+  - input: "s3://my-bucket/data.csv"
+    should_match: true
+    description: "S3 cloud storage"
+  - input: "ftp://files.example.com/doc.pdf"
+    should_match: false
+    description: "FTP scheme not classified as medium"
+  - input: "custom://internal/resource"
+    should_match: false
+    description: "custom scheme not classified"

@@ -1,0 +1,32 @@
+id: capability-file-read
+name: File Read Capability
+description: >
+  Classifies tools with file reading capability based on keywords in
+  tool name, description, and input schema properties.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP06]
+tags: [capability, file-read]
+matcher:
+  type: keyword
+  keywords: ["read file", file_read, get_file, list_directory, readdir, "cat ", "file://", "open file", read_file]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: file_read
+tests:
+  - input: "read_file Opens and reads a file from disk"
+    should_match: true
+    description: "matches read_file keyword"
+  - input: "list_directory shows contents of a directory"
+    should_match: true
+    description: "matches list_directory keyword"
+  - input: "Sends an email notification"
+    should_match: false
+    description: "no file read keywords present"

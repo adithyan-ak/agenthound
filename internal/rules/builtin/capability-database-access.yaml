@@ -1,0 +1,32 @@
+id: capability-database-access
+name: Database Access Capability
+description: >
+  Classifies tools with database access capability based on keywords in
+  tool name, description, and input schema properties.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP06]
+tags: [capability, database-access]
+matcher:
+  type: keyword
+  keywords: [sql, query, database, postgres, mysql, mongodb, redis, execute_sql, "db_", collection]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: database_access
+tests:
+  - input: "execute_sql Runs a SQL query against the production database"
+    should_match: true
+    description: "matches sql, query, database, and execute_sql keywords"
+  - input: "mongodb_find Queries a MongoDB collection"
+    should_match: true
+    description: "matches mongodb and collection keywords"
+  - input: "Reads a file from disk"
+    should_match: false
+    description: "no database keywords present"
