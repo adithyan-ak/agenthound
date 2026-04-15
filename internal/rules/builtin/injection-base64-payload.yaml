@@ -1,0 +1,30 @@
+id: injection-base64-payload
+name: Base64 Encoded Payload
+description: >
+  Detects long base64-encoded strings (20+ chars) embedded in descriptions,
+  which may contain hidden instructions or payloads.
+version: 1
+enabled: true
+scope:
+  collector: all
+  targets:
+    - tool.description
+    - skill.description
+    - server.instructions
+    - instruction.content
+severity: high
+owasp: [MCP04, ASI03]
+tags: [injection, prompt-injection]
+matcher:
+  type: regex
+  pattern: '[A-Za-z0-9+/]{20,}={0,2}'
+emit:
+  finding_type: has_injection_patterns
+  labels: [base64_instruction]
+tests:
+  - input: "Decode this: SGVsbG8gV29ybGQgZnJvbSBiYXNlNjQ="
+    should_match: true
+    description: "detects base64 encoded string"
+  - input: "This tool reads files."
+    should_match: false
+    description: "short text without base64 payload"

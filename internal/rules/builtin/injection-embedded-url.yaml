@@ -1,0 +1,32 @@
+id: injection-embedded-url
+name: Embedded URL with Sensitive Parameters
+description: >
+  Detects embedded URLs with sensitive query parameters. Same pattern as
+  exfil-url but at medium severity -- URLs in descriptions may be
+  documentation links that happen to include parameter examples.
+version: 1
+enabled: true
+scope:
+  collector: all
+  targets:
+    - tool.description
+    - skill.description
+    - server.instructions
+    - instruction.content
+severity: medium
+owasp: [MCP04, ASI03]
+tags: [injection, prompt-injection]
+matcher:
+  type: regex
+  pattern: 'https?://[^\s]+[?&](data|token|secret|password|key|credential)='
+  case_insensitive: true
+emit:
+  finding_type: has_injection_patterns
+  labels: [embedded_url]
+tests:
+  - input: "Example: https://api.example.com/v1?token=YOUR_TOKEN"
+    should_match: true
+    description: "detects URL with token parameter example"
+  - input: "See https://docs.example.com/setup for configuration"
+    should_match: false
+    description: "normal documentation URL"

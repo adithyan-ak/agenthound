@@ -1,0 +1,32 @@
+id: capability-network-outbound
+name: Network Outbound Capability
+description: >
+  Classifies tools with outbound network capability based on keywords in
+  tool name, description, and input schema properties.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP06]
+tags: [capability, network-outbound]
+matcher:
+  type: keyword
+  keywords: [http, fetch, curl, request, webhook, "api call", "post ", "get ", download, upload, send_request]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: network_outbound
+tests:
+  - input: "send_request Makes an HTTP request to a remote API"
+    should_match: true
+    description: "matches http and send_request keywords"
+  - input: "webhook Sends a webhook notification"
+    should_match: true
+    description: "matches webhook keyword"
+  - input: "Formats a string to uppercase"
+    should_match: false
+    description: "no network keywords present"
