@@ -10,6 +10,7 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/api"
 	"github.com/adithyan-ak/agenthound/internal/auth"
+	"github.com/adithyan-ak/agenthound/internal/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +30,11 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 
+		rulesEngine, err := rules.NewEngine(rules.LoadOptions{})
+		if err != nil {
+			slog.Warn("failed to load rules engine, rules API will return empty", "error", err)
+		}
+
 		server := api.NewServer(api.ServerDeps{
 			GraphDB:     infra.GraphDB,
 			Reader:      infra.Reader,
@@ -38,6 +44,7 @@ var serveCmd = &cobra.Command{
 			UserStore:   infra.UserStore,
 			TokenStore:  infra.TokenStore,
 			AuditStore:  infra.AuditStore,
+			RulesEngine: rulesEngine,
 			JWTSecret:   cfg.JWTSecret,
 			CORSOrigins: cfg.CORSOrigins,
 		})

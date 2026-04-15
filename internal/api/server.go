@@ -17,6 +17,7 @@ import (
 	"github.com/adithyan-ak/agenthound/internal/auth"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 	"github.com/adithyan-ak/agenthound/internal/ingest"
+	"github.com/adithyan-ak/agenthound/internal/rules"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +40,7 @@ type ServerDeps struct {
 	UserStore   *appdb.UserStore
 	TokenStore  *appdb.TokenStore
 	AuditStore  *appdb.AuditStore
+	RulesEngine *rules.Engine
 	JWTSecret   string
 	CORSOrigins []string
 }
@@ -62,6 +64,7 @@ func NewServer(deps ServerDeps) *Server {
 	scanH := handlers.NewScanHandler(deps.ScanStore, deps.GraphDB, auditLog)
 	authH := handlers.NewAuthHandler(deps.UserStore, deps.TokenStore, deps.JWTSecret, auditLog)
 	auditH := handlers.NewAuditHandler(deps.AuditStore)
+	rulesH := handlers.NewRulesHandler(deps.RulesEngine)
 
 	authMW := auth.NewMiddleware(deps.JWTSecret, deps.TokenStore, deps.UserStore)
 
@@ -89,6 +92,8 @@ func NewServer(deps ServerDeps) *Server {
 			r.Get("/analysis/prebuilt/{id}", analysisH.HandlePreBuilt)
 			r.Get("/scans", scanH.HandleList)
 			r.Get("/scans/{id}", scanH.HandleGet)
+			r.Get("/rules", rulesH.HandleList)
+			r.Get("/rules/{id}", rulesH.HandleGet)
 		})
 
 		// Authenticated routes — analyst+
