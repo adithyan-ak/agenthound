@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { ScanManager } from "@/components/scans/ScanManager";
 import { QueryLibrary } from "@/components/queries/QueryLibrary";
+import { RulesLibrary } from "@/components/rules/RulesLibrary";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useAuthStore } from "@/store/auth";
@@ -74,6 +75,7 @@ export function App() {
 
           <Route path="/scans" element={<ScanManager />} />
           <Route path="/queries" element={<QueryLibrary />} />
+          <Route path="/rules" element={<RulesLibrary />} />
         </Route>
       </Route>
     </Routes>
