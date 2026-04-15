@@ -7,6 +7,7 @@ import {
   ScanSearch,
   BookOpen,
   Shield,
+  ShieldCheck,
   LogOut,
   PanelRight,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems = [
   { to: "/findings", label: "Findings", icon: AlertTriangle },
   { to: "/scans", label: "Scans", icon: ScanSearch },
   { to: "/queries", label: "Queries", icon: BookOpen },
+  { to: "/rules", label: "Rules", icon: ShieldCheck },
 ];
 
 export function NavBar() {
