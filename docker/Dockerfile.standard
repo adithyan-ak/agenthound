@@ -2,7 +2,7 @@
 FROM node:20-alpine AS ui-builder
 WORKDIR /ui
 COPY server/ui/package.json server/ui/package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY server/ui/ .
 RUN npm run build
 

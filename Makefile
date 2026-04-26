@@ -1,7 +1,7 @@
 .PHONY: build build-collector build-server build-all test lint docker docker-collector docker-server docker-standard up down clean seed demo release ui-build ui-dev ui-test standard standard-run standard-stop deps-check size-check
 
 ui-build:
-	cd server/ui && npm install && npm run build
+	cd server/ui && npm ci --ignore-scripts && npm run build
 	rm -rf server/internal/api/ui/dist
 	mkdir -p server/internal/api/ui
 	cp -r server/ui/dist server/internal/api/ui/dist
