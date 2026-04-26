@@ -1,107 +1,151 @@
 # AgentHound — Project Context for Implementation
 
-AgentHound is a BloodHound-style open-source security tool that enumerates MCP servers and A2A agents, builds a directed trust graph in Neo4j, and uses shortest-path algorithms to discover attack paths across protocol boundaries. **No existing tool does cross-protocol graph-based attack path analysis for AI agent infrastructure.**
+AgentHound is an open-source security tool for AI agent infrastructure. It enumerates MCP servers, A2A agents, and AI-agent client configs, builds a directed trust graph in Neo4j, and uses shortest-path algorithms to discover attack paths across protocol boundaries — including cross-protocol paths spanning MCP and A2A that single-protocol scanners cannot see.
+
+The codebase ships as **two binaries** in the BloodHound/SharpHound style:
+
+- **`agenthound`** — lean field collector. ~9 MiB stripped on linux/amd64. No DB clients, no UI, no auth. Drops on a target host, enumerates, ships JSON to a server or to a local file.
+- **`agenthound-server`** — single-user analysis server. Neo4j-backed graph, Postgres-backed scan history, post-processors, REST API, embedded React UI. Binds 127.0.0.1:8080 by default. **No application-layer authentication** — protect with the network layer (VPN / SSH tunnel).
+
+See `docs/adr/0001-two-binary-split.md` for the rationale and `docs/security.md` for the threat model.
 
 ## Pre-Commit Checks (MANDATORY)
 
 Before every commit, run these checks locally and fix all issues:
 
 ```bash
-gofmt -l .                  # Must produce no output (no formatting issues)
+gofmt -l .                  # Must produce no output
 go build ./...              # Must pass with zero errors
 go vet ./...                # Must pass with zero warnings
+go test ./... -race         # All tests pass with race detector
 ```
 
-If any check fails, fix the issues before committing. Do NOT commit code that fails these checks. The CI runs `golangci-lint` which enforces `errcheck` (all error return values must be handled — use `_, _ =` for intentionally discarded ones like `fmt.Fprintf` to stderr) and `gofmt` (no manual alignment padding).
+The CI runs `golangci-lint` (enforces `errcheck` — use `_, _ =` for intentionally discarded errors like `fmt.Fprintf` to stderr — and `gofmt`). It also runs:
+
+- `govulncheck ./...` — blocking. Vulns surface as CI failures.
+- `go-licenses check` — blocking. Allow-list: `Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, Unlicense, Zlib`.
+- `scripts/deps-check.sh` — blocking. Verifies that the collector binary does not link `chi`, `pgx`, `neo4j-go-driver`, or any `server/internal/` code.
+- `scripts/size-check.sh` — blocking. Collector linux/amd64 stripped binary must stay within baseline + 10%.
 
 ## Tech Stack
 
 | Component | Choice | Key Details |
 |-----------|--------|-------------|
-| Backend | **Go 1.25+** | Required by MCP Go SDK v1.5.0 (`iter.Seq2`). Single binary. |
-| CLI | **cobra** | `agenthound serve`, `collect mcp/a2a/config`, `ingest`, `query` |
-| HTTP router | **chi/v5** | REST API at `/api/v1/*` |
+| Backend | **Go 1.25.9** | Pinned in `go.mod`; required by MCP Go SDK v1.5.0 and to clear stdlib vulns. |
+| CLI | **cobra** | `agenthound scan/setup/rules/...`; `agenthound-server serve/ingest/query` |
+| HTTP router | **chi/v5** | REST API at `/api/v1/*` (server only) |
 | Graph DB | **Neo4j 4.4+ Community** | Cypher pathfinding, APOC for Dijkstra. Dual syntax: 4.4 uses `ON...ASSERT`, 5.x uses `FOR...REQUIRE`. |
-| App DB | **PostgreSQL 16** | Users, scans, audit_log, api_tokens tables. Driver: `pgx/v5`. |
+| App DB | **PostgreSQL 16** | `scans` table only. Driver: `pgx/v5`. Auth/users/audit tables have been removed. |
 | MCP SDK | `github.com/modelcontextprotocol/go-sdk` **v1.5.0** | `mcp.NewClient()`, `mcp.CommandTransport`, auto-paginating iterators (`session.Tools(ctx, nil)`) |
 | Neo4j driver | `neo4j-go-driver/v5` v5.28+ | v5 for 4.4 compat. Batch writes with `UNWIND` + `MERGE`. |
-| JSON validation | `santhosh-tekuri/jsonschema/v6` | Ingest schema validation |
-| Frontend | **React 18 + TypeScript + Vite 6** | SPA embedded in Go binary via `go:embed` |
-| Graph viz | **sigma 3.0.2 + graphology 0.26.0 + @react-sigma/core 5.0.6** | WebGL, 100K+ nodes. Pass `MultiDirectedGraph` constructor to `SigmaContainer`, NOT an instance. |
-| Layout | **graphology-layout-forceatlas2 0.10.1** | Force-directed. Run 2s then freeze. |
-| UI | **shadcn/ui + Tailwind CSS 3.x + Zustand 5.x + TanStack Query 5.x + Recharts 2.x** | |
-| Deployment | **Docker Compose** | 3 containers: `graph-db` (neo4j:4.4-community), `app-db` (postgres:16-alpine), `agenthound` |
+| Frontend | **React 18 + TypeScript + Vite 6** | SPA embedded in `agenthound-server` via `go:embed` |
+| Graph viz | **React Flow (`@xyflow/react`) + ELK (`elkjs`)** | DOM-based, suitable for the small-to-medium graphs typical in attack-path views. |
+| UI | **shadcn/ui (Radix + Tailwind 3) + Zustand 5 + TanStack Query 5 + Recharts 2** | |
+| Deployment | **Docker Compose** | 3 containers: `graph-db` (neo4j:4.4-community), `app-db` (postgres:16-alpine), `agenthound-server` |
+| Release | **GoReleaser v2 + cosign keyless + syft** | Two builds, two Homebrew formulas, multi-arch Docker images, SBOMs, signed checksums. |
 | License | Apache 2.0 | |
 
 ## Project Structure
 
 ```
 agenthound/
-├── cmd/agenthound/main.go              # Cobra entry point
-├── internal/
-│   ├── api/                             # REST API server (chi router)
-│   │   ├── server.go                    # Routes, go:embed for UI
-│   │   ├── middleware/                   # logging, cors
-│   │   ├── handlers/                    # health, graph, ingest, analysis, scans
-│   │   └── ui/dist/                     # Copied from ui/dist by Makefile (go:embed target)
-│   ├── cli/                             # Cobra subcommands: root, serve, ingest, collect_*, query
-│   ├── graph/                           # Neo4j layer
-│   │   ├── driver.go                    # Connection management
-│   │   ├── schema.go                    # Constraints + indexes, version-detected syntax
-│   │   ├── writer.go                    # Batch MERGE writer (UNWIND). APOC preferred, per-kind fallback.
-│   │   └── reader.go                    # Query execution, GetNode, GetStats
-│   ├── ingest/                          # Pipeline: validate → normalize → deduplicate → write
-│   │   ├── pipeline.go                  # Orchestrator, triggers post-processing after write
-│   │   ├── validator.go                 # Schema validation (meta, node kinds, edge kinds)
-│   │   └── normalizer.go               # camelCase→snake_case, timestamps, objectid sync
-│   ├── collector/
-│   │   ├── common/                      # hasher.go, patterns.go, capability.go, entropy.go
-│   │   ├── config/                      # Config Collector + parsers/ (12 client formats)
-│   │   ├── mcp/                         # MCP Collector (wraps Go SDK)
-│   │   └── a2a/                         # A2A Collector (HTTP GET + JSON parse)
-│   ├── analysis/                        # Post-processing
-│   │   ├── postprocessor.go             # Runner with dependency ordering
-│   │   ├── processors/                  # has_access_to, can_execute, shadows, poisoned, can_reach,
-│   │   │                                # can_exfiltrate, can_impersonate, cross_protocol, risk_score
-│   │   ├── riskscore/                   # agent.go, server.go, tool.go, weights.go
-│   │   ├── similarity/tfidf.go          # For CAN_IMPERSONATE cosine similarity
-│   │   └── sensitivity/classifier.go    # Resource URI → sensitivity level
-│   ├── model/                           # Node, Edge, IngestData, IngestMeta, GraphData, Scan
-│   ├── appdb/                           # PostgreSQL: driver, migrations, scans CRUD
-│   ├── auth/                            # Phase 5: bcrypt passwords, JWT (24h, HMAC-SHA256), API tokens (ah_ prefix), RBAC
-│   ├── audit/                           # Phase 5: audit_log writes
-│   └── config/config.go                 # Env-based config (AGENTHOUND_NEO4J_URI, etc.)
-├── pkg/
-│   ├── collector/collector.go           # Collector interface
-│   └── analysis/postprocessor.go        # PostProcessor interface
-├── ui/                                  # React SPA (Vite)
-│   └── src/
-│       ├── api/                         # client.ts (ky), graph.ts, analysis.ts, scans.ts
-│       ├── store/                       # Zustand: graph.ts, search.ts, ui.ts
-│       ├── components/
-│       │   ├── graph/                   # GraphExplorer, Controls, Search, Filters, Legend
-│       │   ├── pathfinder/              # Pathfinder, PathSelector, PathResults, PathHighlight
-│       │   ├── dashboard/               # Dashboard, StatCards, RiskChart, AuthCoverage, TopFindings
-│       │   ├── inspector/               # EntityInspector, NodeProperties, Connections, RiskBreakdown
-│       │   ├── scans/                   # ScanManager, NewScan, ScanHistory
-│       │   └── queries/                 # QueryLibrary (17 pre-built), QueryResult
-│       ├── hooks/                       # useGraph, usePathfinding, useNodeSearch, useGraphEvents
-│       └── lib/                         # graph-builder.ts, node-styles.ts, edge-styles.ts, layout.ts
+├── collector/                          # `agenthound` binary
+│   ├── cmd/agenthound/main.go          # Entry point; blank-imports modules to register them
+│   ├── cli/                            # cobra subcommands: root, scan, setup, rules, stubs, unknown
+│   ├── apiclient/                      # HTTP client to talk to agenthound-server
+│   ├── internal/clientcfg/             # Per-host config (server URL, log level, etc.)
+│   └── scanner/                        # Network scanner stub for future fingerprint modules
+├── server/                             # `agenthound-server` binary
+│   ├── cmd/agenthound-server/main.go   # Entry point
+│   ├── cli/                            # cobra subcommands: serve, ingest, query, version
+│   ├── internal/
+│   │   ├── api/                        # chi router, handlers, middleware (logging, cors). go:embed UI dist
+│   │   ├── graph/                      # Neo4j driver, schema, batch writer, reader
+│   │   ├── ingest/                     # validate → normalize → deduplicate → write → post-process
+│   │   ├── analysis/                   # Post-processing
+│   │   │   ├── postprocessor.go        # Runner with dependency ordering
+│   │   │   ├── processors/             # has_access_to, can_execute, shadows, poisoned_description,
+│   │   │   │                           # poisoned_instructions, can_reach, can_exfiltrate,
+│   │   │   │                           # can_impersonate, cross_protocol, risk_score
+│   │   │   ├── prebuilt/               # 17 pre-built queries
+│   │   │   ├── riskscore/              # agent.go, server.go, tool.go, weights.go
+│   │   │   └── similarity/tfidf.go     # For CAN_IMPERSONATE cosine similarity
+│   │   ├── appdb/                      # Postgres: driver, migrations, scans CRUD
+│   │   └── servercfg/                  # Env-based server config
+│   ├── model/                          # Server-only response types (e.g. for findings handler)
+│   └── ui/                             # React SPA (Vite 6 + React Flow + ELK)
+│       └── src/
+│           ├── api/                    # client.ts (ky), graph.ts, analysis.ts, scans.ts
+│           ├── store/                  # Zustand: graph.ts, search.ts, ui.ts
+│           ├── components/
+│           │   ├── dashboard/          # Dashboard, StatCards, RiskChart, AuthCoverage, TopFindings
+│           │   ├── explorer/           # Graph explorer (React Flow + ELK)
+│           │   ├── findings/           # Findings list + detail with attack path
+│           │   ├── inspector/          # Node properties, connections, evidence
+│           │   ├── scans/              # Scan history, new scan
+│           │   ├── queries/            # 17 pre-built queries
+│           │   └── rules/              # Detection rules viewer
+│           ├── hooks/                  # useGraph, useNodeSearch, useGraphEvents
+│           └── lib/                    # graph-builder.ts, node-styles.ts, edge-styles.ts, layout.ts
+├── sdk/                                # Public Go SDK (unstable until 1.0)
+│   ├── ingest/                         # Node, Edge, IngestData, IngestMeta, GraphData (the wire contract)
+│   ├── action/                         # Fingerprinter, Enumerator, Looter, Extractor, Poisoner, Implanter, Reverter
+│   ├── module/                         # Register / Get / List for self-registering modules
+│   ├── collector/                      # Legacy Collector interface (kept for module compat)
+│   ├── common/                         # hasher, patterns, capability, entropy, ingest helpers
+│   └── rules/                          # YAML rules engine + MatcherSpec (keyword/prefix/regex/entropy/composite)
+├── modules/                            # Self-registering enumeration modules
+│   ├── mcp/                            # MCP Collector (wraps Go SDK). register.go calls sdk/module.Register()
+│   ├── a2a/                            # A2A Collector (HTTP GET + JSON parse + JWS verify)
+│   ├── config/                         # Config Collector + parsers/ (12 client formats)
+│   └── README.md                       # How to add a new module
 ├── docker/
-│   ├── Dockerfile                       # Multi-stage: golang:1.25-alpine → alpine:3.19
-│   └── docker-compose.yml               # neo4j:4.4 + postgres:16 + agenthound
-├── testdata/                            # valid_mcp_scan.json, valid_a2a_scan.json, valid_config_scan.json, merged_scan.json, invalid_scan.json
-├── scripts/                             # seed-test-data.sh, seed-demo.sh
-├── Makefile                             # build, test, lint, docker, up, down, ui-build
-├── .github/workflows/ci.yml            # lint, test (neo4j+pg services), build, docker
+│   ├── Dockerfile.agenthound           # Collector image (no UI, no DB clients)
+│   ├── Dockerfile.agenthound-server    # Server image (UI builder + go binary)
+│   ├── Dockerfile.standard             # Legacy single-binary image (being phased out)
+│   ├── docker-compose.yml              # neo4j:4.4 + postgres:16 + agenthound-server
+│   ├── neo4j.conf                      # APOC plugins enabled
+│   └── init-db.sh                      # Postgres init
+├── testdata/                           # valid_*_scan.json fixtures + a2a/ subdir for fetch tests
+├── scripts/
+│   ├── deps-check.sh                   # CI gate: collector deps must NOT include server-only libs
+│   ├── size-check.sh                   # CI gate: collector binary stays within baseline +10%
+│   ├── collector-allowlist.txt         # Reference list of acceptable collector deps
+│   ├── seed-demo.sh
+│   └── seed-test-data.sh
+├── docs/
+│   ├── adr/0001-two-binary-split.md    # ADR for the collector/server split
+│   ├── future-modules.md               # Deferred surface and planning notes
+│   ├── security.md                     # Threat model and operator OPSEC
+│   ├── quickstart.md, cli-reference.md, api-reference.md, graph-model.md, architecture.md, detection-rules.md
+├── install.sh                          # Collector installer; checksum + cosign verify; atomic install
+├── .goreleaser.yml                     # Two builds, brews, dockers + manifests, cosign, syft
+├── .github/
+│   ├── workflows/ci.yml                # lint, test, build, docker, deps-check, size-check, xplatform-build
+│   ├── workflows/release.yml           # cosign + syft, then goreleaser
+│   └── dependabot.yml                  # gomod daily, github-actions weekly, npm weekly
+├── Makefile                            # build, test, lint, docker, up, down, ui-build
 └── .golangci.yml
 ```
+
+The schema and ingest contract live in **`sdk/ingest/`** — `Node`, `Edge`, `IngestData`, `IngestMeta`, `GraphData`. There is no `internal/model/` anymore.
+
+## Module registration
+
+Modules under `modules/` self-register via `init()`. To add a new one:
+
+1. Create `modules/<name>/`.
+2. Implement `Enumerator` (or a future action interface) from `sdk/action/`.
+3. Add `register.go` calling `sdk/module.Register(...)`.
+4. Blank-import `_ "github.com/adithyan-ak/agenthound/modules/<name>"` in `collector/cmd/agenthound/main.go`.
+
+See `modules/README.md` for the cleanest existing example.
 
 ## Graph Data Model
 
 **Core principle:** Edges = exploitable relationships. Direction = access flow. `Agent → Server → Tool → Resource`.
 
-### Node Types (12 collector-produced + 2 synthetic)
+### Node Types (12 collector-produced)
 
 | Label | Source | Key Properties |
 |-------|--------|----------------|
@@ -117,8 +161,6 @@ agenthound/
 | `Host` | Config + A2A | `hostname`, `ip`, `is_local`, `is_private`, `is_public` |
 | `ConfigFile` | Config | `path`, `client`, `server_count` |
 | `InstructionFile` | Config | `path`, `type` (agents.md/claude.md/cursorrules/copilot-instructions/memory.md), `hash`, `is_suspicious` |
-| `ResourceGroup` | Post-processor (synthetic) | `type`, `sensitivity` |
-| `TrustZone` | Post-processor (synthetic) | `name`, `level`, `node_count` |
 
 ### Node ID Strategy (deterministic, content-based SHA-256)
 
@@ -174,36 +216,39 @@ Host:            SHA-256("Host:" + hostname_or_ip)
 **Post-processor execution order (dependencies):**
 1. HAS_ACCESS_TO → 2. CAN_EXECUTE → 3. SHADOWS → 4. POISONED_DESCRIPTION → 5. CAN_REACH (depends on 1) → 6. CAN_EXFILTRATE_VIA (depends on 5) → 7. CAN_IMPERSONATE → 8. Cross-protocol CAN_REACH (depends on 1) → 9. RiskScore (depends on 1-8)
 
-## Three Collectors
+## Three Collectors (now under `modules/`)
 
-### Config Collector (`internal/collector/config/`)
+### Config Collector (`modules/config/`)
 - **Parses** 12+ MCP client config formats (Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment)
 - **Key format differences:** VS Code uses `servers` key (not `mcpServers`). Windsurf uses `serverUrl` (not `url`). Zed uses `context_servers`. Cline has `autoApprove` array. Continue uses YAML.
 - **Produces:** ConfigFile, AgentInstance, MCPServer, Identity, Credential, Host, InstructionFile nodes + all trust/auth edges
 - **Detects:** Unpinned packages (`npx -y @pkg` without `@version`), high-entropy secrets (Shannon entropy >4.5 base64, >3.0 hex), credential patterns, instruction file poisoning
 - **Parser architecture:** `ConfigParser` interface per client — `ClientName()`, `ConfigPaths()`, `Parse(path, data)`
 
-### MCP Collector (`internal/collector/mcp/`)
+### MCP Collector (`modules/mcp/`)
 - **Wraps** official Go MCP SDK. Connection: `mcp.NewClient()` → `client.Connect(ctx, transport, nil)` → auto-paginating `session.Tools(ctx, nil)`
 - **Enumerates:** tools/list, resources/list, resources/templates/list, prompts/list. NEVER calls tools/call or resources/read.
 - **Transports:** stdio (`mcp.CommandTransport{Command: cmd}`, env via `cmd.Env`) and Streamable HTTP (`mcp.StreamableClientTransport{Endpoint: url}`). Falls back to legacy SSE on 400/404/405.
 - **Security signals per tool:** description_hash (SHA-256 canonical JSON), injection patterns, cross-references, capability_surface classification (8 categories: shell_access, file_read, file_write, network_outbound, database_access, email_send, code_execution, credential_access), annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint — all untrusted hints)
 - **Parallel:** goroutines with configurable concurrency, 120s total timeout per server, 30s init timeout, 100-page pagination safety valve
+- **TLS:** strict by default. `--insecure` opts into `InsecureSkipVerify`. Regression test in `modules/mcp/transport_test.go` asserts strict default.
 
-### A2A Collector (`internal/collector/a2a/`)
+### A2A Collector (`modules/a2a/`)
 - **Pure HTTP client** — GET `/.well-known/agent-card.json` (v0.3.0+), fallback `/.well-known/agent.json` (legacy)
 - **Version detection:** `supportedInterfaces` present → v1.0, top-level `url` → v0.3.0
 - **Handles both v0.3.0 and v1.0 Agent Card formats.** v1.0 moves `url` into `supportedInterfaces[].url`, removes top-level `protocolVersion`.
 - **JWS signature verification** (RFC 7515) when `signatures` field present. Unsigned = flagged.
 - **Auth posture scoring:** none=100, apiKey=70, bearer=50, oauth=25, oidc=20, mTLS=10
 - **Produces:** A2AAgent, A2ASkill, Host nodes + ADVERTISES_SKILL, DELEGATES_TO, SAME_AUTH_DOMAIN, RUNS_ON edges
+- **TLS:** strict by default. `--insecure` opts into `InsecureSkipVerify`. Regression test in `modules/a2a/fetch_test.go` asserts strict default.
 
 ## Ingest Format
 
-All collectors output the same JSON schema (aligned with BloodHound OpenGraph):
+All collectors output the same JSON schema (the wire contract lives in `sdk/ingest/`):
+
 ```json
 {
-  "meta": { "version": 1, "type": "agenthound-ingest", "collector": "mcp|a2a|config", "collector_version": "0.1.0", "timestamp": "ISO8601", "scan_id": "scan-xxx" },
+  "meta": { "version": 1, "type": "agenthound-ingest", "collector": "mcp|a2a|config|scan", "collector_version": "0.1.0", "timestamp": "ISO8601", "scan_id": "scan-xxx" },
   "graph": {
     "nodes": [{ "id": "sha256:...", "kinds": ["MCPServer"], "properties": {...} }],
     "edges": [{ "source": "sha256:...", "target": "sha256:...", "kind": "PROVIDES_TOOL", "properties": {...} }]
@@ -233,7 +278,9 @@ All collectors output the same JSON schema (aligned with BloodHound OpenGraph):
 
 **Resource sensitivity auto-classification:** postgres/mysql/mongodb+prod → critical, file:///etc/ → critical, *.env/*.key/*.pem → critical, redis+prod → critical, DB non-prod → high, file:/// general → medium
 
-## API Endpoints
+## API Endpoints (server)
+
+All endpoints are unauthenticated. Network scope is the security boundary.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -243,7 +290,7 @@ All collectors output the same JSON schema (aligned with BloodHound OpenGraph):
 | `/api/v1/graph/nodes/{id}` | GET | Node + connected edges |
 | `/api/v1/graph/edges` | GET | List edges (filter: kind, source, target) |
 | `/api/v1/ingest` | POST | Upload collector JSON → pipeline → post-process |
-| `/api/v1/query` | POST | Raw Cypher (admin only) |
+| `/api/v1/query` | POST | Raw Cypher |
 | `/api/v1/analysis/shortest-path` | POST | `{source, target, max_hops, algorithm}` |
 | `/api/v1/analysis/all-paths` | POST | Bounded path enumeration |
 | `/api/v1/analysis/weighted-path` | POST | Dijkstra via APOC |
@@ -251,46 +298,45 @@ All collectors output the same JSON schema (aligned with BloodHound OpenGraph):
 | `/api/v1/analysis/prebuilt/{id}` | GET | 17 pre-built queries |
 | `/api/v1/scans` | GET/POST | List history / trigger scan |
 | `/api/v1/scans/{id}` | GET | Scan status |
-| `/api/v1/auth/login` | POST | Username/password → JWT |
-| `/api/v1/auth/tokens` | POST | Create API token (ah_ prefix) |
-| `/api/v1/audit` | GET | Audit log (admin only) |
+| `/api/v1/rules` | GET | List active detection rules |
+
+There is intentionally no `/api/v1/auth/*`, no `/api/v1/audit`, no `/api/v1/auth/users`. See `docs/adr/0001-two-binary-split.md`.
 
 ## CLI Commands
 
+### Collector
+
 ```bash
-agenthound serve                              # Start API server on :8080
-agenthound collect config --discover          # Discover all MCP client configs
-agenthound collect mcp --discover             # Enumerate all discovered MCP servers
-agenthound collect mcp --config <path>        # Enumerate servers from specific config
-agenthound collect mcp --url <url>            # Scan single HTTP MCP server
-agenthound collect a2a --target <url>         # Fetch single Agent Card
-agenthound collect a2a --targets <url1,url2>  # Fetch multiple Agent Cards
-agenthound ingest <file.json>                 # Ingest collector output → Neo4j + post-process
-agenthound query "<cypher>"                   # Execute raw Cypher
-agenthound query --prebuilt <query-id>        # Run pre-built query
-agenthound query --findings --severity critical
+agenthound scan                                    # Discover + enumerate; uploads to server (or --output to file)
+agenthound scan --config                           # Config files only (offline)
+agenthound scan --mcp --url <url>                  # Single HTTP MCP server
+agenthound scan --a2a --target <url>               # Single A2A agent
+agenthound scan --a2a --discover-domain <domain>   # Probe well-known agent-card
+agenthound scan --output scan.json                 # Skip upload, write JSON to file
+agenthound scan --fail-on critical                 # Exit 1 if findings at or above severity
+agenthound setup --server <url>                    # Save server URL to config
+agenthound rules list|validate|test                # YAML rules engine ops
+agenthound version
 ```
 
-## Implementation Phases
+Stub verbs (`agenthound loot|extract|poison|implant`) print "not yet implemented — see docs/future-modules.md" and exit 1. They reserve the verb space without implementing anything.
 
-### Phase 1: Foundation (Weeks 1-2)
-Go scaffolding, Docker Compose, Neo4j schema (14 constraints + indexes), ingest pipeline, basic API, CI/CD.
-**Exit:** `docker compose up` → healthy. `agenthound ingest testdata/valid_mcp_scan.json` → nodes in Neo4j.
+Persistent flags: `--log-level`, `--server-url`, `--output`, `--concurrency`, `--quiet`, `--log-json`.
 
-### Phase 2: Collectors (Weeks 3-5)
-Config Collector (week 3, no network, 12 parsers) → MCP Collector (week 4, Go SDK) → A2A Collector (week 5, HTTP+JSON).
-**Exit:** `collect config --discover` produces valid JSON. `collect mcp --config` enumerates real servers. MCPServer IDs match across collectors.
+### Server
 
-### Phase 3: Post-Processing & Attack Paths (Weeks 6-7)
-9 post-processors in dependency order, risk scoring, pathfinding API, 17 pre-built queries, CLI query mode.
-**Exit:** After scanning test env, AgentHound finds known attack paths. CAN_REACH edges exist. Risk scores ordered correctly.
+```bash
+agenthound-server serve                          # Start API server on 127.0.0.1:8080
+agenthound-server ingest <file.json>             # Ingest collector output → Neo4j + post-process
+agenthound-server query "<cypher>"               # Execute raw Cypher
+agenthound-server query --prebuilt <query-id>    # Run pre-built query
+agenthound-server query --findings --severity critical
+agenthound-server version
+```
 
-### Phase 4: Frontend (Weeks 8-10)
-React+Vite SPA: Dashboard, Graph Explorer (Sigma.js), Pathfinder, Entity Inspector, Scan Manager, Query Library. Embedded via `go:embed`.
-**Exit:** User opens localhost:8080, sees dashboard, clicks nodes, runs pathfinding, sees highlighted paths.
+## Implementation Phases (historical)
 
-### Phase 5: Hardening & Release (Weeks 11-12)
-Auth (bcrypt+JWT+API tokens+RBAC), audit logging, error handling, docs, testing (>80% coverage), performance validation, security review, release artifacts (GHCR images + cross-compiled binaries via GoReleaser).
+Phases 1–5 of the original PRD shipped as the single-binary AgentHound. The two-binary split landed afterwards as a 7-step refactor recorded in commits `0531456` through this commit.
 
 ## Key Implementation Constraints
 
@@ -298,16 +344,19 @@ Auth (bcrypt+JWT+API tokens+RBAC), audit logging, error handling, docs, testing 
 2. **APOC fallback:** All APOC-dependent code needs non-APOC fallbacks. APOC only required for Dijkstra. Node writes: group by kind, run separate MERGE per kind. Edge writes: `edgeKindCypher` map with per-kind Cypher strings.
 3. **Property keys:** Neo4j is case-sensitive. All properties stored as snake_case. Normalizer converts camelCase from collector JSON.
 4. **Batch writes:** 1000 operations per Neo4j transaction. Use `UNWIND $nodes AS node` pattern.
-5. **go:embed constraint:** Go forbids `..` in embed paths. Makefile copies `ui/dist` → `internal/api/ui/dist` before `go build`.
-6. **Sigma.js v3:** Pass `MultiDirectedGraph` constructor (not instance) to `SigmaContainer`. Use `useLoadGraph()` hook. `staleTime: 30_000` on React Query to prevent unnecessary re-renders.
-7. **MCP SDK:** `mcp.CommandTransport` env vars set on `exec.Cmd.Env`, not on transport. `client.Connect()` handles full init handshake. Auto-paginating iterators handle `NextCursor`.
-8. **A2A version detection:** `supportedInterfaces` → v1.0, top-level `url` → v0.3.0. Must handle both.
-9. **Credential safety:** Config Collector hashes credential values by default (SHA-256). `--include-credential-values` for audit mode.
-10. **Stale edge cleanup:** Only delete composite edges whose source collector ran in current scan. Prevents ping-pong on partial scans.
+5. **go:embed constraint:** Go forbids `..` in embed paths. Makefile copies `server/ui/dist` → `server/internal/api/ui/dist` before `go build`.
+6. **MCP SDK:** `mcp.CommandTransport` env vars set on `exec.Cmd.Env`, not on transport. `client.Connect()` handles full init handshake. Auto-paginating iterators handle `NextCursor`.
+7. **A2A version detection:** `supportedInterfaces` → v1.0, top-level `url` → v0.3.0. Must handle both.
+8. **Credential safety:** Config Collector hashes credential values by default (SHA-256). `--include-credential-values` for audit mode.
+9. **Stale edge cleanup:** Only delete composite edges whose source collector ran in current scan. Prevents ping-pong on partial scans.
+10. **Output file safety:** Atomic temp+rename; chmod 0o600 on POSIX. NTFS does not honor POSIX mode bits — see `docs/security.md`.
+11. **TLS strict default:** Both MCP and A2A modules verify certs by default. Regression tests assert this; do not weaken.
+12. **Deps boundary:** The collector binary MUST NOT link `chi`, `pgx`, `neo4j-go-driver`, or any `server/internal/`. Enforced by `scripts/deps-check.sh`.
+13. **Single-user posture:** Server has no authentication at the application layer. The 127.0.0.1 default bind is the security control. Do not introduce auth without an ADR.
 
 ## OWASP Coverage
 
-AgentHound maps all findings to OWASP MCP Top 10 (MCP01-MCP10) and OWASP Agentic Top 10 (ASI01-ASI10). Full/partial coverage documented in `architecture/07-threat-model.md`.
+AgentHound maps all findings to OWASP MCP Top 10 (MCP01-MCP10) and OWASP Agentic Top 10 (ASI01-ASI10). Full/partial coverage documented in `docs/detection-rules.md`.
 
 ## Pre-Built Queries (17)
 
@@ -349,18 +398,37 @@ AgentHound maps all findings to OWASP MCP Top 10 (MCP01-MCP10) and OWASP Agentic
 ## Config Defaults
 
 ```
+# Collector
+AGENTHOUND_SERVER_URL=                                # Set with `agenthound setup --server <url>`
+AGENTHOUND_OUTPUT=                                    # File path. Also the upload-fallback target on network failure.
+AGENTHOUND_LOG_LEVEL=info
+AGENTHOUND_CONCURRENCY=5
+AGENTHOUND_QUIET=                                     # 1 = error-level only
+AGENTHOUND_LOG_JSON=                                  # 1 = JSON handler instead of text
+
+# Server
 AGENTHOUND_NEO4J_URI=bolt://localhost:7687
 AGENTHOUND_NEO4J_USER=neo4j
 AGENTHOUND_NEO4J_PASSWORD=agenthound
 AGENTHOUND_PG_URI=postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable
 AGENTHOUND_API_PORT=8080
 AGENTHOUND_LOG_LEVEL=info
+AGENTHOUND_CORS_ORIGINS=http://localhost:8080
 ```
 
 ## Reference Docs (in repo)
 
 | Path | Content |
 |------|---------|
+| `docs/adr/0001-two-binary-split.md` | ADR for the collector/server split |
+| `docs/security.md` | Threat model and operator OPSEC |
+| `docs/future-modules.md` | Deferred surface and planning notes (action interfaces, template signing, redaction) |
+| `docs/quickstart.md` | 5-minute setup |
+| `docs/cli-reference.md` | All CLI commands |
+| `docs/api-reference.md` | REST API endpoints |
+| `docs/graph-model.md` | Node/edge types, ID strategy, risk scoring |
+| `docs/detection-rules.md` | All 17 detections with OWASP mappings |
+| `docs/architecture.md` | Architecture for contributors |
 | `architecture/01-vision.md` through `architecture/09-roadmap.md` | PRD sections (gitignored, local only) |
 | `collectors/01-mcp-collector.md` | MCP collector spec + Go SDK usage |
 | `collectors/02-a2a-collector.md` | A2A collector spec + card schema |
@@ -368,6 +436,5 @@ AGENTHOUND_LOG_LEVEL=info
 | `collectors/04-graph-pipeline.md` | Full ingest → post-process → query pipeline |
 | `collectors/05-visual-architecture.md` | Mermaid diagrams of the graph |
 | `collectors/06-ui-scenarios.md` | UI graph rendering scenarios |
-| `plan/phase01.md` through `plan/phase05.md` | Detailed implementation plans per phase |
+| `plan/phase01.md` through `plan/phase05.md` | Detailed implementation plans for original phases |
 | `research/mcp-spec-2025-11-25.md` | MCP protocol reference (JSON-RPC, transports, OAuth, Tasks) |
-| `research/sigma-react-graphology-stack.md` | Frontend stack research |

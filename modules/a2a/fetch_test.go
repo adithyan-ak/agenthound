@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -138,6 +139,34 @@ func TestFetchAgentCard_ServerError(t *testing.T) {
 	_, err := FetchAgentCard(context.Background(), srv.URL, "", false)
 	if err == nil {
 		t.Fatal("expected error on 500 response")
+	}
+}
+
+// TestFetchAgentCard_TLSStrictDefault asserts that the A2A fetcher rejects a
+// self-signed TLS certificate when Insecure=false (default). This guards
+// against regressions where a stray InsecureSkipVerify=true silently weakens
+// transport security across the codebase.
+func TestFetchAgentCard_TLSStrictDefault(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(loadFixture(t, "agent_card_v030.json"))
+	}))
+	defer srv.Close()
+
+	// Insecure=false → TLS handshake should fail (unknown authority).
+	_, err := FetchAgentCard(context.Background(), srv.URL, "", false)
+	if err == nil {
+		t.Fatal("expected TLS verification error with self-signed cert; got nil")
+	}
+	if !strings.Contains(err.Error(), "x509") &&
+		!strings.Contains(err.Error(), "certificate") &&
+		!strings.Contains(err.Error(), "tls") {
+		t.Errorf("expected TLS-related error, got: %v", err)
+	}
+
+	// Insecure=true → handshake should succeed.
+	if _, err := FetchAgentCard(context.Background(), srv.URL, "", true); err != nil {
+		t.Errorf("Insecure=true against self-signed cert: unexpected error %v", err)
 	}
 }
 

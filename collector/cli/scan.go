@@ -193,7 +193,7 @@ func shipToServer(ctx context.Context, clientCfg *clientcfg.ClientConfig, merged
 	client := apiclient.New(clientCfg.ServerURL)
 
 	if err := client.Health(ctx); err != nil {
-		return fmt.Errorf("server check: %w", err)
+		return fallbackToFile(merged, fmt.Errorf("server check: %w", err))
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges → shipping to %s\n",
@@ -201,7 +201,7 @@ func shipToServer(ctx context.Context, clientCfg *clientcfg.ClientConfig, merged
 
 	result, err := client.Ingest(ctx, merged)
 	if err != nil {
-		return fmt.Errorf("ingest via API: %w", err)
+		return fallbackToFile(merged, fmt.Errorf("ingest via API: %w", err))
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete (%.1fs)\n\n", time.Since(start).Seconds())
@@ -313,6 +313,23 @@ func collectA2A(ctx context.Context, target string, targets []string, targetsFil
 	}
 	slog.Info("running a2a collector", "target", target, "targets", len(targets))
 	return c.Collect(ctx, opts)
+}
+
+// fallbackToFile is invoked when uploading the scan to the server fails.
+// It writes the merged scan JSON to $AGENTHOUND_OUTPUT (if set) or
+// ./scan-<scan_id>.json so a partial scan is never silently lost. The
+// original upload error is returned, augmented with the path the file
+// was written to.
+func fallbackToFile(merged *ingest.IngestData, uploadErr error) error {
+	out := os.Getenv("AGENTHOUND_OUTPUT")
+	if out == "" {
+		out = fmt.Sprintf("scan-%s.json", merged.Meta.ScanID)
+	}
+	if writeErr := writeCollectorOutput(merged, out); writeErr != nil {
+		return fmt.Errorf("upload failed (%v) AND fallback file write failed: %w", uploadErr, writeErr)
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "WARNING: upload failed (%v); scan saved to %s\n", uploadErr, out)
+	return nil
 }
 
 var severityRank = map[string]int{

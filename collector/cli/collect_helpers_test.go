@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
@@ -69,6 +70,53 @@ func TestWriteCollectorOutput_Stdout(t *testing.T) {
 	}
 	if got.Meta.Collector != "stdout-test" {
 		t.Errorf("collector = %q, want %q", got.Meta.Collector, "stdout-test")
+	}
+}
+
+func TestWriteOutputAtomic_PermsAndContent(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "atomic.json")
+	want := []byte(`{"hello":"world"}`)
+
+	if err := writeOutputAtomic(out, want); err != nil {
+		t.Fatalf("writeOutputAtomic: %v", err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("content = %q, want %q", got, want)
+	}
+
+	// 0o600 is POSIX-only; on Windows the FS layer ignores the mode bits.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(out)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("perm = %v, want 0o600", mode)
+		}
+	}
+}
+
+func TestWriteOutputAtomic_NoTempLeftBehindOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.json")
+	if err := writeOutputAtomic(out, []byte("data")); err != nil {
+		t.Fatalf("writeOutputAtomic: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("expected exactly one file in dir, got %d: %v", len(entries), names)
 	}
 }
 

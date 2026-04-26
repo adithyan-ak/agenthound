@@ -1,174 +1,120 @@
 #!/bin/sh
+# AgentHound collector installer.
+#
+# Pin to a release tag for integrity:
+#   curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v<VERSION>/install.sh | sh
+#
+# Verifies the downloaded archive against checksums.txt before extracting,
+# and against cosign signatures if cosign is available on $PATH.
+
 set -e
 
-REPO="ghcr.io/adithyan-ak/agenthound"
 GITHUB_REPO="adithyan-ak/agenthound"
-TAG="latest"
-NAME="agenthound"
-PORT="${AGENTHOUND_PORT:-8080}"
-INSTALL_DIR="${AGENTHOUND_INSTALL_DIR:-/usr/local/bin}"
-ADMIN_PASSWORD="${AGENTHOUND_ADMIN_PASSWORD:-agenthound}"
+INSTALL_DIR="${AGENTHOUND_INSTALL_DIR:-$HOME/.local/bin}"
 
 echo ""
-echo "  AgentHound Installer"
-echo "  ===================="
+echo "  AgentHound Collector Installer"
+echo "  =============================="
 echo ""
 
-# ── Detect container runtime ──
-if command -v docker >/dev/null 2>&1; then
-  RUNTIME="docker"
-elif command -v podman >/dev/null 2>&1; then
-  RUNTIME="podman"
-else
-  echo "Error: Docker or Podman is required."
-  echo ""
-  echo "Install Docker: https://docs.docker.com/get-docker/"
-  exit 1
-fi
-
-$RUNTIME info >/dev/null 2>&1 || {
-  echo "Error: $RUNTIME daemon is not running."
-  echo "Start it and try again."
-  exit 1
-}
-
-# ── Detect OS and architecture ──
+# Detect OS / arch
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in
   x86_64|amd64) ARCH="amd64" ;;
   aarch64|arm64) ARCH="arm64" ;;
-  *) echo "Warning: Unsupported architecture $ARCH. CLI binary will not be installed." ;;
+  *) echo "Error: unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# ── Check port availability ──
-if command -v lsof >/dev/null 2>&1 && lsof -i ":$PORT" >/dev/null 2>&1; then
-  echo "Error: Port $PORT is already in use."
-  echo ""
-  echo "Use a different port:"
-  echo "  AGENTHOUND_PORT=9090 sh -c \"\$(curl -sSfL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh)\""
-  exit 1
-fi
-
-# ── Stop existing container if running ──
-if $RUNTIME ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${NAME}$"; then
-  echo "Stopping existing AgentHound container..."
-  $RUNTIME stop "$NAME" 2>/dev/null || true
-  $RUNTIME rm "$NAME" 2>/dev/null || true
-fi
-
-# ── Pull and run server ──
-echo "Pulling AgentHound image..."
-$RUNTIME pull "$REPO:$TAG"
-
-echo "Starting AgentHound on port $PORT..."
-$RUNTIME run -d \
-  --name "$NAME" \
-  -p "${PORT}:8080" \
-  -v agenthound-data:/data \
-  --restart unless-stopped \
-  "$REPO:$TAG"
-
-# ── Wait for healthy ──
-echo ""
-echo "Waiting for services to start (this takes ~30s)..."
-ATTEMPTS=0
-while [ $ATTEMPTS -lt 45 ]; do
-  if curl -sf "http://localhost:${PORT}/api/v1/health" >/dev/null 2>&1; then
-    break
-  fi
-  ATTEMPTS=$((ATTEMPTS + 1))
-  sleep 2
-  printf "."
-done
-
-if [ $ATTEMPTS -ge 45 ]; then
-  echo ""
-  echo ""
-  echo "Warning: Health check timed out after 90s."
-  echo "Check logs: $RUNTIME logs $NAME"
-  exit 1
-fi
-
-echo ""
-echo "Server is running."
-
-# ── Download native CLI binary ──
-CLI_INSTALLED=false
-if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "arm64" ]; then
-  VERSION=$(curl -sSfL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 || true)
+# Resolve version. Default to the latest GitHub Release tag.
+if [ -z "$AGENTHOUND_VERSION" ]; then
+  VERSION=$(curl -sSfL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
   if [ -z "$VERSION" ]; then
-    echo ""
-    echo "Warning: No release found. CLI binary not installed."
-    echo "You can still use: $RUNTIME exec $NAME agenthound scan"
-  else
-    BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/agenthound-${VERSION#v}-${OS}-${ARCH}.tar.gz"
-    echo "Downloading CLI binary ${VERSION} for ${OS}/${ARCH}..."
-    if curl -sSfL "$BINARY_URL" | tar -xz -C /tmp 2>/dev/null; then
-      if install -m 755 /tmp/agenthound "$INSTALL_DIR/agenthound" 2>/dev/null; then
-        CLI_INSTALLED=true
-        echo "Installed to ${INSTALL_DIR}/agenthound"
-      else
-        echo "Warning: Could not install to ${INSTALL_DIR}. Try with sudo or set AGENTHOUND_INSTALL_DIR."
-      fi
-      rm -f /tmp/agenthound
-    else
-      echo "Warning: Binary download failed. You can still use: $RUNTIME exec $NAME agenthound scan"
-    fi
+    echo "Error: could not determine latest release"; exit 1
   fi
-fi
-
-# ── Bootstrap CLI auth ──
-if [ "$CLI_INSTALLED" = true ]; then
-  echo ""
-  echo "Setting up CLI authentication..."
-  JWT=$(curl -sSf "http://localhost:${PORT}/api/v1/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"username\":\"admin\",\"password\":\"${ADMIN_PASSWORD}\"}" 2>/dev/null \
-    | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
-
-  if [ -n "$JWT" ]; then
-    HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
-    TOKEN=$(curl -sSf "http://localhost:${PORT}/api/v1/auth/tokens" \
-      -H "Authorization: Bearer $JWT" \
-      -H "Content-Type: application/json" \
-      -d "{\"name\":\"cli-${HOSTNAME}-install\"}" 2>/dev/null \
-      | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
-
-    if [ -n "$TOKEN" ]; then
-      CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/agenthound"
-      mkdir -p "$CONFIG_DIR"
-      cat > "$CONFIG_DIR/config.yaml" <<YAML
-server_url: http://localhost:${PORT}
-api_token: ${TOKEN}
-YAML
-      chmod 600 "$CONFIG_DIR/config.yaml"
-      echo "CLI configured."
-    else
-      echo "Warning: Could not create API token. Run 'agenthound setup' manually."
-    fi
-  else
-    echo "Warning: Could not authenticate. Run 'agenthound setup' manually."
-  fi
-fi
-
-# ── Print summary ──
-echo ""
-echo "  AgentHound is running!"
-echo ""
-echo "  URL:     http://localhost:${PORT}"
-echo "  Login:   admin / agenthound"
-echo ""
-if [ "$CLI_INSTALLED" = true ]; then
-  echo "  Scan:    agenthound scan"
-  echo "  Query:   agenthound query --findings"
 else
-  echo "  Scan:    $RUNTIME exec $NAME agenthound scan"
+  VERSION="$AGENTHOUND_VERSION"
 fi
+
+echo "Version:  ${VERSION}"
+echo "Platform: ${OS}/${ARCH}"
 echo ""
-echo "  Manage:"
-echo "    Stop:    $RUNTIME stop $NAME"
-echo "    Start:   $RUNTIME start $NAME"
-echo "    Logs:    $RUNTIME logs -f $NAME"
-echo "    Remove:  $RUNTIME rm -f $NAME && $RUNTIME volume rm agenthound-data"
-echo ""
+
+ARCHIVE="agenthound_${VERSION#v}_${OS}_${ARCH}.tar.gz"
+BASE_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}"
+TMPDIR=$(mktemp -d)
+STAGE=$(mktemp -d)
+trap 'rm -rf "$TMPDIR" "$STAGE"' EXIT
+
+echo "Downloading ${ARCHIVE}..."
+curl -sSfL -o "${TMPDIR}/${ARCHIVE}" "${BASE_URL}/${ARCHIVE}"
+curl -sSfL -o "${TMPDIR}/checksums.txt" "${BASE_URL}/checksums.txt"
+
+# Verify checksum (mandatory — fail closed)
+echo "Verifying checksum..."
+cd "$TMPDIR"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum --ignore-missing -c checksums.txt
+elif command -v shasum >/dev/null 2>&1; then
+  grep -E "  ${ARCHIVE}\$" checksums.txt | shasum -a 256 -c
+else
+  echo "Error: neither sha256sum nor shasum found; cannot verify integrity"
+  exit 1
+fi
+
+# Optional: cosign signature verification
+if command -v cosign >/dev/null 2>&1; then
+  echo "Verifying cosign signature..."
+  curl -sSfL -o "${TMPDIR}/checksums.txt.sig" "${BASE_URL}/checksums.txt.sig"
+  curl -sSfL -o "${TMPDIR}/checksums.txt.pem" "${BASE_URL}/checksums.txt.pem"
+  cosign verify-blob \
+    --certificate "${TMPDIR}/checksums.txt.pem" \
+    --signature   "${TMPDIR}/checksums.txt.sig" \
+    --certificate-identity "https://github.com/${GITHUB_REPO}/.github/workflows/release.yml@refs/tags/${VERSION}" \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    "${TMPDIR}/checksums.txt"
+else
+  cat <<EOF >&2
+
+NOTE: cosign not found on PATH; skipping signature verification.
+To verify manually, install cosign and run:
+
+  cosign verify-blob \\
+    --certificate ${BASE_URL}/checksums.txt.pem \\
+    --signature   ${BASE_URL}/checksums.txt.sig \\
+    --certificate-identity 'https://github.com/${GITHUB_REPO}/.github/workflows/release.yml@refs/tags/${VERSION}' \\
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+    checksums.txt
+
+EOF
+fi
+
+# Extract atomically: extract to staging dir, then mv
+echo "Installing to ${INSTALL_DIR}/agenthound..."
+mkdir -p "$INSTALL_DIR"
+tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$STAGE"
+chmod 0755 "${STAGE}/agenthound"
+mv "${STAGE}/agenthound" "${INSTALL_DIR}/agenthound"
+
+# Verify the installed binary runs
+if "${INSTALL_DIR}/agenthound" --version >/dev/null 2>&1; then
+  echo ""
+  echo "  Installed: ${INSTALL_DIR}/agenthound"
+  "${INSTALL_DIR}/agenthound" --version | sed 's/^/  /'
+  echo ""
+  case ":$PATH:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *) echo "  Add ${INSTALL_DIR} to your PATH:"
+       echo '    export PATH="$HOME/.local/bin:$PATH"'
+       echo ""
+       ;;
+  esac
+  echo "  Quick start:"
+  echo "    agenthound scan --discover --output scan.json"
+  echo "    agenthound setup --server http://localhost:8080"
+  echo ""
+else
+  echo "Error: installed binary failed to run"
+  exit 1
+fi

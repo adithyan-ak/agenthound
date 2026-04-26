@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: daily
+    groups:
+      go-chi:
+        patterns: ["github.com/go-chi/*"]
+      jackc:
+        patterns: ["github.com/jackc/*"]
+      golang-x:
+        patterns: ["golang.org/x/*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/server/ui"
+    schedule:
+      interval: weekly
