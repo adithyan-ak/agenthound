@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/adithyan-ak/agenthound/internal/model"
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 )
 
 type Collector interface {

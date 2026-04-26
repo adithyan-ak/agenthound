@@ -10,7 +10,7 @@ import (
 
 	"github.com/adithyan-ak/agenthound/internal/api"
 	"github.com/adithyan-ak/agenthound/internal/auth"
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/spf13/cobra"
 )
 

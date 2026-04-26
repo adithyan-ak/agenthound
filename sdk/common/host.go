@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adithyan-ak/agenthound/internal/model"
+	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
 type HostInfo struct {
@@ -52,7 +52,7 @@ func ClassifyHost(hostOrURL string) HostInfo {
 }
 
 func HostNodeID(hostname string) string {
-	return model.ComputeNodeID("Host", hostname)
+	return ingest.ComputeNodeID("Host", hostname)
 }
 
 func isLocal(host string) bool {

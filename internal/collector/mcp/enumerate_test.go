@@ -5,7 +5,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 )
 
 func testEnumerateEngine(t *testing.T) *rules.Engine {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 )
 
 func testInstrEngine(t *testing.T) *rules.Engine {

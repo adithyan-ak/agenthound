@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

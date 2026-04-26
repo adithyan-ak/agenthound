@@ -1,4 +1,4 @@
-package model
+package ingest
 
 type Edge struct {
 	Source     string         `json:"source"`

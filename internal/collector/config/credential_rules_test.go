@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 )
 
 func testConfigEngine(t *testing.T) *rules.Engine {
