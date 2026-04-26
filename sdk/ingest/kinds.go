@@ -1,4 +1,4 @@
-package model
+package ingest
 
 // AllowedNodeKinds are the 12 collector-produced node kinds accepted in ingest input.
 var AllowedNodeKinds = map[string]bool{

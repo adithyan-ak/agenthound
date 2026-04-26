@@ -15,7 +15,7 @@ import (
 	mcpcollector "github.com/adithyan-ak/agenthound/internal/collector/mcp"
 	"github.com/adithyan-ak/agenthound/internal/config"
 	"github.com/adithyan-ak/agenthound/internal/model"
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )

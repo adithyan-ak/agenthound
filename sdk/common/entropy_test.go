@@ -97,7 +97,7 @@ func TestIsBase64Charset(t *testing.T) {
 		{"pure alpha", "abcXYZ", true},
 		{"pure digits", "0123456789", true},
 		{"padding only", "====", true},
-		{"unicode", "\u00e9\u00e8", false},
+		{"unicode", "éè", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestIsHexCharset(t *testing.T) {
 		{"valid hex mixed", "aAbBcC00FF", true},
 		{"with g", "abcdefg", false},
 		{"with space", "ab cd", false},
-		{"unicode", "\u00e9", false},
+		{"unicode", "é", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

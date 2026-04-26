@@ -17,7 +17,7 @@ import (
 	"github.com/adithyan-ak/agenthound/internal/auth"
 	"github.com/adithyan-ak/agenthound/internal/graph"
 	"github.com/adithyan-ak/agenthound/internal/ingest"
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"

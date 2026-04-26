@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adithyan-ak/agenthound/internal/model"
+	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
 const CollectorVersion = "0.1.0"
 
-func NewIngestData(collector, scanID string) *model.IngestData {
+func NewIngestData(collector, scanID string) *ingest.IngestData {
 	if scanID == "" {
 		scanID = GenerateScanID(collector)
 	}
-	return &model.IngestData{
-		Meta: model.IngestMeta{
+	return &ingest.IngestData{
+		Meta: ingest.IngestMeta{
 			Version:          1,
 			Type:             "agenthound-ingest",
 			Collector:        collector,
@@ -22,9 +22,9 @@ func NewIngestData(collector, scanID string) *model.IngestData {
 			Timestamp:        time.Now().UTC().Format(time.RFC3339),
 			ScanID:           scanID,
 		},
-		Graph: model.GraphData{
-			Nodes: []model.Node{},
-			Edges: []model.Edge{},
+		Graph: ingest.GraphData{
+			Nodes: []ingest.Node{},
+			Edges: []ingest.Edge{},
 		},
 	}
 }
@@ -47,23 +47,23 @@ func DefaultEdgeProps(scanID string) map[string]any {
 	return NewEdgeProps(scanID, 1.0, 0.0)
 }
 
-func NewNode(id string, kinds []string, props map[string]any) model.Node {
+func NewNode(id string, kinds []string, props map[string]any) ingest.Node {
 	if props == nil {
 		props = make(map[string]any)
 	}
 	props["objectid"] = id
-	return model.Node{
+	return ingest.Node{
 		ID:         id,
 		Kinds:      kinds,
 		Properties: props,
 	}
 }
 
-func NewEdge(source, target, kind, sourceKind, targetKind string, props map[string]any) model.Edge {
+func NewEdge(source, target, kind, sourceKind, targetKind string, props map[string]any) ingest.Edge {
 	if props == nil {
 		props = make(map[string]any)
 	}
-	return model.Edge{
+	return ingest.Edge{
 		Source:     source,
 		Target:     target,
 		Kind:       kind,

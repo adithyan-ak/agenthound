@@ -3,8 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/adithyan-ak/agenthound/internal/collector/common"
-	"github.com/adithyan-ak/agenthound/internal/rules"
+	"github.com/adithyan-ak/agenthound/sdk/common"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 )
 
 func testCredEngine(t *testing.T) *rules.Engine {

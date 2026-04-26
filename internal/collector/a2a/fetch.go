@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adithyan-ak/agenthound/internal/collector/common"
+	"github.com/adithyan-ak/agenthound/sdk/common"
 )
 
 type RawCard struct {

@@ -1,4 +1,4 @@
-package model
+package ingest
 
 type Node struct {
 	ID         string         `json:"id"`

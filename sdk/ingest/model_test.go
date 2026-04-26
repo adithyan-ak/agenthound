@@ -1,4 +1,4 @@
-package model
+package ingest
 
 import (
 	"encoding/json"

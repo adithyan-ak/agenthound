@@ -22,8 +22,8 @@ func TestHashSHA256(t *testing.T) {
 		},
 		{
 			name:  "unicode",
-			input: "\u00e9\u00e8\u00ea",
-			want:  HashSHA256("\u00e9\u00e8\u00ea"),
+			input: "éèê",
+			want:  HashSHA256("éèê"),
 		},
 	}
 	for _, tt := range tests {
