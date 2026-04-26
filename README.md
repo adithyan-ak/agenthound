@@ -259,7 +259,7 @@ Global flags (available on every subcommand): `--log-level`, `--server-url`, `--
 | `AGENTHOUND_NEO4J_USER` | `neo4j` | Neo4j username |
 | `AGENTHOUND_NEO4J_PASSWORD` | `agenthound` | Neo4j password |
 | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | Postgres connection |
-| `AGENTHOUND_API_PORT` | `8080` | HTTP server port |
+| `AGENTHOUND_BIND` | `127.0.0.1:8080` | Server bind address `host:port`. Set to `0.0.0.0:8080` only inside a trusted network. |
 | `AGENTHOUND_LOG_LEVEL` | `info` | Log level |
 | `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | Comma-separated allowed CORS origins (dev only) |
 
@@ -271,7 +271,7 @@ There is intentionally no `AGENTHOUND_JWT_SECRET`, `AGENTHOUND_ADMIN_PASSWORD`, 
 
 - The collector writes scan JSON via atomic `temp + rename`. A SIGINT mid-write never leaves a half-written file at the destination.
 - Output files are `chmod 0o600` on POSIX. **NTFS does not honor POSIX permission bits** — on Windows the file inherits the directory's NTFS ACL, which typically allows any local user to read it. Treat output stored on Windows as readable by every local user account.
-- When `--upload` is configured but the network call fails, the collector falls back to writing the scan JSON locally (path from `$AGENTHOUND_OUTPUT` or auto-named `./scan-<scan_id>.json`) so a partial scan is never silently lost.
+- When upload mode is in effect (`--server-url` or `$AGENTHOUND_SERVER_URL`) but the network call fails, the collector falls back to writing the scan JSON locally (path from `$AGENTHOUND_OUTPUT` or auto-named `./scan-<scan_id>.json`) so a partial scan is never silently lost.
 
 ---
 

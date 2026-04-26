@@ -46,7 +46,7 @@ The collector makes outbound network calls to:
 
 1. **Targets specified by the operator** — `--target`, `--targets`,
    `--config`, `--url`, or paths discovered by `--discover`.
-2. **The operator's server**, when `--upload` mode is in use.
+2. **The operator's server**, when upload mode is in use (`--server-url` or `$AGENTHOUND_SERVER_URL`).
 3. **No one else.** No telemetry, no phone-home, no version-check
    pings, no crash reporting.
 

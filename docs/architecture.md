@@ -1,40 +1,36 @@
 # Architecture Overview
 
-AgentHound enumerates MCP servers and A2A agents, builds a directed trust graph in Neo4j, and uses shortest-path algorithms to discover attack paths across protocol boundaries.
+AgentHound enumerates MCP servers and A2A agents, builds a directed trust graph in Neo4j, and uses shortest-path algorithms to discover attack paths across protocol boundaries. It ships as **two binaries** in the BloodHound/SharpHound style: a lean field collector (`agenthound`) and a single-user analysis server (`agenthound-server`).
 
 ## Components
 
 ```
-                         +---------------------------+
-                         |      CLI (cobra)          |
-                         |  collect | ingest | query |
-                         +------------+--------------+
-                                      |
-                         +------------v--------------+
-                         |    API Server (chi/v5)    |
-                         |      /api/v1/*            |
-                         |  +--------------------+   |
-                         |  | Embedded React SPA |   |
-                         |  | (go:embed ui/dist) |   |
-                         +--+----+----------+----+---+
-                              |  |          |
-               +--------------+  |          +--------------+
-               v                 v                         v
-    +----------+---+   +---------+--------+   +------------+----+
-    | Neo4j 4.4+   |   | Ingest Pipeline  |   | PostgreSQL 16   |
-    | Graph DB     |   | validate/norm/   |   | users, scans,   |
-    | (Cypher,     |   | dedup/write/     |   | audit_log,      |
-    | APOC)        |   | post-process     |   | api_tokens      |
-    +--------------+   +------------------+   +-----------------+
+   +-----------------------+              +---------------------------------+
+   |    agenthound         |  JSON over   |     agenthound-server           |
+   |    (collector)        | --- HTTPS -> |     (single-user)               |
+   |                       |  or file     |                                 |
+   |  scan / setup /       |              |  serve / ingest / query         |
+   |  rules / collect      |              |  +---------------------------+  |
+   +-----------------------+              |  |    API Server (chi/v5)    |  |
+                                          |  |    /api/v1/* (no auth)    |  |
+                                          |  |  +---------------------+  |  |
+                                          |  |  | Embedded React SPA  |  |  |
+                                          |  |  | (go:embed)          |  |  |
+                                          |  +--+----+----------+----+--+  |
+                                          |       |  |          |          |
+                                          |       v  v          v          |
+                                          |   Neo4j  Ingest  PostgreSQL    |
+                                          |   4.4+   pipe-   16            |
+                                          |          line    (scans)       |
+                                          +---------------------------------+
 ```
 
-The Go binary ships as a single artifact. The React SPA is built by Vite, copied into
-`internal/api/ui/dist/`, and embedded at compile time via `go:embed`.
+The collector binary contains zero database clients, no UI, and no chi router. It produces JSON conforming to `sdk/ingest`. The server binary embeds the React SPA built by Vite.
 
 ## Data Flow
 
 ```
-collect config --discover       collect mcp --discover       collect a2a --target <url>
+scan --config         scan --mcp --url <url>           scan --a2a --target <url>
         |                               |                               |
         v                               v                               v
   Parse 12 client configs      Connect via Go MCP SDK         HTTP GET agent cards
@@ -123,25 +119,28 @@ MCPServer node IDs so their outputs merge cleanly on ingest.
 
 ## Security Model
 
+Single-user posture. The server has **no application-layer authentication, no RBAC, no audit log**. Protect via the network layer (loopback bind, VPN, SSH tunnel). See [`security.md`](security.md) for the full threat model.
+
 | Layer | Implementation |
 |-------|---------------|
-| Authentication | bcrypt password hashing, JWT (HMAC-SHA256, 24h expiry), API tokens (`ah_` prefix) |
-| Authorization | RBAC with three roles: **admin** (full access + raw Cypher), **analyst** (read + analysis), **viewer** (read-only) |
-| Audit | All mutating actions logged to `audit_log` table (actor, action, resource, timestamp) |
+| Network scope | `agenthound-server` binds `127.0.0.1:8080` by default. Override with `--bind 0.0.0.0:8080` only inside a trusted network. |
+| TLS (collector outbound) | Strict cert verification by default. Use `--insecure` only against self-signed targets. |
 | Credential safety | Config Collector hashes credential values by default (SHA-256). `--include-credential-values` for audit mode. |
+| Output files | Written `0o600` on POSIX; NTFS ACLs apply on Windows. |
+| Supply chain | Cosign-signed `checksums.txt` per release; SBOM per archive (syft); pinned action SHAs; `govulncheck` blocking; collector dependency allowlist. |
 
 ## Deployment
 
 Docker Compose runs three containers:
 
-| Container | Image | Purpose | Default Port |
-|-----------|-------|---------|-------------|
-| graph-db | neo4j:4.4-community | Graph storage, Cypher queries, APOC pathfinding | 7687 (bolt), 7474 (browser) |
-| app-db | postgres:16-alpine | Users, scans, audit log, API tokens | 5432 |
-| agenthound | golang:1.25-alpine (multi-stage) | API server + embedded UI | 8080 |
+| Container | Image | Purpose | Default Port (host) |
+|-----------|-------|---------|---------------------|
+| graph-db | neo4j:4.4-community | Graph storage, Cypher queries, APOC pathfinding | 127.0.0.1:7687 (bolt), 127.0.0.1:7474 (browser) |
+| app-db | postgres:16-alpine | scans table only (no users/tokens/audit) | 127.0.0.1:5432 |
+| agenthound | golang:1.25-alpine (multi-stage) | API server + embedded UI | 127.0.0.1:8080 |
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Configuration is env-based: `AGENTHOUND_NEO4J_URI`, `AGENTHOUND_PG_URI`, `AGENTHOUND_API_PORT`.
+Configuration is env-based: `AGENTHOUND_NEO4J_URI`, `AGENTHOUND_PG_URI`, `AGENTHOUND_BIND` (default `127.0.0.1:8080`), `AGENTHOUND_CORS_ORIGINS`.

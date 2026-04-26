@@ -2,9 +2,15 @@ openapi: 3.0.3
 info:
   title: AgentHound API
   description: >-
-    REST API for AgentHound — a graph-based security tool that enumerates MCP
-    servers and A2A agents, builds trust graphs in Neo4j, and discovers attack
-    paths across protocol boundaries.
+    REST API for `agenthound-server`. The API has no application-layer
+    authentication; it binds to 127.0.0.1:8080 by default. AgentHound is a
+    graph-based security tool that enumerates MCP servers and A2A agents,
+    builds trust graphs in Neo4j, and discovers attack paths across protocol
+    boundaries.
+
+
+    Note: this server runs without auth. Generated client code should not
+    attempt Bearer authentication or send Authorization headers.
   version: "0.1.0"
   license:
     name: Apache 2.0
@@ -16,17 +22,6 @@ servers:
 security: []
 
 components:
-  securitySchemes:
-    BearerJWT:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: JWT obtained from /auth/login (expires 24h)
-    APIToken:
-      type: http
-      scheme: bearer
-      description: API token with ah_ prefix, created via /auth/tokens
-
   schemas:
     ErrorResponse:
       type: object
@@ -60,89 +55,6 @@ components:
         postgres:
           type: string
           enum: [ok, unavailable]
-
-    LoginRequest:
-      type: object
-      required: [username, password]
-      properties:
-        username:
-          type: string
-        password:
-          type: string
-
-    LoginResponse:
-      type: object
-      properties:
-        token:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-        user:
-          $ref: "#/components/schemas/UserInfo"
-
-    UserInfo:
-      type: object
-      properties:
-        id:
-          type: string
-        username:
-          type: string
-        role:
-          type: string
-          enum: [admin, analyst, viewer]
-
-    CreateUserRequest:
-      type: object
-      required: [username, password, role]
-      properties:
-        username:
-          type: string
-        password:
-          type: string
-        role:
-          type: string
-          enum: [admin, analyst, viewer]
-
-    CreateTokenRequest:
-      type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-
-    CreateTokenResponse:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        token:
-          type: string
-          description: Full token value (only returned at creation time)
-
-    APIToken:
-      type: object
-      properties:
-        id:
-          type: string
-        user_id:
-          type: string
-        name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        expires_at:
-          type: string
-          format: date-time
-        last_used:
-          type: string
-          format: date-time
 
     GraphStats:
       type: object
@@ -418,36 +330,7 @@ components:
             type: object
             additionalProperties: true
 
-    AuditEntry:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        timestamp:
-          type: string
-          format: date-time
-        action:
-          type: string
-        user_id:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
-
   responses:
-    Unauthorized:
-      description: Missing or invalid authentication
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Forbidden:
-      description: Insufficient role
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
       description: Invalid request
       content:
@@ -488,34 +371,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
-  /auth/login:
-    post:
-      summary: Authenticate
-      description: Exchange username/password for a JWT (24h expiry).
-      operationId: login
-      tags: [Public]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /docs:
     get:
       summary: OpenAPI specification
@@ -536,9 +391,6 @@ paths:
       description: Returns node and edge counts grouped by kind.
       operationId: getGraphStats
       tags: [Graph]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       responses:
         "200":
           description: Stats retrieved
@@ -546,8 +398,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GraphStats"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /graph/nodes:
     get:
@@ -555,9 +405,6 @@ paths:
       description: List graph nodes with optional kind filter.
       operationId: listNodes
       tags: [Graph]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: kind
           in: query
@@ -580,8 +427,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Node"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /graph/nodes/{id}:
     get:
@@ -589,9 +434,6 @@ paths:
       description: Returns a single node with all connected edges.
       operationId: getNode
       tags: [Graph]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: id
           in: path
@@ -605,8 +447,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NodeDetail"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -616,9 +456,6 @@ paths:
       description: List graph edges with optional filters.
       operationId: listEdges
       tags: [Graph]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: kind
           in: query
@@ -651,8 +488,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Edge"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /ingest:
     post:
@@ -663,9 +498,6 @@ paths:
         Rate limited to 20 requests/minute. Max body 100 MB.
       operationId: ingest
       tags: [Ingest]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -682,10 +514,6 @@ paths:
                 $ref: "#/components/schemas/IngestResult"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -695,9 +523,6 @@ paths:
       description: Find the shortest path between two nodes in the graph.
       operationId: shortestPath
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -713,10 +538,6 @@ paths:
                 $ref: "#/components/schemas/PathResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /analysis/all-paths:
     post:
@@ -724,9 +545,6 @@ paths:
       description: Enumerate all paths between two nodes (bounded by max_hops and limit).
       operationId: allPaths
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -742,10 +560,6 @@ paths:
                 $ref: "#/components/schemas/PathResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /analysis/weighted-path:
     post:
@@ -755,9 +569,6 @@ paths:
         shortestPath+reduce fallback. Response includes the algorithm used.
       operationId: weightedPath
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -773,10 +584,6 @@ paths:
                 $ref: "#/components/schemas/PathResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /analysis/findings:
     get:
@@ -784,9 +591,6 @@ paths:
       description: List all composite edges as security findings.
       operationId: getFindings
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: severity
           in: query
@@ -802,8 +606,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Finding"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /analysis/prebuilt:
     get:
@@ -811,9 +613,6 @@ paths:
       description: Returns metadata for all 17 pre-built security queries.
       operationId: listPreBuilt
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       responses:
         "200":
           description: Query list
@@ -823,8 +622,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/PreBuiltQuery"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /analysis/prebuilt/{id}:
     get:
@@ -832,9 +629,6 @@ paths:
       description: Run a pre-built query by ID and return results.
       operationId: runPreBuilt
       tags: [Analysis]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: id
           in: path
@@ -848,8 +642,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PreBuiltResult"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -859,9 +651,6 @@ paths:
       description: List scan history with pagination.
       operationId: listScans
       tags: [Scans]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: limit
           in: query
@@ -882,16 +671,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Scan"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
     post:
       summary: Create scan
       description: Register a new scan.
       operationId: createScan
       tags: [Scans]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -907,10 +691,6 @@ paths:
                 $ref: "#/components/schemas/Scan"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /scans/{id}:
     get:
@@ -918,9 +698,6 @@ paths:
       description: Get scan details by ID.
       operationId: getScan
       tags: [Scans]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       parameters:
         - name: id
           in: path
@@ -934,8 +711,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Scan"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -943,13 +718,10 @@ paths:
     post:
       summary: Raw Cypher query
       description: >-
-        Execute a raw Cypher query against Neo4j. Admin only.
+        Execute a raw Cypher query against Neo4j.
         Rate limited to 10 requests/minute.
       operationId: rawQuery
       tags: [Admin]
-      security:
-        - BearerJWT: []
-        - APIToken: []
       requestBody:
         required: true
         content:
@@ -965,223 +737,5 @@ paths:
                 $ref: "#/components/schemas/QueryResponse"
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
-
-  /auth/tokens:
-    post:
-      summary: Create API token
-      description: >-
-        Create an API token (ah_ prefix) for programmatic access.
-        The full token value is only returned at creation time.
-      operationId: createToken
-      tags: [Auth]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateTokenRequest"
-      responses:
-        "201":
-          description: Token created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreateTokenResponse"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-    get:
-      summary: List API tokens
-      description: List API tokens for the current user.
-      operationId: listTokens
-      tags: [Auth]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      responses:
-        "200":
-          description: Token list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/APIToken"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /auth/tokens/{id}:
-    delete:
-      summary: Revoke API token
-      operationId: deleteToken
-      tags: [Auth]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Token revoked
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /auth/users:
-    post:
-      summary: Create user
-      description: Create a new user account. Admin only.
-      operationId: createUser
-      tags: [Admin]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateUserRequest"
-      responses:
-        "201":
-          description: User created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserInfo"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "409":
-          description: Username already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    get:
-      summary: List users
-      description: List all users. Admin only.
-      operationId: listUsers
-      tags: [Admin]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      responses:
-        "200":
-          description: User list
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/UserInfo"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /auth/users/{id}:
-    delete:
-      summary: Delete user
-      description: Delete a user account. Admin only. Cannot delete yourself.
-      operationId: deleteUser
-      tags: [Admin]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: User deleted
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /audit:
-    get:
-      summary: Audit log
-      description: >-
-        View audit log entries (login events, ingest operations, query
-        executions, token management). Admin only.
-      operationId: getAuditLog
-      tags: [Admin]
-      security:
-        - BearerJWT: []
-        - APIToken: []
-      parameters:
-        - name: action
-          in: query
-          schema:
-            type: string
-          description: Filter by action (e.g. auth.login_success)
-        - name: user_id
-          in: query
-          schema:
-            type: string
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: Start time (RFC3339)
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date-time
-          description: End time (RFC3339)
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 100
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-      responses:
-        "200":
-          description: Audit entries
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AuditEntry"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"

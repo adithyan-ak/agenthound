@@ -37,11 +37,30 @@ collector_deps=$(go list -deps ./collector/cmd/agenthound)
 for pat in "${collector_block[@]}"; do
   hits=$(echo "$collector_deps" | grep -E "$pat" || true)
   if [ -n "$hits" ]; then
-    echo "ADVISORY: collector links forbidden dep matching $pat:"
+    echo "VIOLATION: collector links forbidden dep matching $pat:"
     echo "$hits" | sed 's/^/    /'
     fail=1
   fi
 done
+
+# Allowlist enforcement: fail on any collector dep NOT in the curated allowlist.
+# Adding a dep requires updating scripts/collector-allowlist.txt deliberately,
+# which is the gate for spotting telemetry / surveillance / network-call packages
+# before they land in the lean field binary.
+allowlist=scripts/collector-allowlist.txt
+if [ -f "$allowlist" ]; then
+  # Strip comments and blank lines from the allowlist.
+  allow_pkgs=$(grep -vE '^[[:space:]]*(#|$)' "$allowlist" | sort -u)
+  unlisted=$(echo "$collector_deps" | sort -u | comm -23 - <(echo "$allow_pkgs"))
+  if [ -n "$unlisted" ]; then
+    echo "VIOLATION: collector links deps not in $allowlist:"
+    echo "$unlisted" | sed 's/^/    /'
+    echo "    (add the dep to $allowlist after reviewing whether it makes outbound calls.)"
+    fail=1
+  fi
+else
+  echo "WARN: $allowlist missing — allowlist enforcement skipped."
+fi
 
 echo "=== server deps ==="
 server_deps=$(go list -deps ./server/cmd/agenthound-server)

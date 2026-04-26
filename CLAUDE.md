@@ -411,7 +411,7 @@ AGENTHOUND_NEO4J_URI=bolt://localhost:7687
 AGENTHOUND_NEO4J_USER=neo4j
 AGENTHOUND_NEO4J_PASSWORD=agenthound
 AGENTHOUND_PG_URI=postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable
-AGENTHOUND_API_PORT=8080
+AGENTHOUND_BIND=127.0.0.1:8080
 AGENTHOUND_LOG_LEVEL=info
 AGENTHOUND_CORS_ORIGINS=http://localhost:8080
 ```

@@ -1,40 +1,45 @@
 # CLI Reference
 
-AgentHound uses [Cobra](https://github.com/spf13/cobra) for its CLI. All commands support `--help` for usage details.
+AgentHound ships as **two binaries**: `agenthound` (collector) and `agenthound-server` (single-user analysis server). Both use [Cobra](https://github.com/spf13/cobra); all commands support `--help`.
 
-## Global flags
-
-These flags apply to all commands. Each can also be set via environment variable.
+## Collector global flags (`agenthound`)
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--neo4j-uri` | `AGENTHOUND_NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection URI |
-| `--neo4j-user` | `AGENTHOUND_NEO4J_USER` | `neo4j` | Neo4j username |
-| `--neo4j-password` | `AGENTHOUND_NEO4J_PASSWORD` | `agenthound` | Neo4j password |
-| `--pg-uri` | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | PostgreSQL URI |
-| `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error |
+| `--server-url` | `AGENTHOUND_SERVER_URL` | (none) | Where to upload scan JSON. If unset and `--output` is unset, scan fails. |
+| `--output` | `AGENTHOUND_OUTPUT` | (none) | Write scan JSON to this path instead of uploading. |
+| `--concurrency` | `AGENTHOUND_CONCURRENCY` | `0` (auto) | Max parallel collector workers. |
+| `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error. |
+| `--quiet` | `AGENTHOUND_QUIET=1` | `false` | Suppress non-error log output. |
+| `--log-json` | `AGENTHOUND_LOG_JSON=1` | `false` | Emit logs as JSON instead of text. |
+
+## Server global flags (`agenthound-server`)
+
+| Flag | Env var | Default | Description |
+|------|---------|---------|-------------|
+| `--bind` | `AGENTHOUND_BIND` | `127.0.0.1:8080` | Bind address `host:port`. Set to `0.0.0.0:8080` only inside a trusted network. |
+| `--neo4j-uri` | `AGENTHOUND_NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection URI. |
+| `--neo4j-user` | `AGENTHOUND_NEO4J_USER` | `neo4j` | Neo4j username. |
+| `--neo4j-password` | `AGENTHOUND_NEO4J_PASSWORD` | `agenthound` | Neo4j password. |
+| `--pg-uri` | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | PostgreSQL URI. |
+| `--cors-origins` | `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | Comma-separated CORS origins. |
+| `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | Log level. |
 
 Priority: CLI flag > environment variable > default value.
 
 ---
 
-## `agenthound serve`
+## `agenthound-server serve`
 
 Start the API server and embedded UI.
 
 ```bash
-agenthound serve [--port 8080]
+agenthound-server serve [--bind 127.0.0.1:8080]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--port` | `8080` | API server listen port |
+The server has **no application-layer authentication**. Default bind is loopback only; expose remotely only over your own VPN/SSH tunnel/firewall. See [`security.md`](security.md).
 
-On first start, creates a default `admin` user with the password from `AGENTHOUND_ADMIN_PASSWORD` (default: `agenthound`). Initializes Neo4j schema (constraints + indexes) and PostgreSQL migrations automatically.
-
-The server embeds the React SPA and serves it at the root URL. The API is mounted at `/api/v1/*`.
-
-Graceful shutdown on SIGINT/SIGTERM with a 10-second drain timeout.
+Initializes Neo4j schema (constraints + indexes) and PostgreSQL migrations automatically. Embeds the React SPA at the root URL; API at `/api/v1/*`. Graceful shutdown on SIGINT/SIGTERM with a 10-second drain timeout.
 
 ---
 

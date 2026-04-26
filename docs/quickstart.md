@@ -63,18 +63,15 @@ agenthound ingest scan.json
 
 ## 5. Open the UI
 
-Navigate to [http://localhost:8080](http://localhost:8080) and log in:
+Navigate to [http://localhost:8080](http://localhost:8080).
 
-- **Username:** `admin`
-- **Password:** `agenthound`
-
-> Change the default password in production by setting `AGENTHOUND_ADMIN_PASSWORD`.
+The server has **no application-layer authentication**. It binds to `127.0.0.1:8080` by default; access from another machine should go over a network you trust (VPN, SSH tunnel, Tailscale). See [`security.md`](security.md) for the full posture.
 
 ## 6. Explore
 
 - **Dashboard** -- overview of node/edge counts, risk distribution, top findings
 - **Graph Explorer** -- interactive graph visualization, click nodes to inspect
-- **Pathfinder** -- find shortest/weighted attack paths between any two nodes
+- **Findings** -- per-finding detail page with the embedded attack-path diagram
 - **Query Library** -- 17 pre-built security queries mapped to OWASP
 - **Scan Manager** -- view scan history, trigger new scans
 
@@ -122,10 +119,9 @@ agenthound scan --fail-on critical                 # Exit 1 if critical findings
 | `AGENTHOUND_NEO4J_USER` | `neo4j` | Neo4j username |
 | `AGENTHOUND_NEO4J_PASSWORD` | `agenthound` | Neo4j password |
 | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | PostgreSQL URI |
-| `AGENTHOUND_API_PORT` | `8080` | API server port |
+| `AGENTHOUND_BIND` | `127.0.0.1:8080` | Server bind address (`host:port`). Set to `0.0.0.0:8080` only inside a trusted network. |
 | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error |
-| `AGENTHOUND_JWT_SECRET` | (random) | JWT signing secret (set for stable tokens) |
-| `AGENTHOUND_ADMIN_PASSWORD` | `agenthound` | Initial admin password |
+| `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | Comma-separated CORS origins for the UI |
 
 ## Next steps
 

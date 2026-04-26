@@ -42,7 +42,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.agenthound-server
     ports:
-      - "8080:8080"
+      # Bind on the loopback interface only — the server has no application-layer
+      # auth. To reach it from another machine, use a VPN / SSH tunnel / Tailscale,
+      # or set this explicitly to "0.0.0.0:8080:8080" in a deployment you trust.
+      - "127.0.0.1:8080:8080"
     environment:
       AGENTHOUND_NEO4J_URI: bolt://graph-db:7687
       AGENTHOUND_NEO4J_USER: neo4j
