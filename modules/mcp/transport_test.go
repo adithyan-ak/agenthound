@@ -1,6 +1,9 @@
 package mcp
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -145,6 +148,55 @@ func TestBuildTransportUnsupported(t *testing.T) {
 	_, err := buildTransport(spec, false)
 	if err == nil {
 		t.Fatal("expected error for unsupported transport")
+	}
+}
+
+// TestBuildHTTPTransport_TLSStrictDefault verifies that the MCP HTTP transport
+// rejects self-signed certificates by default. When the caller passes custom
+// headers (forcing the transport to build its own http.Client), insecure=false
+// must produce a client that performs full certificate verification.
+//
+// We probe the underlying *http.Client directly rather than driving the full
+// MCP SDK handshake — the test server is plain HTTP, not MCP, so an SDK
+// connect would fail for unrelated protocol reasons. The TLS-handshake
+// failure path is the same regardless of upstream protocol.
+func TestBuildHTTPTransport_TLSStrictDefault(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// insecure=false WITH headers: code path that builds a custom *http.Client.
+	spec := ServerSpec{
+		Name:      "tls-test",
+		Transport: "http",
+		URL:       srv.URL,
+		Headers:   map[string]string{"X-Test": "1"},
+	}
+	tr, err := buildTransport(spec, false)
+	if err != nil {
+		t.Fatalf("buildTransport: %v", err)
+	}
+	st, ok := tr.(*mcpsdk.StreamableClientTransport)
+	if !ok || st.HTTPClient == nil {
+		t.Fatalf("expected custom *http.Client when insecure=false with headers; got %T", tr)
+	}
+	if _, err := st.HTTPClient.Get(srv.URL); err == nil {
+		t.Fatal("expected TLS verification error against self-signed cert; got nil")
+	} else if !strings.Contains(err.Error(), "x509") &&
+		!strings.Contains(err.Error(), "certificate") &&
+		!strings.Contains(err.Error(), "tls") {
+		t.Errorf("expected TLS-related error, got: %v", err)
+	}
+
+	// insecure=true: same server should now succeed.
+	tr, err = buildTransport(spec, true)
+	if err != nil {
+		t.Fatalf("buildTransport (insecure): %v", err)
+	}
+	st = tr.(*mcpsdk.StreamableClientTransport)
+	if _, err := st.HTTPClient.Get(srv.URL); err != nil {
+		t.Errorf("insecure=true against self-signed cert: unexpected error %v", err)
 	}
 }
 

@@ -24,7 +24,15 @@ control: localhost, VPN, SSH tunnel.`,
 		if err := cfg.Validate(); err != nil {
 			return err
 		}
-		setupLogger(cfg.LogLevel)
+		quiet, _ := cmd.Root().PersistentFlags().GetBool("quiet")
+		jsonLog, _ := cmd.Root().PersistentFlags().GetBool("log-json")
+		if !quiet && os.Getenv("AGENTHOUND_QUIET") == "1" {
+			quiet = true
+		}
+		if !jsonLog && os.Getenv("AGENTHOUND_LOG_JSON") == "1" {
+			jsonLog = true
+		}
+		setupLogger(cfg.LogLevel, quiet, jsonLog)
 		return nil
 	},
 }
@@ -42,9 +50,11 @@ func init() {
 	rootCmd.PersistentFlags().String("server-url", "", "AgentHound server URL for upload mode (env: AGENTHOUND_SERVER_URL)")
 	rootCmd.PersistentFlags().String("output", "", "Write collected JSON to this path instead of uploading (env: AGENTHOUND_OUTPUT)")
 	rootCmd.PersistentFlags().Int("concurrency", 0, "Max parallel collector workers (env: AGENTHOUND_CONCURRENCY)")
+	rootCmd.PersistentFlags().Bool("quiet", false, "Suppress non-error log output (env: AGENTHOUND_QUIET=1)")
+	rootCmd.PersistentFlags().Bool("log-json", false, "Emit logs as JSON instead of text (env: AGENTHOUND_LOG_JSON=1)")
 }
 
-func setupLogger(level string) {
+func setupLogger(level string, quiet, jsonLog bool) {
 	var logLevel slog.Level
 	switch level {
 	case "debug":
@@ -56,6 +66,15 @@ func setupLogger(level string) {
 	default:
 		logLevel = slog.LevelInfo
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	if quiet {
+		logLevel = slog.LevelError
+	}
+	opts := &slog.HandlerOptions{Level: logLevel}
+	var handler slog.Handler
+	if jsonLog {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
 	slog.SetDefault(slog.New(handler))
 }

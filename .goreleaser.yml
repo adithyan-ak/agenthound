@@ -2,23 +2,151 @@ version: 2
 
 builds:
   - id: agenthound
-    main: ./cmd/agenthound
+    main: ./collector/cmd/agenthound
     binary: agenthound
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+    flags: [-trimpath]
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+
+  - id: agenthound-server
+    main: ./server/cmd/agenthound-server
+    binary: agenthound-server
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
 
 archives:
-  - format: tar.gz
-    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
+  - id: agenthound
+    ids: [agenthound]
+    name_template: "agenthound_{{.Version}}_{{.Os}}_{{.Arch}}"
+    format_overrides: [{goos: windows, formats: [zip]}]
+  - id: agenthound-server
+    ids: [agenthound-server]
+    name_template: "agenthound-server_{{.Version}}_{{.Os}}_{{.Arch}}"
+    format_overrides: [{goos: windows, formats: [zip]}]
 
 checksum:
   name_template: 'checksums.txt'
+
+# Sign the checksums file ONLY (one signature gates all artifacts via the checksums).
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+
+sboms:
+  - artifacts: archive
+
+brews:
+  - repository:
+      owner: adithyan-ak
+      name: homebrew-agenthound
+    ids: [agenthound]
+    name: agenthound
+    description: "AgentHound — lean field collector for AI agent infrastructure"
+    homepage: "https://github.com/adithyan-ak/agenthound"
+    install: |
+      bin.install "agenthound"
+    test: |
+      assert_match "agenthound", shell_output("#{bin}/agenthound --version")
+
+  - repository:
+      owner: adithyan-ak
+      name: homebrew-agenthound
+    ids: [agenthound-server]
+    name: agenthound-server
+    description: "AgentHound — single-user server (Neo4j-backed graph + UI)"
+    homepage: "https://github.com/adithyan-ak/agenthound"
+    install: |
+      bin.install "agenthound-server"
+    test: |
+      assert_match "agenthound-server", shell_output("#{bin}/agenthound-server --version")
+
+dockers:
+  - id: agenthound
+    image_templates:
+      - "ghcr.io/adithyan-ak/agenthound:{{ .Version }}-amd64"
+      - "ghcr.io/adithyan-ak/agenthound:latest-amd64"
+    dockerfile: docker/Dockerfile.agenthound
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=agenthound"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/adithyan-ak/agenthound"
+    extra_files: [collector, server, sdk, modules, go.mod, go.sum]
+    skip_push: false
+    goarch: amd64
+  - id: agenthound-arm64
+    image_templates:
+      - "ghcr.io/adithyan-ak/agenthound:{{ .Version }}-arm64"
+      - "ghcr.io/adithyan-ak/agenthound:latest-arm64"
+    dockerfile: docker/Dockerfile.agenthound
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    extra_files: [collector, server, sdk, modules, go.mod, go.sum]
+    goarch: arm64
+  - id: agenthound-server
+    image_templates:
+      - "ghcr.io/adithyan-ak/agenthound-server:{{ .Version }}-amd64"
+      - "ghcr.io/adithyan-ak/agenthound-server:latest-amd64"
+    dockerfile: docker/Dockerfile.agenthound-server
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    extra_files: [collector, server, sdk, modules, go.mod, go.sum]
+    goarch: amd64
+  - id: agenthound-server-arm64
+    image_templates:
+      - "ghcr.io/adithyan-ak/agenthound-server:{{ .Version }}-arm64"
+      - "ghcr.io/adithyan-ak/agenthound-server:latest-arm64"
+    dockerfile: docker/Dockerfile.agenthound-server
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    extra_files: [collector, server, sdk, modules, go.mod, go.sum]
+    goarch: arm64
+
+docker_manifests:
+  - name_template: ghcr.io/adithyan-ak/agenthound:{{ .Version }}
+    image_templates:
+      - ghcr.io/adithyan-ak/agenthound:{{ .Version }}-amd64
+      - ghcr.io/adithyan-ak/agenthound:{{ .Version }}-arm64
+  - name_template: ghcr.io/adithyan-ak/agenthound:latest
+    image_templates:
+      - ghcr.io/adithyan-ak/agenthound:latest-amd64
+      - ghcr.io/adithyan-ak/agenthound:latest-arm64
+  - name_template: ghcr.io/adithyan-ak/agenthound-server:{{ .Version }}
+    image_templates:
+      - ghcr.io/adithyan-ak/agenthound-server:{{ .Version }}-amd64
+      - ghcr.io/adithyan-ak/agenthound-server:{{ .Version }}-arm64
+  - name_template: ghcr.io/adithyan-ak/agenthound-server:latest
+    image_templates:
+      - ghcr.io/adithyan-ak/agenthound-server:latest-amd64
+      - ghcr.io/adithyan-ak/agenthound-server:latest-arm64
+
+docker_signs:
+  - cmd: cosign
+    artifacts: manifests
+    args: ["sign", "--yes", "${artifact}@${digest}"]
 
 changelog:
   sort: asc

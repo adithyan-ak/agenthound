@@ -6,15 +6,22 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.9"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - uses: golangci/golangci-lint-action@v7
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa  # v7.0.1
         with:
           version: "v2.11"
+      - name: Check licenses
+        run: |
+          go install github.com/google/go-licenses@latest
+          "$(go env GOPATH)/bin/go-licenses" check \
+            --allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0,Unlicense,Zlib \
+            ./collector/cmd/agenthound/... \
+            ./server/cmd/agenthound-server/...
 
   test:
     runs-on: ubuntu-latest
@@ -44,10 +51,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.9"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
       - run: go test ./... -v -race -coverprofile=coverage.out
@@ -69,7 +76,6 @@ jobs:
             exit 1
           fi
       - name: Run govulncheck
-        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
@@ -77,20 +83,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: server/ui/package-lock.json
-      - run: cd server/ui && npm ci && npm run build
+      - run: cd server/ui && npm ci --ignore-scripts && npm run build
       - run: mkdir -p server/internal/api/ui && cp -r server/ui/dist server/internal/api/ui/dist
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.9"
       - run: go build -o bin/agenthound ./collector/cmd/agenthound
       - run: go build -o bin/agenthound-server ./server/cmd/agenthound-server
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: binaries
           path: bin/
@@ -100,45 +106,45 @@ jobs:
     needs: [lint, test, build]
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Build standard image (validate only)
-        uses: docker/build-push-action@v6
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      - name: Build collector image (validate only)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
           context: .
-          file: docker/Dockerfile.standard
+          file: docker/Dockerfile.agenthound
           push: false
-          tags: agenthound:standard
-      - name: Build slim image (validate only)
-        uses: docker/build-push-action@v6
+          tags: agenthound:collector
+      - name: Build server image (validate only)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
           context: .
-          file: docker/Dockerfile
+          file: docker/Dockerfile.agenthound-server
           push: false
-          tags: agenthound:slim
+          tags: agenthound-server:latest
 
   deps-check:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.9"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - name: Run deps-check (advisory)
+      - name: Run deps-check (blocking)
         run: bash scripts/deps-check.sh
 
   size-check:
     runs-on: ubuntu-latest
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
-      - name: Run size-check (advisory)
+          go-version: "1.25.9"
+      - name: Run size-check (blocking)
         run: bash scripts/size-check.sh
 
   xplatform-build:
@@ -150,10 +156,10 @@ jobs:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.9"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
       - name: Build collector ${{ matrix.os }}/${{ matrix.arch }}

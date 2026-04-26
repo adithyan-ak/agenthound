@@ -2,7 +2,7 @@
 # Verifies that the collector binary doesn't pull server-only deps,
 # and the server binary doesn't pull MCP SDK or modules/.
 # Run via `make deps-check`.
-# Advisory in this commit; flipped to blocking in Step 7.
+# Blocking gate: returns non-zero if violations are found.
 #
 # Note on go-jose: legitimately used by modules/a2a for JWS signature
 # verification of A2A Agent Cards (RFC 7515). It belongs in the collector
@@ -56,8 +56,7 @@ done
 
 if [ "$fail" -eq 1 ]; then
   echo ""
-  echo "deps-check found violations (advisory in Step 5; blocking in Step 7)."
+  echo "deps-check found violations (blocking)."
 fi
 
-# Step 5: exit 0 always (advisory). Step 7 will change to: exit $fail
-exit 0
+exit $fail

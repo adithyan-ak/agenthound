@@ -2,13 +2,13 @@
 # Measures the linux/amd64 stripped collector binary size and reports
 # whether it has grown beyond the recorded baseline + 10%.
 # Run via `make size-check`.
-# Advisory in this commit; flipped to blocking in Step 7.
+# Blocking gate: returns non-zero if the binary exceeds baseline + 10%.
 
 set -e
 
 cd "$(dirname "$0")/.."
 
-# BASELINE_BYTES recorded at Step 5 from a fresh prototype build below.
+# BASELINE_BYTES recorded from a fresh prototype build below.
 # Update this number consciously when a dep change intentionally raises the bar.
 BASELINE_BYTES=9412792
 
@@ -30,9 +30,8 @@ echo "limit (baseline +10%):      $LIMIT bytes"
 
 fail=0
 if [ "$BYTES" -gt "$LIMIT" ]; then
-  echo "ADVISORY: collector binary exceeds baseline + 10%."
+  echo "FAIL: collector binary exceeds baseline + 10%."
   fail=1
 fi
 
-# Step 5: exit 0 always (advisory). Step 7 will change to: exit $fail
-exit 0
+exit $fail
