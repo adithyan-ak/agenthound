@@ -1,4 +1,4 @@
-.PHONY: build build-collector build-server build-all test lint docker up down clean seed demo release ui-build ui-dev ui-test standard standard-run standard-stop
+.PHONY: build build-collector build-server build-all test lint docker up down clean seed demo release ui-build ui-dev ui-test standard standard-run standard-stop deps-check size-check
 
 ui-build:
 	cd server/ui && npm install && npm run build
@@ -58,3 +58,9 @@ standard-run:
 
 standard-stop:
 	docker stop agenthound && docker rm agenthound
+
+deps-check:
+	@bash scripts/deps-check.sh
+
+size-check:
+	@bash scripts/size-check.sh
