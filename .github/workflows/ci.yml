@@ -116,3 +116,55 @@ jobs:
           file: docker/Dockerfile
           push: false
           tags: agenthound:slim
+
+  deps-check:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Create UI embed stub
+        run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
+      - name: Run deps-check (advisory)
+        run: bash scripts/deps-check.sh
+
+  size-check:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Run size-check (advisory)
+        run: bash scripts/size-check.sh
+
+  xplatform-build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Create UI embed stub
+        run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
+      - name: Build collector ${{ matrix.os }}/${{ matrix.arch }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: go build -trimpath -ldflags='-s -w' -o /dev/null ./collector/cmd/agenthound
+      - name: Build server ${{ matrix.os }}/${{ matrix.arch }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: go build -trimpath -ldflags='-s -w' -o /dev/null ./server/cmd/agenthound-server
