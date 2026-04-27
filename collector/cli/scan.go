@@ -2,13 +2,12 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
-	"github.com/adithyan-ak/agenthound/collector/apiclient"
-	"github.com/adithyan-ak/agenthound/collector/internal/clientcfg"
 	a2acollector "github.com/adithyan-ak/agenthound/modules/a2a"
 	configcollector "github.com/adithyan-ak/agenthound/modules/config"
 	mcpcollector "github.com/adithyan-ak/agenthound/modules/mcp"
@@ -21,13 +20,22 @@ import (
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
-	Short: "Scan AI agent infrastructure and ship the result to the server (or to a file)",
+	Short: "Scan AI agent infrastructure and write the result to a file or stdout",
 	Long: `Discover and enumerate MCP servers, A2A agents, and client configurations,
-then ship the merged trust graph as JSON.
+then write the merged trust graph as JSON.
 
 By default, the collector runs config + MCP enumeration. Use --config, --mcp,
-or --a2a to scope the scan. Output goes to a file when --output is set,
-otherwise it is uploaded to the agenthound-server at $AGENTHOUND_SERVER_URL.`,
+or --a2a to scope the scan. Output goes to a file: pass --output <path> to
+choose the path, or pass --output - to stream the JSON to stdout (useful for
+piping into 'agenthound-server ingest -'). When --output is unset, the scan
+is written to ./scan-<scan_id>.json in the current working directory.
+
+Operators ingest the resulting JSON on their analysis box via either:
+
+  agenthound-server ingest scan.json
+  cat scan.json | agenthound-server ingest -
+
+or by drag-dropping the file into the UI's Scan Manager → Import Scan dialog.`,
 	RunE: runScan,
 }
 
@@ -53,8 +61,7 @@ func init() {
 	scanCmd.Flags().Duration("timeout", 120*time.Second, "Timeout per server/agent")
 	scanCmd.Flags().Bool("insecure", false, "Skip TLS verification")
 
-	scanCmd.Flags().String("scan-output", "", "Export JSON to file (skip server upload)")
-	scanCmd.Flags().String("fail-on", "", "Exit 1 if findings at or above severity: critical, high, medium, low")
+	scanCmd.Flags().String("scan-output", "", "Write scan JSON to this path. Use '-' for stdout. Defaults to ./scan-<scan_id>.json in CWD.")
 
 	rootCmd.AddCommand(scanCmd)
 }
@@ -89,8 +96,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	failOn, _ := cmd.Flags().GetString("fail-on")
-
 	if !runConfig && !runMCP && !runA2A {
 		runConfig = true
 		runMCP = true
@@ -110,13 +115,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		targets = append(targets, fmt.Sprintf("https://%s/.well-known/agent-card.json", domain))
 	}
 
-	if failOn != "" {
-		if _, ok := severityRank[failOn]; !ok {
-			return fmt.Errorf("invalid --fail-on value %q: must be critical, high, medium, or low", failOn)
-		}
-	}
-
-	start := time.Now()
 	ctx := context.Background()
 
 	merged := collectAll(ctx, runConfig, runMCP, runA2A,
@@ -124,20 +122,35 @@ func runScan(cmd *cobra.Command, args []string) error {
 		url, target, targets, targetsFile, authToken,
 		concurrency, timeout, insecure)
 
-	if output != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges\n", len(merged.Graph.Nodes), len(merged.Graph.Edges))
-		return writeCollectorOutput(merged, output)
+	// Default behavior: if no --output set, auto-name to scan-<scan_id>.json in CWD.
+	if output == "" {
+		output = fmt.Sprintf("scan-%s.json", merged.Meta.ScanID)
 	}
 
-	clientCfg, err := clientcfg.LoadClientConfig(cmd.Root().PersistentFlags())
+	_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges\n", len(merged.Graph.Nodes), len(merged.Graph.Edges))
+
+	// "-" means stdout.
+	if output == "-" {
+		return writeCollectorOutputStdout(merged)
+	}
+	return writeCollectorOutput(merged, output)
+}
+
+// writeCollectorOutputStdout writes the merged scan as indented JSON to
+// os.Stdout. Used for piping into 'agenthound-server ingest -'. No atomic
+// write semantics; stdout is the operator's responsibility (e.g., via SSH).
+func writeCollectorOutputStdout(data *ingest.IngestData) error {
+	encoded, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal JSON: %w", err)
 	}
-	if clientCfg == nil {
-		return fmt.Errorf("no server configured\n\nRun 'agenthound setup' to connect to a server, or pass --output <file> to save the JSON locally")
+	if _, err := os.Stdout.Write(encoded); err != nil {
+		return fmt.Errorf("write stdout: %w", err)
 	}
-
-	return shipToServer(ctx, clientCfg, merged, start, failOn)
+	if _, err := os.Stdout.Write([]byte("\n")); err != nil {
+		return fmt.Errorf("write stdout: %w", err)
+	}
+	return nil
 }
 
 func collectAll(ctx context.Context, runConfig, runMCP, runA2A bool,
@@ -187,62 +200,6 @@ func collectAll(ctx context.Context, runConfig, runMCP, runA2A bool,
 	}
 
 	return merged
-}
-
-func shipToServer(ctx context.Context, clientCfg *clientcfg.ClientConfig, merged *ingest.IngestData, start time.Time, failOn string) error {
-	client := apiclient.New(clientCfg.ServerURL)
-
-	if err := client.Health(ctx); err != nil {
-		return fallbackToFile(merged, fmt.Errorf("server check: %w", err))
-	}
-
-	_, _ = fmt.Fprintf(os.Stderr, "Collected %d nodes, %d edges → shipping to %s\n",
-		len(merged.Graph.Nodes), len(merged.Graph.Edges), clientCfg.ServerURL)
-
-	result, err := client.Ingest(ctx, merged)
-	if err != nil {
-		return fallbackToFile(merged, fmt.Errorf("ingest via API: %w", err))
-	}
-
-	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete (%.1fs)\n\n", time.Since(start).Seconds())
-	_, _ = fmt.Fprintf(os.Stderr, "  %-8s  %d nodes, %d edges\n", "Graph", result.NodesWritten, result.EdgesWritten)
-
-	var processorCount, compositeEdges int
-	for _, ps := range result.PostProcessingStats {
-		processorCount++
-		compositeEdges += ps.EdgesCreated
-	}
-	if processorCount > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "  %-8s  %d processors, %d composite edges\n", "Analysis", processorCount, compositeEdges)
-	}
-
-	findings, err := client.GetFindings(ctx, "")
-	if err != nil {
-		slog.Warn("failed to fetch findings", "error", err)
-	} else if len(findings) > 0 {
-		counts := countFindingsBySeverity(findings)
-		_, _ = fmt.Fprintf(os.Stderr, "\n  Findings %d critical, %d high, %d medium, %d low\n",
-			counts["critical"], counts["high"], counts["medium"], counts["low"])
-	}
-
-	_, _ = fmt.Fprintln(os.Stderr)
-
-	if failOn != "" {
-		threshold := severityRank[failOn]
-		if findings == nil {
-			findings, err = client.GetFindings(ctx, "")
-			if err != nil {
-				return fmt.Errorf("query findings for --fail-on: %w", err)
-			}
-		}
-		count := countAtOrAbove(findings, threshold)
-		if count > 0 {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed: %d finding(s) at severity %q or above\n", count, failOn)
-			os.Exit(1)
-		}
-	}
-
-	return nil
 }
 
 func loadRulesEngineOrNil() *rules.Engine {
@@ -313,51 +270,4 @@ func collectA2A(ctx context.Context, target string, targets []string, targetsFil
 	}
 	slog.Info("running a2a collector", "target", target, "targets", len(targets))
 	return c.Collect(ctx, opts)
-}
-
-// fallbackToFile is invoked when uploading the scan to the server fails.
-// It writes the merged scan JSON to $AGENTHOUND_OUTPUT (if set) or
-// ./scan-<scan_id>.json so a partial scan is never silently lost. The
-// original upload error is returned, augmented with the path the file
-// was written to.
-func fallbackToFile(merged *ingest.IngestData, uploadErr error) error {
-	out := os.Getenv("AGENTHOUND_OUTPUT")
-	if out == "" {
-		out = fmt.Sprintf("scan-%s.json", merged.Meta.ScanID)
-	}
-	if writeErr := writeCollectorOutput(merged, out); writeErr != nil {
-		return fmt.Errorf("upload failed (%v) AND fallback file write failed: %w", uploadErr, writeErr)
-	}
-	_, _ = fmt.Fprintf(os.Stderr, "WARNING: upload failed (%v); scan saved to %s\n", uploadErr, out)
-	return nil
-}
-
-var severityRank = map[string]int{
-	"critical": 0,
-	"high":     1,
-	"medium":   2,
-	"low":      3,
-}
-
-func countFindingsBySeverity(findings []apiclient.Finding) map[string]int {
-	counts := map[string]int{
-		"critical": 0,
-		"high":     0,
-		"medium":   0,
-		"low":      0,
-	}
-	for _, f := range findings {
-		counts[f.Severity]++
-	}
-	return counts
-}
-
-func countAtOrAbove(findings []apiclient.Finding, threshold int) int {
-	count := 0
-	for _, f := range findings {
-		if rank, ok := severityRank[f.Severity]; ok && rank <= threshold {
-			count++
-		}
-	}
-	return count
 }

@@ -1,95 +1,15 @@
 package cli
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/adithyan-ak/agenthound/collector/apiclient"
+	"github.com/adithyan-ak/agenthound/sdk/ingest"
 	"github.com/spf13/cobra"
 )
-
-func TestCountFindingsBySeverity(t *testing.T) {
-	findings := []apiclient.Finding{
-		{ID: "1", Severity: "critical"},
-		{ID: "2", Severity: "high"},
-		{ID: "3", Severity: "high"},
-		{ID: "4", Severity: "medium"},
-		{ID: "5", Severity: "low"},
-		{ID: "6", Severity: "low"},
-		{ID: "7", Severity: "low"},
-	}
-	counts := countFindingsBySeverity(findings)
-
-	want := map[string]int{"critical": 1, "high": 2, "medium": 1, "low": 3}
-	for sev, expected := range want {
-		if counts[sev] != expected {
-			t.Errorf("severity %q: got %d, want %d", sev, counts[sev], expected)
-		}
-	}
-}
-
-func TestCountFindingsBySeverity_Empty(t *testing.T) {
-	counts := countFindingsBySeverity(nil)
-	for _, sev := range []string{"critical", "high", "medium", "low"} {
-		if counts[sev] != 0 {
-			t.Errorf("severity %q: got %d, want 0", sev, counts[sev])
-		}
-	}
-}
-
-func TestCountAtOrAbove(t *testing.T) {
-	findings := []apiclient.Finding{
-		{ID: "1", Severity: "critical"},
-		{ID: "2", Severity: "high"},
-		{ID: "3", Severity: "high"},
-		{ID: "4", Severity: "medium"},
-		{ID: "5", Severity: "low"},
-	}
-	got := countAtOrAbove(findings, severityRank["high"])
-	if got != 3 {
-		t.Errorf("countAtOrAbove(threshold=high): got %d, want 3", got)
-	}
-}
-
-func TestCountAtOrAbove_NoneAbove(t *testing.T) {
-	findings := []apiclient.Finding{
-		{ID: "1", Severity: "medium"},
-		{ID: "2", Severity: "medium"},
-		{ID: "3", Severity: "low"},
-	}
-	got := countAtOrAbove(findings, severityRank["critical"])
-	if got != 0 {
-		t.Errorf("countAtOrAbove(threshold=critical): got %d, want 0", got)
-	}
-}
-
-func TestCountAtOrAbove_AllLevels(t *testing.T) {
-	findings := []apiclient.Finding{
-		{ID: "1", Severity: "critical"},
-		{ID: "2", Severity: "high"},
-		{ID: "3", Severity: "medium"},
-		{ID: "4", Severity: "low"},
-	}
-
-	tests := []struct {
-		threshold string
-		want      int
-	}{
-		{"critical", 1},
-		{"high", 2},
-		{"medium", 3},
-		{"low", 4},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.threshold, func(t *testing.T) {
-			got := countAtOrAbove(findings, severityRank[tt.threshold])
-			if got != tt.want {
-				t.Errorf("countAtOrAbove(%s) = %d, want %d", tt.threshold, got, tt.want)
-			}
-		})
-	}
-}
 
 func newScanCmdForTest() *cobra.Command {
 	cmd := &cobra.Command{RunE: runScan}
@@ -110,7 +30,6 @@ func newScanCmdForTest() *cobra.Command {
 	cmd.Flags().Duration("timeout", 0, "")
 	cmd.Flags().Bool("insecure", false, "")
 	cmd.Flags().String("scan-output", "", "")
-	cmd.Flags().String("fail-on", "", "")
 	return cmd
 }
 
@@ -139,32 +58,86 @@ func TestRunScan_A2ANoTarget(t *testing.T) {
 	}
 }
 
-func TestRunScan_InvalidFailOn(t *testing.T) {
-	cmd := newScanCmdForTest()
-	_ = cmd.Flags().Set("fail-on", "banana")
-	err := runScan(cmd, nil)
-	if err == nil {
-		t.Fatal("expected error for invalid --fail-on")
+// TestRunScan_DefaultOutputCWD verifies that when --output is unset, the
+// scan is written to ./scan-<scan_id>.json in the current working directory.
+// The test temporarily changes CWD to a tempdir and runs --config (offline,
+// no network), then asserts a scan-*.json file appeared.
+func TestRunScan_DefaultOutputCWD(t *testing.T) {
+	dir := t.TempDir()
+	oldCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
 	}
-	if !strings.Contains(err.Error(), "invalid --fail-on") {
-		t.Errorf("error = %q, want 'invalid --fail-on'", err.Error())
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldCWD) }()
+
+	cmd := newScanCmdForTest()
+	// --config with --path '' but Discover would scan real configs. Pass
+	// a non-existent path so the collector returns an empty graph quickly.
+	_ = cmd.Flags().Set("config", "true")
+	_ = cmd.Flags().Set("path", filepath.Join(dir, "no-such-config.json"))
+
+	if err := runScan(cmd, nil); err != nil {
+		t.Fatalf("runScan: %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	var scanFile string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "scan-") && strings.HasSuffix(e.Name(), ".json") {
+			scanFile = e.Name()
+			break
+		}
+	}
+	if scanFile == "" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("expected a scan-*.json file in CWD; got: %v", names)
+	}
+
+	// Verify the file is valid JSON with the expected meta.
+	raw, err := os.ReadFile(filepath.Join(dir, scanFile))
+	if err != nil {
+		t.Fatalf("read scan: %v", err)
+	}
+	var got ingest.IngestData
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Meta.Type != "agenthound-ingest" {
+		t.Errorf("meta.type = %q, want agenthound-ingest", got.Meta.Type)
+	}
+	if got.Meta.Collector != "scan" {
+		t.Errorf("meta.collector = %q, want scan", got.Meta.Collector)
 	}
 }
 
-func TestSeverityRank(t *testing.T) {
-	if severityRank["critical"] != 0 {
-		t.Errorf("critical rank = %d, want 0", severityRank["critical"])
+// TestRunScan_StdoutDash verifies that --output - writes JSON to stdout.
+func TestRunScan_StdoutDash(t *testing.T) {
+	dir := t.TempDir()
+	cmd := newScanCmdForTest()
+	_ = cmd.Flags().Set("config", "true")
+	_ = cmd.Flags().Set("path", filepath.Join(dir, "no-such-config.json"))
+	_ = cmd.Flags().Set("scan-output", "-")
+
+	out := captureStdout(t, func() {
+		if err := runScan(cmd, nil); err != nil {
+			t.Fatalf("runScan: %v", err)
+		}
+	})
+
+	var got ingest.IngestData
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nraw: %q", err, out)
 	}
-	if severityRank["high"] != 1 {
-		t.Errorf("high rank = %d, want 1", severityRank["high"])
-	}
-	if severityRank["medium"] != 2 {
-		t.Errorf("medium rank = %d, want 2", severityRank["medium"])
-	}
-	if severityRank["low"] != 3 {
-		t.Errorf("low rank = %d, want 3", severityRank["low"])
-	}
-	if len(severityRank) != 4 {
-		t.Errorf("severity rank has %d entries, want 4", len(severityRank))
+	if got.Meta.Type != "agenthound-ingest" {
+		t.Errorf("meta.type = %q, want agenthound-ingest", got.Meta.Type)
 	}
 }

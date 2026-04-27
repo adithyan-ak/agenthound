@@ -95,7 +95,6 @@ encoding/pem
 errors
 flag
 fmt
-github.com/adithyan-ak/agenthound/collector/apiclient
 github.com/adithyan-ak/agenthound/collector/cli
 github.com/adithyan-ak/agenthound/collector/cmd/agenthound
 github.com/adithyan-ak/agenthound/collector/internal/clientcfg
