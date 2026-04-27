@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -12,16 +13,32 @@ import (
 )
 
 var ingestCmd = &cobra.Command{
-	Use:   "ingest <file.json>",
+	Use:   "ingest <file.json | ->",
 	Short: "Ingest collector JSON output into the graph database",
-	Args:  cobra.ExactArgs(1),
+	Long: `Ingest collector JSON into the graph database.
+
+Provide a path to a collector JSON file, or '-' to read from stdin. The
+stdin form is the standard pipe target for 'agenthound scan --output -':
+
+  agenthound scan --output - | agenthound-server ingest -
+  ssh target 'agenthound scan --output -' | agenthound-server ingest -`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		filePath := args[0]
 
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			return fmt.Errorf("read file: %w", err)
+		var data []byte
+		var err error
+		if filePath == "-" {
+			data, err = io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("read stdin: %w", err)
+			}
+		} else {
+			data, err = os.ReadFile(filePath)
+			if err != nil {
+				return fmt.Errorf("read file: %w", err)
+			}
 		}
 
 		var ingestData ingest.IngestData

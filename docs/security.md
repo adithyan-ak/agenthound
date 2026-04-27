@@ -46,9 +46,15 @@ The collector makes outbound network calls to:
 
 1. **Targets specified by the operator** — `--target`, `--targets`,
    `--config`, `--url`, or paths discovered by `--discover`.
-2. **The operator's server**, when upload mode is in use (`--server-url` or `$AGENTHOUND_SERVER_URL`).
-3. **No one else.** No telemetry, no phone-home, no version-check
-   pings, no crash reporting.
+2. **No one else.** No telemetry, no phone-home, no version-check
+   pings, no crash reporting, and no upload to a central server.
+
+Scan output is written to a local file (or to stdout via `--output -`).
+Transport to the operator's analysis box is the operator's
+responsibility — typically a file copy, an SSH pipe
+(`agenthound scan --output - | ssh op-box 'agenthound-server ingest -'`),
+or a drag-drop into the UI's `Scan Manager → Import scan` dialog. The
+collector does not initiate any connection back to a server.
 
 `scripts/deps-check.sh` enforces the dependency boundary: the
 collector binary cannot link `chi`, `pgx`, `neo4j-go-driver`, or any

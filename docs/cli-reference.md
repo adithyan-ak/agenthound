@@ -6,12 +6,13 @@ AgentHound ships as **two binaries**: `agenthound` (collector) and `agenthound-s
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--server-url` | `AGENTHOUND_SERVER_URL` | (none) | Where to upload scan JSON. If unset and `--output` is unset, scan fails. |
-| `--output` | `AGENTHOUND_OUTPUT` | (none) | Write scan JSON to this path instead of uploading. |
+| `--output` | `AGENTHOUND_OUTPUT` | (auto-named in CWD) | Write scan JSON to this path. Use `-` for stdout (pipe target). When unset, defaults to `./scan-<scan_id>.json` in the current working directory. |
 | `--concurrency` | `AGENTHOUND_CONCURRENCY` | `0` (auto) | Max parallel collector workers. |
 | `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error. |
 | `--quiet` | `AGENTHOUND_QUIET=1` | `false` | Suppress non-error log output. |
 | `--log-json` | `AGENTHOUND_LOG_JSON=1` | `false` | Emit logs as JSON instead of text. |
+
+The collector is offline-by-default. It does not phone home to a server. To ingest the resulting JSON on the operator's box, use `agenthound-server ingest <file>` or `agenthound-server ingest -` (stdin), or drag-drop the file in the UI's `Scan Manager → Import scan` dialog.
 
 ## Server global flags (`agenthound-server`)
 
@@ -122,34 +123,48 @@ At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--output` | | Export merged JSON to file (skips ingest and analysis) |
-| `--fail-on` | | Exit 1 if findings at or above severity: `critical`, `high`, `medium`, `low` |
+| `--output` | (auto-named in CWD) | Write merged JSON to this path. Use `-` for stdout (pipe target). When unset, defaults to `./scan-<scan_id>.json` in CWD. |
 
 ### Examples
 
 ```bash
-agenthound scan                                        # Full scan (config + MCP)
+agenthound scan                                        # Full scan (config + MCP); writes ./scan-<scan_id>.json in CWD
 agenthound scan --config                               # Config files only (offline)
 agenthound scan --config --path ~/.cursor/mcp.json     # Single config file
 agenthound scan --mcp                                  # MCP servers only
 agenthound scan --mcp --url https://mcp.example.com    # Single HTTP MCP server
 agenthound scan --a2a --target https://agent.example.com
 agenthound scan --a2a --discover-domain example.com
-agenthound scan --output scan.json                     # Export without ingesting
-agenthound scan --fail-on critical                     # CI/CD gate
+agenthound scan --output scan.json                     # Explicit file path
+agenthound scan --output - | agenthound-server ingest - # Stream JSON over stdin
+agenthound scan --output - | ssh op-box 'agenthound-server ingest -' # Pipe over SSH
+```
+
+For CI/CD gating on findings, run the analysis on the operator's server:
+
+```bash
+agenthound-server query --findings --severity critical --fail-on critical
 ```
 
 ---
 
-## `agenthound ingest`
+## `agenthound-server ingest`
 
 Ingest collector JSON output into the graph database.
 
 ```bash
-agenthound ingest <file.json>
+agenthound-server ingest <file.json>
+agenthound-server ingest -
 ```
 
-Takes exactly one argument: the path to a collector JSON output file.
+Takes exactly one argument: the path to a collector JSON output file, or `-` to read from stdin. The stdin form is the standard pipe target for `agenthound scan --output -`:
+
+```bash
+agenthound scan --output - | agenthound-server ingest -
+ssh target 'agenthound scan --output -' | agenthound-server ingest -
+```
+
+The same pipeline (validate → normalize → deduplicate → write → post-process) backs the `POST /api/v1/ingest` HTTP endpoint and the UI's `Scan Manager → Import scan` drag-drop dialog. All three entry points produce the same graph state.
 
 ### Pipeline stages
 
@@ -171,29 +186,29 @@ Ingest complete:
 
 ---
 
-## `agenthound query`
+## `agenthound-server query`
 
-Execute queries against the graph database. Supports four mutually exclusive modes.
+Execute queries against the graph database (runs on the operator's box, not the collector). Supports four mutually exclusive modes.
 
 ### Raw Cypher
 
 ```bash
-agenthound query "MATCH (n:MCPServer) RETURN n.name, n.transport"
+agenthound-server query "MATCH (n:MCPServer) RETURN n.name, n.transport"
 ```
 
 ### Pre-built query
 
 ```bash
-agenthound query --prebuilt <query-id>
+agenthound-server query --prebuilt <query-id>
 ```
 
-Run `agenthound query --prebuilt ""` to see available query IDs (the command prints the list on unknown ID).
+Run `agenthound-server query --prebuilt ""` to see available query IDs (the command prints the list on unknown ID).
 
 ### Findings
 
 ```bash
-agenthound query --findings [--severity critical|high|medium|low]
-agenthound query --findings --fail-on critical         # CI: exit 1 if critical findings
+agenthound-server query --findings [--severity critical|high|medium|low]
+agenthound-server query --findings --fail-on critical         # CI: exit 1 if critical findings
 ```
 
 Lists all composite edges as security findings with severity classification.
@@ -201,7 +216,7 @@ Lists all composite edges as security findings with severity classification.
 ### Shortest path
 
 ```bash
-agenthound query --shortest-path --from <Kind:name> --to <Kind:name>
+agenthound-server query --shortest-path --from <Kind:name> --to <Kind:name>
 ```
 
 Node references use `Kind:name` format, e.g., `AgentInstance:claude-desktop` or `MCPResource:postgres://prod`.

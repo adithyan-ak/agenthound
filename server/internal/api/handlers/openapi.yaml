@@ -11,6 +11,13 @@ info:
 
     Note: this server runs without auth. Generated client code should not
     attempt Bearer authentication or send Authorization headers.
+
+
+    The `/ingest` endpoint is consumed primarily by the embedded React UI's
+    "Scan Manager → Import scan" drag-drop dialog. The `agenthound` collector
+    binary writes JSON to a file or stdout and does NOT call this endpoint
+    directly — operators ingest scans via `agenthound-server ingest <file>`,
+    `agenthound-server ingest -` (stdin), or the UI uploader.
   version: "0.1.0"
   license:
     name: Apache 2.0

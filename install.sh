@@ -111,8 +111,9 @@ if "${INSTALL_DIR}/agenthound" --version >/dev/null 2>&1; then
        ;;
   esac
   echo "  Quick start:"
-  echo "    agenthound scan --discover --output scan.json"
-  echo "    agenthound setup --server http://localhost:8080"
+  echo "    agenthound scan                              # writes ./scan-<scan_id>.json in CWD"
+  echo "    agenthound scan --output scan.json           # explicit path"
+  echo "    agenthound scan --output - | ssh op-box agenthound-server ingest -"
   echo ""
 else
   echo "Error: installed binary failed to run"

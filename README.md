@@ -13,8 +13,8 @@ AgentHound enumerates MCP servers, A2A agents, and AI-agent client configuration
 
 It ships as **two binaries** in the SharpHound/BloodHound style:
 
-- **`agenthound`** — a lean field collector. ~9 MiB stripped on linux/amd64. No Neo4j, no Postgres, no UI. Drops on a target host, enumerates, ships JSON to a server you control or to a local file.
-- **`agenthound-server`** — the operator's single-user ingest + analysis server. Runs Neo4j-backed graph storage, post-processors, the REST API, and the React UI.
+- **`agenthound`** — a lean field collector. ~9 MiB stripped on linux/amd64. No Neo4j, no Postgres, no UI. Drops on a target host, enumerates, writes JSON to a file or stdout. The collector is offline-by-default — it does not phone home.
+- **`agenthound-server`** — the operator's single-user ingest + analysis server. Runs Neo4j-backed graph storage, post-processors, the REST API, and the React UI. Operators move scan JSON to the server via file copy, an SSH pipe, or the UI's drag-drop import.
 
 Open-source graph-based attack-path analysis spanning MCP + A2A + agent-client configs. Other tools analyze each protocol in isolation; the graph model lets AgentHound surface paths like `A2A Agent → DELEGATES_TO → A2A Agent → MCP Server → MCPTool (shell_access) → Host` that a single-protocol scanner can't see.
 
@@ -151,23 +151,38 @@ Or run the server inside Tailscale / WireGuard / a VPN you control. **Do not** e
 ## Quick scan
 
 ```bash
-# Discover and enumerate everything reachable from this host, ship to the server
-agenthound setup --server http://localhost:8080
+# Discover and enumerate everything reachable from this host (default: ./scan-<scan_id>.json in CWD)
 agenthound scan
 
-# Or save to a file (no server required)
-agenthound scan --output scan.json
+# Choose a path explicitly
+agenthound scan --output /tmp/scan.json
+
+# Stream JSON to stdout for piping
+agenthound scan --output - | ssh op-box 'agenthound-server ingest -'
 
 # Scope to one collector
 agenthound scan --config                              # Config files only (offline)
 agenthound scan --mcp --url https://mcp.example.com   # Single HTTP MCP server
 agenthound scan --a2a --targets url1,url2             # A2A agents
-
-# CI/CD gate: exit 1 on critical findings
-agenthound scan --fail-on critical
 ```
 
-The collector ships JSON to the server, which validates, normalizes, deduplicates, writes the graph, and runs the post-processors. Then open the UI:
+## Workflow
+
+The collector writes JSON. The operator's box ingests it. There are three equivalent paths:
+
+```bash
+# (a) File copy + CLI ingest
+scp scan.json operator-box:/tmp/
+ssh operator-box 'agenthound-server ingest /tmp/scan.json'
+
+# (b) Stdin pipe (no file at rest on either side)
+agenthound scan --output - | ssh operator-box 'agenthound-server ingest -'
+
+# (c) UI drag-drop import
+# Open http://localhost:8080 → Scan Manager → "Import scan" → drag scan.json into the dropzone
+```
+
+The server validates, normalizes, deduplicates, writes the graph, and runs the post-processors. Then open the UI:
 
 ```bash
 open http://localhost:8080
@@ -242,14 +257,13 @@ Every node gets a risk score (0–100) based on weighted factors:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTHOUND_SERVER_URL` | | URL of the agenthound-server to upload to |
-| `AGENTHOUND_OUTPUT` | | Write scan JSON to this path instead of uploading. Also used as the upload-fallback path on network failure. |
+| `AGENTHOUND_OUTPUT` | | Write scan JSON to this path. Use `-` for stdout. Defaults to `./scan-<scan_id>.json` in CWD. |
 | `AGENTHOUND_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `AGENTHOUND_QUIET` | | `1` suppresses non-error logs (same as `--quiet`) |
 | `AGENTHOUND_LOG_JSON` | | `1` emits structured JSON logs instead of text |
 | `AGENTHOUND_CONCURRENCY` | `5` | Max parallel collector workers |
 
-Global flags (available on every subcommand): `--log-level`, `--server-url`, `--output`, `--concurrency`, `--quiet`, `--log-json`.
+Global flags (available on every subcommand): `--log-level`, `--output`, `--concurrency`, `--quiet`, `--log-json`.
 
 ### Server
 
@@ -271,7 +285,7 @@ There is intentionally no `AGENTHOUND_JWT_SECRET`, `AGENTHOUND_ADMIN_PASSWORD`, 
 
 - The collector writes scan JSON via atomic `temp + rename`. A SIGINT mid-write never leaves a half-written file at the destination.
 - Output files are `chmod 0o600` on POSIX. **NTFS does not honor POSIX permission bits** — on Windows the file inherits the directory's NTFS ACL, which typically allows any local user to read it. Treat output stored on Windows as readable by every local user account.
-- When upload mode is in effect (`--server-url` or `$AGENTHOUND_SERVER_URL`) but the network call fails, the collector falls back to writing the scan JSON locally (path from `$AGENTHOUND_OUTPUT` or auto-named `./scan-<scan_id>.json`) so a partial scan is never silently lost.
+- When `--output` is unset, the collector writes to `./scan-<scan_id>.json` in the current working directory. Pass `--output -` to stream JSON to stdout (no file is created); use this with a pipe (`| agenthound-server ingest -`).
 
 ---
 

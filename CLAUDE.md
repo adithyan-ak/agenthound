@@ -4,7 +4,7 @@ AgentHound is an open-source security tool for AI agent infrastructure. It enume
 
 The codebase ships as **two binaries** in the BloodHound/SharpHound style:
 
-- **`agenthound`** — lean field collector. ~9 MiB stripped on linux/amd64. No DB clients, no UI, no auth. Drops on a target host, enumerates, ships JSON to a server or to a local file.
+- **`agenthound`** — lean field collector. ~9 MiB stripped on linux/amd64. No DB clients, no UI, no auth, no outbound HTTP to a server. Drops on a target host, enumerates, writes JSON to a file or stdout. Operators move the scan to the analysis box via file copy, an SSH pipe, or the UI's drag-drop import.
 - **`agenthound-server`** — single-user analysis server. Neo4j-backed graph, Postgres-backed scan history, post-processors, REST API, embedded React UI. Binds 127.0.0.1:8080 by default. **No application-layer authentication** — protect with the network layer (VPN / SSH tunnel).
 
 See `docs/adr/0001-two-binary-split.md` for the rationale and `docs/security.md` for the threat model.
@@ -32,7 +32,7 @@ The CI runs `golangci-lint` (enforces `errcheck` — use `_, _ =` for intentiona
 | Component | Choice | Key Details |
 |-----------|--------|-------------|
 | Backend | **Go 1.25.9** | Pinned in `go.mod`; required by MCP Go SDK v1.5.0 and to clear stdlib vulns. |
-| CLI | **cobra** | `agenthound scan/setup/rules/...`; `agenthound-server serve/ingest/query` |
+| CLI | **cobra** | `agenthound scan/rules/...`; `agenthound-server serve/ingest/query` |
 | HTTP router | **chi/v5** | REST API at `/api/v1/*` (server only) |
 | Graph DB | **Neo4j 4.4+ Community** | Cypher pathfinding, APOC for Dijkstra. Dual syntax: 4.4 uses `ON...ASSERT`, 5.x uses `FOR...REQUIRE`. |
 | App DB | **PostgreSQL 16** | `scans` table only. Driver: `pgx/v5`. Auth/users/audit tables have been removed. |
@@ -51,9 +51,8 @@ The CI runs `golangci-lint` (enforces `errcheck` — use `_, _ =` for intentiona
 agenthound/
 ├── collector/                          # `agenthound` binary
 │   ├── cmd/agenthound/main.go          # Entry point; blank-imports modules to register them
-│   ├── cli/                            # cobra subcommands: root, scan, setup, rules, stubs, unknown
-│   ├── apiclient/                      # HTTP client to talk to agenthound-server
-│   ├── internal/clientcfg/             # Per-host config (server URL, log level, etc.)
+│   ├── cli/                            # cobra subcommands: root, scan, rules, stubs, unknown
+│   ├── internal/clientcfg/             # Per-host config (log level, output, concurrency)
 │   └── scanner/                        # Network scanner stub for future fingerprint modules
 ├── server/                             # `agenthound-server` binary
 │   ├── cmd/agenthound-server/main.go   # Entry point
@@ -307,32 +306,34 @@ There is intentionally no `/api/v1/auth/*`, no `/api/v1/audit`, no `/api/v1/auth
 ### Collector
 
 ```bash
-agenthound scan                                    # Discover + enumerate; uploads to server (or --output to file)
+agenthound scan                                    # Discover + enumerate; writes ./scan-<scan_id>.json in CWD
 agenthound scan --config                           # Config files only (offline)
 agenthound scan --mcp --url <url>                  # Single HTTP MCP server
 agenthound scan --a2a --target <url>               # Single A2A agent
 agenthound scan --a2a --discover-domain <domain>   # Probe well-known agent-card
-agenthound scan --output scan.json                 # Skip upload, write JSON to file
-agenthound scan --fail-on critical                 # Exit 1 if findings at or above severity
-agenthound setup --server <url>                    # Save server URL to config
+agenthound scan --output scan.json                 # Explicit file path
+agenthound scan --output -                         # Stream JSON to stdout (use with a pipe)
 agenthound rules list|validate|test                # YAML rules engine ops
 agenthound version
 ```
 
 Stub verbs (`agenthound loot|extract|poison|implant`) print "not yet implemented — see docs/future-modules.md" and exit 1. They reserve the verb space without implementing anything.
 
-Persistent flags: `--log-level`, `--server-url`, `--output`, `--concurrency`, `--quiet`, `--log-json`.
+Persistent flags: `--log-level`, `--output`, `--concurrency`, `--quiet`, `--log-json`.
 
 ### Server
 
 ```bash
 agenthound-server serve                          # Start API server on 127.0.0.1:8080
 agenthound-server ingest <file.json>             # Ingest collector output → Neo4j + post-process
+agenthound-server ingest -                       # Read collector output from stdin
 agenthound-server query "<cypher>"               # Execute raw Cypher
 agenthound-server query --prebuilt <query-id>    # Run pre-built query
 agenthound-server query --findings --severity critical
 agenthound-server version
 ```
+
+The UI also exposes a drag-drop import at `Scan Manager → Import scan`, which POSTs the file to `/api/v1/ingest` (same pipeline as the CLI).
 
 ## Implementation Phases (historical)
 
@@ -399,8 +400,7 @@ AgentHound maps all findings to OWASP MCP Top 10 (MCP01-MCP10) and OWASP Agentic
 
 ```
 # Collector
-AGENTHOUND_SERVER_URL=                                # Set with `agenthound setup --server <url>`
-AGENTHOUND_OUTPUT=                                    # File path. Also the upload-fallback target on network failure.
+AGENTHOUND_OUTPUT=                                    # File path. Use '-' for stdout. Defaults to ./scan-<scan_id>.json in CWD.
 AGENTHOUND_LOG_LEVEL=info
 AGENTHOUND_CONCURRENCY=5
 AGENTHOUND_QUIET=                                     # 1 = error-level only

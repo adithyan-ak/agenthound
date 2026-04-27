@@ -36,13 +36,13 @@ The binary is at `bin/agenthound`.
 
 ## 3. Scan your infrastructure
 
-Run a full scan that discovers configs, enumerates MCP servers, ingests into the graph, and computes attack paths:
+Run a full scan that discovers configs and enumerates MCP servers. The collector writes JSON to a local file (auto-named `./scan-<scan_id>.json` in the current directory):
 
 ```bash
 agenthound scan
 ```
 
-This auto-discovers all MCP client config files (Claude Desktop, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment), connects to each configured MCP server, and runs post-processing to compute composite attack paths and risk scores.
+This auto-discovers all MCP client config files (Claude Desktop, Cursor, VS Code, Windsurf, Continue, Zed, Cline, JetBrains, Kiro, Amazon Q, Augment) and connects to each configured MCP server.
 
 ### (Optional) Scan A2A agents
 
@@ -52,14 +52,22 @@ If you have A2A agents running:
 agenthound scan --a2a --target https://agent.example.com
 ```
 
-### Export without ingesting
+## 4. Ingest the scan into the graph
 
-To review the raw collector output before ingesting:
+The collector is offline-by-default. Move the scan JSON to the operator's box and ingest it. There are three equivalent paths:
 
 ```bash
-agenthound scan --output scan.json
-agenthound ingest scan.json
+# (a) File + CLI ingest
+agenthound-server ingest scan-*.json
+
+# (b) Stream over stdin (no file at rest)
+agenthound scan --output - | agenthound-server ingest -
+
+# (c) UI drag-drop import
+# Open http://localhost:8080 → Scan Manager → "Import scan" → drag scan.json into the dropzone
 ```
+
+The same ingest pipeline (validate → normalize → deduplicate → write → post-process) runs for all three. After ingest, the post-processors compute composite attack paths and risk scores.
 
 ## 5. Open the UI
 
@@ -75,25 +83,25 @@ The server has **no application-layer authentication**. It binds to `127.0.0.1:8
 - **Query Library** -- 17 pre-built security queries mapped to OWASP
 - **Scan Manager** -- view scan history, trigger new scans
 
-## 7. Run queries from the CLI
+## 7. Run queries from the CLI (operator's box)
 
 ```bash
 # List all findings
-agenthound query --findings
+agenthound-server query --findings
 
 # Critical findings only
-agenthound query --findings --severity critical
+agenthound-server query --findings --severity critical
 
 # Pre-built query
-agenthound query --prebuilt agents-shell-access
+agenthound-server query --prebuilt agents-shell-access
 
 # Shortest path between two nodes
-agenthound query --shortest-path \
+agenthound-server query --shortest-path \
   --from AgentInstance:claude-desktop \
   --to MCPResource:postgres://prod
 
 # Raw Cypher
-agenthound query "MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s) RETURN a.name, s.name"
+agenthound-server query "MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s) RETURN a.name, s.name"
 ```
 
 ## Quick scan tips
@@ -105,10 +113,10 @@ agenthound scan --config                           # Config files only (offline,
 agenthound scan --mcp --url https://mcp.example.com  # Single MCP server
 ```
 
-Use `--fail-on` for CI/CD pipelines:
+For CI/CD pipelines, gate on findings on the operator's server (not on the collector):
 
 ```bash
-agenthound scan --fail-on critical                 # Exit 1 if critical findings exist
+agenthound-server query --findings --severity critical --fail-on critical
 ```
 
 ## Environment variables

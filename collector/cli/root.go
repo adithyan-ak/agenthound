@@ -15,10 +15,12 @@ var rootCmd = &cobra.Command{
 	Use:   "agenthound",
 	Short: "BloodHound for AI Agent Infrastructure — collector",
 	Long: `AgentHound enumerates MCP servers, A2A agents, and client configurations,
-then ships the trust graph as JSON to an agenthound-server (or to a file).
+then writes the trust graph as JSON to a file or stdout.
 
-The collector is auth-less. Reach the server over a network you already
-control: localhost, VPN, SSH tunnel.`,
+The collector is auth-less and offline-by-default. Operators ingest the
+resulting JSON on their analysis box via 'agenthound-server ingest <file>',
+'cat scan.json | agenthound-server ingest -', or by drag-dropping into the
+UI's Scan Manager → Import Scan dialog.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cfg = clientcfg.LoadWithFlags(cmd.Root().PersistentFlags())
 		if err := cfg.Validate(); err != nil {
@@ -47,8 +49,7 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().String("log-level", "", "Log level: debug, info, warn, error (env: AGENTHOUND_LOG_LEVEL)")
-	rootCmd.PersistentFlags().String("server-url", "", "AgentHound server URL for upload mode (env: AGENTHOUND_SERVER_URL)")
-	rootCmd.PersistentFlags().String("output", "", "Write collected JSON to this path instead of uploading (env: AGENTHOUND_OUTPUT)")
+	rootCmd.PersistentFlags().String("output", "", "Write collected JSON to this path. Use '-' for stdout. Defaults to ./scan-<scan_id>.json in CWD. (env: AGENTHOUND_OUTPUT)")
 	rootCmd.PersistentFlags().Int("concurrency", 0, "Max parallel collector workers (env: AGENTHOUND_CONCURRENCY)")
 	rootCmd.PersistentFlags().Bool("quiet", false, "Suppress non-error log output (env: AGENTHOUND_QUIET=1)")
 	rootCmd.PersistentFlags().Bool("log-json", false, "Emit logs as JSON instead of text (env: AGENTHOUND_LOG_JSON=1)")
