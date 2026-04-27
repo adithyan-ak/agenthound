@@ -14,6 +14,26 @@ import (
 	"github.com/adithyan-ak/agenthound/server/model"
 )
 
+// nodeEdgeWriter is the subset of *graph.Writer that Pipeline needs.
+// Defining it as an interface lets tests substitute a recording mock.
+// *graph.Writer satisfies it implicitly.
+type nodeEdgeWriter interface {
+	WriteNodes(ctx context.Context, nodes []sdkingest.Node, scanID string) (int, error)
+	WriteEdges(ctx context.Context, edges []sdkingest.Edge, scanID string) (int, error)
+}
+
+// scanRecorder is the subset of *appdb.ScanStore that Pipeline needs.
+// *appdb.ScanStore satisfies it implicitly.
+type scanRecorder interface {
+	CreateScan(ctx context.Context, scan *model.Scan) error
+	UpdateScan(ctx context.Context, id, status string, nodeCount, edgeCount int, scanErr string) error
+}
+
+// postProcessFunc runs the analysis post-processors. Defaulted to
+// analysis.RunPostProcessors; replaceable in tests to assert behavior
+// without exercising every concrete processor.
+type postProcessFunc func(ctx context.Context, db graph.GraphDB, scanID string, collectors []string) ([]graph.ProcessingStats, error)
+
 // Pipeline serializes ingests through a single mutex.
 //
 // The post-processing stage's stale-edge cleanup deletes composite
@@ -28,19 +48,29 @@ type Pipeline struct {
 	mu         sync.Mutex
 	validator  *Validator
 	normalizer *Normalizer
-	writer     *graph.Writer
+	writer     nodeEdgeWriter
 	graphDB    graph.GraphDB
-	scanStore  *appdb.ScanStore
+	scanStore  scanRecorder
+	runPP      postProcessFunc
 }
 
 func NewPipeline(writer *graph.Writer, graphDB graph.GraphDB, scanStore *appdb.ScanStore) *Pipeline {
-	return &Pipeline{
+	p := &Pipeline{
 		validator:  NewValidator(),
 		normalizer: NewNormalizer(),
-		writer:     writer,
 		graphDB:    graphDB,
-		scanStore:  scanStore,
+		runPP:      analysis.RunPostProcessors,
 	}
+	// Avoid the typed-nil-into-interface trap: assign only if the
+	// concrete pointer is non-nil so `p.writer != nil` checks behave
+	// the same as before the interface seam was introduced.
+	if writer != nil {
+		p.writer = writer
+	}
+	if scanStore != nil {
+		p.scanStore = scanStore
+	}
+	return p
 }
 
 func (p *Pipeline) Ingest(ctx context.Context, data *sdkingest.IngestData) (*sdkingest.IngestResult, error) {
@@ -98,8 +128,8 @@ func (p *Pipeline) Ingest(ctx context.Context, data *sdkingest.IngestData) (*sdk
 	slog.Info("edges written", "count", edgesWritten)
 
 	// Stage 6: Post-processing (non-fatal)
-	if p.graphDB != nil {
-		ppStats, ppErr := analysis.RunPostProcessors(ctx, p.graphDB, data.Meta.ScanID, []string{data.Meta.Collector})
+	if p.graphDB != nil && p.runPP != nil {
+		ppStats, ppErr := p.runPP(ctx, p.graphDB, data.Meta.ScanID, []string{data.Meta.Collector})
 		if ppErr != nil {
 			slog.Error("post-processing failed", "error", ppErr)
 		}

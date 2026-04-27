@@ -12,18 +12,26 @@ import (
 
 const defaultBatchSize = 1000
 
+// execFunc executes a single cypher batch. Real driver-backed instances use
+// driverExecBatch; tests inject an in-memory recorder to assert batching,
+// APOC routing, and error propagation without a live Neo4j.
+type execFunc func(ctx context.Context, cypher string, params map[string]any) (int, error)
+
 type Writer struct {
 	driver    neo4j.DriverWithContext
 	hasAPOC   bool
 	apocOnce  sync.Once
 	batchSize int
+	execFn    execFunc
 }
 
 func NewWriter(driver neo4j.DriverWithContext) *Writer {
-	return &Writer{
+	w := &Writer{
 		driver:    driver,
 		batchSize: defaultBatchSize,
 	}
+	w.execFn = w.driverExecBatch
+	return w
 }
 
 func (w *Writer) detectAPOC(ctx context.Context) {
@@ -79,7 +87,7 @@ RETURN count(*) AS written`, kind)
 				}
 			}
 
-			written, err := w.execBatch(ctx, cypher, map[string]any{
+			written, err := w.execFn(ctx, cypher, map[string]any{
 				"nodes":   params,
 				"scan_id": scanID,
 			})
@@ -137,7 +145,7 @@ RETURN count(*) AS written`, sourceMatch, targetMatch)
 				}
 			}
 
-			written, err := w.execBatch(ctx, cypher, map[string]any{
+			written, err := w.execFn(ctx, cypher, map[string]any{
 				"edges":   params,
 				"kind":    key.Kind,
 				"scan_id": scanID,
@@ -175,7 +183,7 @@ func (w *Writer) writeEdgesFallback(ctx context.Context, edges []ingest.Edge, sc
 				}
 			}
 
-			written, err := w.execBatch(ctx, cypher, map[string]any{
+			written, err := w.execFn(ctx, cypher, map[string]any{
 				"edges":   params,
 				"scan_id": scanID,
 			})
@@ -205,7 +213,10 @@ SET r += edge.properties, r.scan_id = $scan_id, r.last_seen = datetime()
 RETURN count(*) AS written`, matchClause("a", sourceKind, "source"), matchClause("b", targetKind, "target"), edgeKind)
 }
 
-func (w *Writer) execBatch(ctx context.Context, cypher string, params map[string]any) (int, error) {
+// driverExecBatch executes a cypher batch against the live Neo4j driver. It is
+// the production implementation of execFn. Kept as a method (not a free func)
+// so it can be swapped per-Writer for tests.
+func (w *Writer) driverExecBatch(ctx context.Context, cypher string, params map[string]any) (int, error) {
 	session := w.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
