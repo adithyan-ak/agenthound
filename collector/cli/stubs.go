@@ -38,8 +38,9 @@ func newStubCmd(verb, oneliner string) *cobra.Command {
 }
 
 func init() {
-	// loot landed in v0.2 — see collector/cli/loot.go.
-	// poison + implant landed in v0.4 — see collector/cli/poison.go,
-	// collector/cli/implant.go.
-	rootCmd.AddCommand(newStubCmd("extract", "extract source data from derived artifacts"))
+	// All offensive verbs now have real implementations:
+	// - loot: v0.2 (collector/cli/loot.go)
+	// - poison + implant: v0.4 (collector/cli/poison.go, implant.go)
+	// - extract: v0.5 (collector/cli/extract.go)
+	// No stubs remain.
 }

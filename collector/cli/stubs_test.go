@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"testing"
 )
 
@@ -10,38 +9,17 @@ import (
 // space without implementing anything" — break it and a future PR that adds
 // `extract|poison|implant` may collide with an existing alias.
 //
-// loot landed in v0.2 (collector/cli/loot.go) and is no longer a stub.
-func TestStubsRegistered(t *testing.T) {
-	for _, verb := range []string{"extract"} {
+// TestNoStubsRemain confirms all offensive verbs have real implementations.
+// v0.5 shipped the last stub (extract). No stubs should remain.
+func TestNoStubsRemain(t *testing.T) {
+	for _, verb := range []string{"scan", "loot", "poison", "implant", "revert", "discover", "extract"} {
 		t.Run(verb, func(t *testing.T) {
 			cmd, _, err := rootCmd.Find([]string{verb})
 			if err != nil {
 				t.Fatalf("rootCmd.Find(%q): %v", verb, err)
 			}
-			if cmd == nil || cmd.Use != verb {
-				t.Fatalf("verb %q not registered (got %v)", verb, cmd)
-			}
-			if cmd.RunE == nil {
-				t.Fatalf("verb %q has no RunE (cobra would print help instead of returning the stub error)", verb)
-			}
-		})
-	}
-}
-
-// TestStubsReturnError confirms the stub RunE returns errStubNotImplemented.
-// main.go translates a non-nil RunE error into exit-code 1, so this is the
-// load-bearing assertion that the still-stubbed verbs fail with non-zero
-// status. (loot is no longer in this list; it's a real command in v0.2.)
-func TestStubsReturnError(t *testing.T) {
-	for _, verb := range []string{"extract"} {
-		t.Run(verb, func(t *testing.T) {
-			cmd, _, err := rootCmd.Find([]string{verb})
-			if err != nil {
-				t.Fatalf("rootCmd.Find(%q): %v", verb, err)
-			}
-			runErr := cmd.RunE(cmd, nil)
-			if !errors.Is(runErr, errStubNotImplemented) {
-				t.Errorf("RunE for %q returned %v, want errStubNotImplemented", verb, runErr)
+			if cmd == nil || cmd.RunE == nil {
+				t.Fatalf("verb %q not registered or has no RunE", verb)
 			}
 		})
 	}

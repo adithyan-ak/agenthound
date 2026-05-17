@@ -97,20 +97,20 @@ func TestIngestDataJSONRoundTrip(t *testing.T) {
 }
 
 func TestAllowedNodeKindsComplete(t *testing.T) {
-	if len(AllowedNodeKinds) != 22 {
-		t.Errorf("AllowedNodeKinds: got %d entries, want 22", len(AllowedNodeKinds))
+	if len(AllowedNodeKinds) != 23 {
+		t.Errorf("AllowedNodeKinds: got %d entries, want 23", len(AllowedNodeKinds))
 	}
 }
 
 func TestAllNodeLabelsComplete(t *testing.T) {
-	if len(AllNodeLabels) != 24 {
-		t.Errorf("AllNodeLabels: got %d entries, want 24", len(AllNodeLabels))
+	if len(AllNodeLabels) != 25 {
+		t.Errorf("AllNodeLabels: got %d entries, want 25", len(AllNodeLabels))
 	}
 }
 
 func TestAllowedEdgeKindsComplete(t *testing.T) {
-	if len(AllowedEdgeKinds) != 24 {
-		t.Errorf("AllowedEdgeKinds: got %d entries, want 24", len(AllowedEdgeKinds))
+	if len(AllowedEdgeKinds) != 25 {
+		t.Errorf("AllowedEdgeKinds: got %d entries, want 25", len(AllowedEdgeKinds))
 	}
 }
 

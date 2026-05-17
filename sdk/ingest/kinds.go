@@ -1,36 +1,37 @@
 package ingest
 
-// AllowedNodeKinds are the 22 collector-produced node kinds accepted in ingest
+// AllowedNodeKinds are the 23 collector-produced node kinds accepted in ingest
 // input. The first 12 are the v0.1 set; the next 8 are per-service AI-service
 // kinds added in v0.2; AIService is the multi-label umbrella every per-service
-// node also carries; AIModel is the v0.3 model-artifact kind emitted by the
-// Ollama Looter (one node per model surfaced via /api/tags + /api/show).
+// node also carries; AIModel is the v0.3 model-artifact kind; and
+// ExtractedTrainingSignal is the v0.5 extraction-output kind.
 var AllowedNodeKinds = map[string]bool{
-	"MCPServer":         true,
-	"MCPTool":           true,
-	"MCPResource":       true,
-	"MCPPrompt":         true,
-	"A2AAgent":          true,
-	"A2ASkill":          true,
-	"AgentInstance":     true,
-	"Identity":          true,
-	"Credential":        true,
-	"Host":              true,
-	"ConfigFile":        true,
-	"InstructionFile":   true,
-	"OllamaInstance":    true,
-	"VLLMInstance":      true,
-	"QdrantInstance":    true,
-	"MLflowServer":      true,
-	"LiteLLMGateway":    true,
-	"JupyterServer":     true,
-	"LangServeApp":      true,
-	"OpenWebUIInstance": true,
-	"AIService":         true,
-	"AIModel":           true,
+	"MCPServer":               true,
+	"MCPTool":                 true,
+	"MCPResource":             true,
+	"MCPPrompt":               true,
+	"A2AAgent":                true,
+	"A2ASkill":                true,
+	"AgentInstance":           true,
+	"Identity":                true,
+	"Credential":              true,
+	"Host":                    true,
+	"ConfigFile":              true,
+	"InstructionFile":         true,
+	"OllamaInstance":          true,
+	"VLLMInstance":            true,
+	"QdrantInstance":          true,
+	"MLflowServer":            true,
+	"LiteLLMGateway":          true,
+	"JupyterServer":           true,
+	"LangServeApp":            true,
+	"OpenWebUIInstance":       true,
+	"AIService":               true,
+	"AIModel":                 true,
+	"ExtractedTrainingSignal": true,
 }
 
-// AllNodeLabels includes all 24 node labels (22 collector + 2 synthetic) for
+// AllNodeLabels includes all 25 node labels (23 collector + 2 synthetic) for
 // Neo4j schema operations. Schema-init logic skips labels in UmbrellaLabels
 // when creating uniqueness constraints — see UmbrellaLabels for the why.
 var AllNodeLabels = []string{
@@ -40,7 +41,7 @@ var AllNodeLabels = []string{
 	"ConfigFile", "InstructionFile",
 	"OllamaInstance", "VLLMInstance", "QdrantInstance", "MLflowServer",
 	"LiteLLMGateway", "JupyterServer", "LangServeApp", "OpenWebUIInstance",
-	"AIService", "AIModel",
+	"AIService", "AIModel", "ExtractedTrainingSignal",
 	"ResourceGroup", "TrustZone",
 }
 
@@ -55,10 +56,11 @@ var UmbrellaLabels = map[string]bool{
 	"AIService": true,
 }
 
-// RawEdgeKinds are the 16 collector-produced edge kinds accepted in ingest
+// RawEdgeKinds are the 17 collector-produced edge kinds accepted in ingest
 // input. EXPOSES is reserved in v0.2 for v0.3 fingerprinters; EXPOSES_CREDENTIAL
 // is emitted by the v0.2 LiteLLM Looter; PROVIDES_MODEL is emitted by the v0.3
-// Ollama Looter (OllamaInstance → AIModel).
+// Ollama Looter; EXTRACTED_FROM is emitted by the v0.5 embedding-inversion
+// Extractor (AIModel → ExtractedTrainingSignal).
 var RawEdgeKinds = map[string]bool{
 	"TRUSTS_SERVER":      true,
 	"PROVIDES_TOOL":      true,
@@ -76,9 +78,10 @@ var RawEdgeKinds = map[string]bool{
 	"EXPOSES":            true,
 	"EXPOSES_CREDENTIAL": true,
 	"PROVIDES_MODEL":     true,
+	"EXTRACTED_FROM":     true,
 }
 
-// AllowedEdgeKinds includes all 24 edge kinds (16 raw + 8 composite) for Neo4j writer dispatch.
+// AllowedEdgeKinds includes all 25 edge kinds (17 raw + 8 composite) for Neo4j writer dispatch.
 var AllowedEdgeKinds = map[string]bool{
 	// Raw (collector-produced)
 	"TRUSTS_SERVER":      true,
@@ -97,6 +100,7 @@ var AllowedEdgeKinds = map[string]bool{
 	"EXPOSES":            true,
 	"EXPOSES_CREDENTIAL": true,
 	"PROVIDES_MODEL":     true,
+	"EXTRACTED_FROM":     true,
 	// Composite (post-processor produced)
 	"HAS_ACCESS_TO":         true,
 	"CAN_EXECUTE":           true,
@@ -148,6 +152,7 @@ var EdgeKindEndpoints = map[string]EdgeEndpoints{
 	"EXPOSES":               {SourceKinds: []string{"AIService"}, TargetKinds: []string{"AIService"}},
 	"EXPOSES_CREDENTIAL":    {SourceKinds: []string{"AIService"}, TargetKinds: []string{"Credential"}},
 	"PROVIDES_MODEL":        {SourceKinds: []string{"OllamaInstance"}, TargetKinds: []string{"AIModel"}},
+	"EXTRACTED_FROM":        {SourceKinds: []string{"AIModel"}, TargetKinds: []string{"ExtractedTrainingSignal"}},
 }
 
 // ResolveEdgeEndpoints returns the source and target node kinds for an edge,
