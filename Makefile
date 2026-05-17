@@ -2,9 +2,11 @@
 
 ui-build:
 	cd server/ui && npm ci --ignore-scripts && npm run build
-	rm -rf server/internal/api/ui/dist
-	mkdir -p server/internal/api/ui
-	cp -r server/ui/dist server/internal/api/ui/dist
+	# Preserve dist/.gitkeep (committed so go:embed all:ui/dist works on
+	# fresh clones); clear other contents and copy in the freshly-built UI.
+	find server/internal/api/ui/dist -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
+	mkdir -p server/internal/api/ui/dist
+	cp -r server/ui/dist/. server/internal/api/ui/dist/
 
 ui-dev:
 	cd server/ui && npm run dev
@@ -49,7 +51,9 @@ down:
 	docker compose -f docker/docker-compose.yml down
 
 clean:
-	rm -rf bin/ coverage.out server/ui/dist server/internal/api/ui/dist
+	rm -rf bin/ coverage.out server/ui/dist
+	# Clear built UI but keep the .gitkeep marker.
+	find server/internal/api/ui/dist -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
 
 seed:
 	@bash scripts/seed-test-data.sh

@@ -38,8 +38,8 @@ func newStubCmd(verb, oneliner string) *cobra.Command {
 }
 
 func init() {
-	rootCmd.AddCommand(newStubCmd("loot", "loot known services on a target"))
+	// loot landed in v0.2 — see collector/cli/loot.go.
+	// poison + implant landed in v0.4 — see collector/cli/poison.go,
+	// collector/cli/implant.go.
 	rootCmd.AddCommand(newStubCmd("extract", "extract source data from derived artifacts"))
-	rootCmd.AddCommand(newStubCmd("poison", "inject attacker-controlled artifacts"))
-	rootCmd.AddCommand(newStubCmd("implant", "plant persistence in instruction or config files"))
 }

@@ -75,8 +75,8 @@ func TestHandleListPreBuilt(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&queries); err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 17 {
-		t.Fatalf("expected 17 pre-built queries, got %d", len(queries))
+	if len(queries) != 18 {
+		t.Fatalf("expected 18 pre-built queries, got %d", len(queries))
 	}
 }
 

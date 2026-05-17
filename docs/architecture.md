@@ -6,13 +6,14 @@ AgentHound enumerates MCP servers and A2A agents, builds a directed trust graph 
 
 ```
    +-----------------------+              +---------------------------------+
-   |    agenthound         |  JSON over   |     agenthound-server           |
-   |    (collector)        | --- HTTPS -> |     (single-user)               |
-   |                       |  or file     |                                 |
-   |  scan / setup /       |              |  serve / ingest / query         |
-   |  rules / collect      |              |  +---------------------------+  |
-   +-----------------------+              |  |    API Server (chi/v5)    |  |
-                                          |  |    /api/v1/* (no auth)    |  |
+   |    agenthound         |  JSON file   |     agenthound-server           |
+   |    (collector)        | -- or stdin->|     (single-user)               |
+   |                       |  pipe / UI   |                                 |
+   |  scan / rules /       |  drag-drop   |  serve / ingest / query         |
+   |  version (+ stub      |              |  +---------------------------+  |
+   |  loot/extract/        |              |  |    API Server (chi/v5)    |  |
+   |  poison/implant)      |              |  | /api/v1/* — read=open,    |  |
+   +-----------------------+              |  |  mutate=localhost token   |  |
                                           |  |  +---------------------+  |  |
                                           |  |  | Embedded React SPA  |  |  |
                                           |  |  | (go:embed)          |  |  |
@@ -49,8 +50,9 @@ scan --config         scan --mcp --url <url>           scan --a2a --target <url>
          |  2. Normalize (snake_case)   |
          |  3. Deduplicate (MERGE)      |
          |  4. Batch write to Neo4j     |
-         |  5. Post-process (9 stages)  |
-         |  6. Risk scoring             |
+         |  5. Post-process (9 stages   |
+         |     producing composite      |
+         |     edges, plus risk score)  |
          +------------------------------+
                         |
                         v

@@ -1,5 +1,11 @@
 # MCP Collector — Technical Implementation Specification
 
+> **Status: historical design spec, kept for reference.**
+> This document is the original design spec for the MCP collector. The protocol description, enumeration semantics, security signals, and Go SDK usage are still load-bearing. Two areas have drifted from the shipping code:
+> - **CLI surface:** the `agenthound collect mcp ...` examples reflect the pre-split CLI. Today it's `agenthound scan --mcp ...` (see [`docs/cli-reference.md`](../docs/cli-reference.md)).
+> - **Property casing:** properties shown as camelCase here are stored as `snake_case` in Neo4j (the ingest normalizer converts on write). [`docs/graph-model.md`](../docs/graph-model.md) is canonical.
+> The actual implementation lives in [`modules/mcp/`](../modules/mcp/).
+
 ## 1. Purpose
 
 The MCP Collector enumerates MCP servers by establishing JSON-RPC 2.0 connections, performing the standard initialization handshake, and calling read-only enumeration endpoints (`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`). It extracts all server metadata, tool definitions, resource descriptors, and prompt templates — plus security-relevant signals needed to construct trust graph edges.

@@ -1,0 +1,34 @@
+# LiteLLM fingerprint rule (v0.2).
+#
+# Identifies a LiteLLM proxy / gateway. Default port 4000 (BerriAI's
+# stock value). The fingerprint is a single GET to /health/liveliness
+# which returns the literal string "I'm alive!" with HTTP 200. This is
+# the lowest-friction probe that disambiguates LiteLLM from anything
+# else listening on 4000 — no auth required.
+#
+# Authentication posture is "master_key" because the looter that lands
+# in v0.2 Phase 4 needs the master key to extract upstream credentials.
+# is_anonymous_loot=false: the looter cannot exfiltrate credentials
+# without operator-supplied master key (vs. Ollama, which exposes its
+# model list anonymously).
+id: litellm
+name: LiteLLM proxy / gateway
+description: Identifies LiteLLM by GET /health/liveliness returning "I'm alive!"
+version: 2
+service_kind: litellm
+probes:
+  - method: GET
+    path: /health/liveliness
+    matchers:
+      - type: http_status
+        status_code: 200
+      - type: body_contains
+        value: "I'm alive!"
+emit:
+  node_kinds:
+    - LiteLLMGateway
+    - AIService
+  properties:
+    service_kind: litellm
+    auth_method: master_key
+    is_anonymous_loot: "false"

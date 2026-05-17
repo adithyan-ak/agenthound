@@ -1,5 +1,11 @@
 # A2A Collector — Technical Implementation Specification
 
+> **Status: historical design spec, kept for reference.**
+> This document is the original design spec for the A2A collector. Agent Card schema (v0.3.0 and v1.0), JWS verification approach, auth posture scoring, and the trust graph edges produced are still load-bearing. Two areas have drifted from the shipping code:
+> - **CLI surface:** the `agenthound collect a2a ...` examples reflect the pre-split CLI. Today it's `agenthound scan --a2a ...` (see [`docs/cli-reference.md`](../docs/cli-reference.md)).
+> - **Property casing:** properties shown as camelCase here are stored as `snake_case` in Neo4j. [`docs/graph-model.md`](../docs/graph-model.md) is canonical.
+> The actual implementation lives in [`modules/a2a/`](../modules/a2a/), including JWS signature verification in `modules/a2a/jws.go`.
+
 ## 1. Purpose
 
 The A2A Collector fetches Agent Cards from A2A-compliant agents via HTTP GET to their well-known discovery URL, parses the card's identity, capabilities, skills, and security schemes, and outputs graph nodes and edges that represent agent trust relationships, delegation chains, and authentication posture.

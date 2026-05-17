@@ -31,6 +31,13 @@ export const EDGE_CATEGORY_MAP: Record<string, EdgeCategory> = {
   HAS_ENV_VAR: "structure",
   USES_CREDENTIAL: "structure",
   LOADS_INSTRUCTIONS: "structure",
+  // v0.2 raw edges. EXPOSES is reserved for v0.3 (Open WebUI →
+  // Ollama backend); EXPOSES_CREDENTIAL is the LiteLLM Looter's
+  // emission and is the load-bearing edge for the credential-chain
+  // demo. Both render in the structure palette to match
+  // USES_CREDENTIAL's visual continuity.
+  EXPOSES: "structure",
+  EXPOSES_CREDENTIAL: "structure",
 };
 
 export const EDGE_COLORS: Record<string, string> = Object.fromEntries(

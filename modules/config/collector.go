@@ -163,15 +163,30 @@ func (c *ConfigCollector) Collect(ctx context.Context, opts collector.CollectOpt
 				}))
 
 				credID := ingest.ComputeNodeID("Credential", cred.Source, cred.Name)
-				addNode(common.NewNode(credID, []string{"Credential"}, map[string]any{
+				// value_hash is the cross-collector merge primitive — see
+				// docs/plans/v0.2-implementation.md decision B and
+				// sdk/common/hasher.go HashCredentialValue. Always populated
+				// from the ORIGINAL raw value (cred.ValueHash carries that;
+				// cred.Value may already be the hash when
+				// IncludeCredentialValues=false). The credential-chain Cypher
+				// in server/internal/analysis/processors/cross_service_credential_chain
+				// joins on this property between Config Collector emissions
+				// and LiteLLM Looter emissions.
+				credProps := map[string]any{
 					"type":         cred.Type,
 					"name":         cred.Name,
-					"value":        cred.Value,
 					"source":       cred.Source,
 					"is_exposed":   cred.IsExposed,
 					"high_entropy": cred.HighEntropy,
 					"format":       cred.Format,
-				}))
+					"value_hash":   cred.ValueHash,
+				}
+				// Raw value only when the operator explicitly opts in — the
+				// hash above is sufficient for the chain join.
+				if opts.IncludeCredentialValues {
+					credProps["value"] = cred.Value
+				}
+				addNode(common.NewNode(credID, []string{"Credential"}, credProps))
 
 				authWeight := identityAuthWeight(identityType)
 				addEdge(common.NewEdge(serverID, identityID, "AUTHENTICATES_WITH", "MCPServer", "Identity",

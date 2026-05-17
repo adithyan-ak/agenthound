@@ -7,7 +7,7 @@ AgentHound ships as **two binaries**: `agenthound` (collector) and `agenthound-s
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
 | `--output` | `AGENTHOUND_OUTPUT` | (auto-named in CWD) | Write scan JSON to this path. Use `-` for stdout (pipe target). When unset, defaults to `./scan-<scan_id>.json` in the current working directory. |
-| `--concurrency` | `AGENTHOUND_CONCURRENCY` | `0` (auto) | Max parallel collector workers. |
+| `--concurrency` | `AGENTHOUND_CONCURRENCY` | `5` | Max parallel collector workers. |
 | `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error. |
 | `--quiet` | `AGENTHOUND_QUIET=1` | `false` | Suppress non-error log output. |
 | `--log-json` | `AGENTHOUND_LOG_JSON=1` | `false` | Emit logs as JSON instead of text. |

@@ -168,6 +168,26 @@ agenthound scan --mcp --url https://mcp.example.com   # Single HTTP MCP server
 agenthound scan --a2a --targets url1,url2             # A2A agents
 ```
 
+## Network scan + Looter (v0.2)
+
+The v0.2 offensive surface adds active network discovery for AI services and the first concrete `Looter` action. The network scanner sweeps a CIDR for AI services on standard ports and dispatches fingerprinters at each open port; the LiteLLM Looter extracts upstream provider credentials (OpenAI, Anthropic, AWS Bedrock, Azure, Cohere) from a master-key-authenticated LiteLLM gateway:
+
+```bash
+# Discover AI services on a private CIDR (Ollama on 11434, LiteLLM on 4000, ...).
+agenthound scan 10.0.0.0/24
+
+# Public IP space requires explicit override + interactive AUTHORIZED prompt + watermark.
+agenthound scan 1.1.1.1 --allow-public-targets --authorization-file ./engagement.pdf
+
+# Loot a discovered LiteLLM gateway. value_hash on every emitted Credential is the
+# cross-collector merge primitive — same secret seen as an env var by the Config
+# Collector lights up the credential-chain finding in the analysis server.
+agenthound loot 10.0.0.10:4000 --type litellm \
+    --master-key sk-... --engagement-id ENG-001 --output -
+```
+
+See [`docs/scanner.md`](docs/scanner.md) for the full network scanner guide (legal warnings, port set, safety controls) and [`docs/loot-litellm.md`](docs/loot-litellm.md) for the LiteLLM Looter audit-trail residue caveat.
+
 ## Workflow
 
 The collector writes JSON. The operator's box ingests it. There are three equivalent paths:
@@ -235,11 +255,11 @@ The collector is a **single static binary** with the three enumeration modules s
 
 ### The graph
 
-AgentHound builds a directed trust graph with **12 node types** and **13 direct edge types** (plus 9 post-processed composite edge types):
+AgentHound builds a directed trust graph with **12 collector-produced node types** (plus 2 synthetic) and **13 raw edge types** (plus 8 post-processed composite edge types — 21 total):
 
 - **Nodes:** `AgentInstance`, `MCPServer`, `MCPTool`, `MCPResource`, `MCPPrompt`, `A2AAgent`, `A2ASkill`, `Identity`, `Credential`, `Host`, `ConfigFile`, `InstructionFile`
 - **Direct edges:** `TRUSTS_SERVER`, `PROVIDES_TOOL`, `PROVIDES_RESOURCE`, `PROVIDES_PROMPT`, `ADVERTISES_SKILL`, `DELEGATES_TO`, `AUTHENTICATES_WITH`, `USES_CREDENTIAL`, `RUNS_ON`, `CONFIGURED_IN`, `HAS_ENV_VAR`, `LOADS_INSTRUCTIONS`, `SAME_AUTH_DOMAIN`
-- **Composite edges (computed by post-processors):** `HAS_ACCESS_TO`, `CAN_EXECUTE`, `CAN_REACH`, `CAN_EXFILTRATE_VIA`, `SHADOWS`, `POISONED_DESCRIPTION`, `POISONED_INSTRUCTIONS`, `CAN_IMPERSONATE`, cross-protocol `CAN_REACH`
+- **Composite edges (computed by post-processors):** `HAS_ACCESS_TO`, `CAN_EXECUTE`, `CAN_REACH`, `CAN_EXFILTRATE_VIA`, `SHADOWS`, `POISONED_DESCRIPTION`, `POISONED_INSTRUCTIONS`, `CAN_IMPERSONATE`. The cross-protocol A2A→MCP traversal reuses the `CAN_REACH` label with `source_collector` annotations.
 
 Node IDs are deterministic SHA-256 hashes — the same `MCPServer` discovered by the Config Collector and the MCP Collector merges into a single node by ID.
 

@@ -1,6 +1,10 @@
 package action
 
-import "context"
+import (
+	"context"
+
+	"github.com/adithyan-ak/agenthound/sdk/ingest"
+)
 
 // Fingerprinter probes a single Target to identify the running service
 // (kind, version, auth posture). Output feeds enumeration and module
@@ -11,6 +15,27 @@ type Fingerprinter interface {
 	Fingerprint(ctx context.Context, t Target) (*FingerprintResult, error)
 }
 
-// FingerprintResult is a v0 stub. The concrete shape lands with the first
-// Fingerprinter implementation; treat as opaque until then.
-type FingerprintResult struct{}
+// FingerprintResult reports the outcome of a single fingerprinter
+// dispatch against a Target. Matched is true only when the probe(s)
+// completed successfully and every matcher passed; partial matches
+// return Matched=false with no error (a fingerprinter saying "this is
+// not my service" is normal, not a system failure).
+//
+// IngestData carries the node(s) and edge(s) the fingerprinter wants
+// merged into the scan output. v0.2 fingerprinters emit at most one
+// node — the per-service multi-labeled :ServiceKind:AIService node —
+// plus zero edges. Future fingerprinters that discover additional
+// structure (e.g. Open WebUI → Ollama backend) will emit edges via
+// IngestData as well.
+//
+// Properties duplicates the IngestData node properties for caller
+// convenience (e.g. logging, the scanner's stderr summary). Treat
+// IngestData as the canonical source of truth.
+type FingerprintResult struct {
+	Matched     bool
+	ServiceKind string
+	Version     string
+	AuthMethod  string
+	IngestData  *ingest.IngestData
+	Properties  map[string]string
+}

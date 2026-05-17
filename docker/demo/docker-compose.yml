@@ -1,0 +1,86 @@
+# AgentHound v0.2 demo lab.
+#
+# Two AI services on a private subnet plus an "operator" container with
+# a Claude Desktop config that references LiteLLM via an env var. The
+# Config Collector + LiteLLM Looter together produce the credential-chain
+# finding — matching value_hash on the LITELLM_MASTER_KEY env var emitted
+# by the config side and the master Credential emitted by the looter.
+#
+# Subnet 172.20.0.0/24:
+#   172.20.0.10 — ollama       (port 11434)
+#   172.20.0.20 — litellm-stub (port 4000) — see Dockerfile in same dir
+#   172.20.0.30 — operator     (mounted MCP config; not serving anything)
+#
+# Run end-to-end demo:
+#
+#   docker compose -f docker/demo/docker-compose.yml up -d
+#   ./scripts/seed-demo.sh
+#   open http://localhost:8080  # connects to the analysis server, not the lab
+#
+# v0.2 ships with a stub LiteLLM (a small Python FastAPI app) rather
+# than the real LiteLLM image because the real image needs a Postgres
+# backend and provider keys we'd have to hand-roll. The stub serves
+# /health/liveliness, /model/info, and /key/list with deterministic
+# payloads so the fingerprinter and looter both succeed without
+# external dependencies.
+
+version: "3.9"
+
+networks:
+  demo-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agenthound-demo-ollama
+    networks:
+      demo-lab:
+        ipv4_address: 172.20.0.10
+    # Bind on 0.0.0.0 inside the container's network namespace; the
+    # demo CIDR is private and the only way to reach this is through
+    # the agenthound scanner running against 172.20.0.0/24.
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  litellm-stub:
+    build:
+      context: ./litellm-stub
+    container_name: agenthound-demo-litellm
+    networks:
+      demo-lab:
+        ipv4_address: 172.20.0.20
+    environment:
+      - LITELLM_MASTER_KEY=sk-DEMO-CHAIN-KEY-NOT-REAL
+    # The stub binds its FastAPI app on :4000 inside the container; the
+    # scanner detects it via the LiteLLM fingerprinter rule.
+    healthcheck:
+      test: ["CMD", "curl", "-fsSL", "http://127.0.0.1:4000/health/liveliness"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  operator:
+    image: alpine:3.20
+    container_name: agenthound-demo-operator
+    networks:
+      demo-lab:
+        ipv4_address: 172.20.0.30
+    # The operator container holds an MCP client config that
+    # references the LiteLLM master key by env var. The Config
+    # Collector reads this when seed-demo.sh runs (mounting the
+    # config into the host's filesystem), emitting a :Credential node
+    # whose value_hash matches the master Credential the LiteLLM
+    # Looter emits — the cross-collector merge that lights up the
+    # credential-chain finding.
+    volumes:
+      - ./operator-config:/operator/config:ro
+    command: ["sh", "-c", "tail -f /dev/null"]

@@ -64,6 +64,15 @@ func init() {
 			Cypher:      CypherCredentialChain,
 			OWASPMap:    []string{"MCP03", "ASI04"},
 		},
+		"litellm-credential-leak": {
+			ID:          "litellm-credential-leak",
+			Name:        "LiteLLM Credential Leak",
+			Description: "Finds upstream provider credentials reachable through a LiteLLM gateway whose master key was discovered in agent config (cross-collector value_hash join).",
+			Category:    "Critical Paths",
+			Severity:    "critical",
+			Cypher:      CypherLitellmCredentialLeak,
+			OWASPMap:    []string{"MCP03", "ASI04"},
+		},
 
 		// Vulnerabilities
 		"poisoned-tools": {

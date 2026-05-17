@@ -1,31 +1,64 @@
 package ingest
 
-// AllowedNodeKinds are the 12 collector-produced node kinds accepted in ingest input.
+// AllowedNodeKinds are the 22 collector-produced node kinds accepted in ingest
+// input. The first 12 are the v0.1 set; the next 8 are per-service AI-service
+// kinds added in v0.2; AIService is the multi-label umbrella every per-service
+// node also carries; AIModel is the v0.3 model-artifact kind emitted by the
+// Ollama Looter (one node per model surfaced via /api/tags + /api/show).
 var AllowedNodeKinds = map[string]bool{
-	"MCPServer":       true,
-	"MCPTool":         true,
-	"MCPResource":     true,
-	"MCPPrompt":       true,
-	"A2AAgent":        true,
-	"A2ASkill":        true,
-	"AgentInstance":   true,
-	"Identity":        true,
-	"Credential":      true,
-	"Host":            true,
-	"ConfigFile":      true,
-	"InstructionFile": true,
+	"MCPServer":         true,
+	"MCPTool":           true,
+	"MCPResource":       true,
+	"MCPPrompt":         true,
+	"A2AAgent":          true,
+	"A2ASkill":          true,
+	"AgentInstance":     true,
+	"Identity":          true,
+	"Credential":        true,
+	"Host":              true,
+	"ConfigFile":        true,
+	"InstructionFile":   true,
+	"OllamaInstance":    true,
+	"VLLMInstance":      true,
+	"QdrantInstance":    true,
+	"MLflowServer":      true,
+	"LiteLLMGateway":    true,
+	"JupyterServer":     true,
+	"LangServeApp":      true,
+	"OpenWebUIInstance": true,
+	"AIService":         true,
+	"AIModel":           true,
 }
 
-// AllNodeLabels includes all 14 node labels (12 collector + 2 synthetic) for Neo4j schema constraints.
+// AllNodeLabels includes all 24 node labels (22 collector + 2 synthetic) for
+// Neo4j schema operations. Schema-init logic skips labels in UmbrellaLabels
+// when creating uniqueness constraints — see UmbrellaLabels for the why.
 var AllNodeLabels = []string{
 	"MCPServer", "MCPTool", "MCPResource", "MCPPrompt",
 	"A2AAgent", "A2ASkill", "AgentInstance",
 	"Identity", "Credential", "Host",
 	"ConfigFile", "InstructionFile",
+	"OllamaInstance", "VLLMInstance", "QdrantInstance", "MLflowServer",
+	"LiteLLMGateway", "JupyterServer", "LangServeApp", "OpenWebUIInstance",
+	"AIService", "AIModel",
 	"ResourceGroup", "TrustZone",
 }
 
-// RawEdgeKinds are the 13 collector-produced edge kinds accepted in ingest input.
+// UmbrellaLabels are labels that nodes carry as a multi-label *companion* to a
+// per-kind label rather than as their primary identity. The schema-init loop
+// in server/internal/graph/schema.go MUST skip these when creating
+// `objectid IS UNIQUE` constraints — every per-service node also carries
+// :AIService, so a uniqueness constraint on the umbrella would falsely
+// collide between distinct services that happen to share an objectid string
+// across different per-kind hash inputs.
+var UmbrellaLabels = map[string]bool{
+	"AIService": true,
+}
+
+// RawEdgeKinds are the 16 collector-produced edge kinds accepted in ingest
+// input. EXPOSES is reserved in v0.2 for v0.3 fingerprinters; EXPOSES_CREDENTIAL
+// is emitted by the v0.2 LiteLLM Looter; PROVIDES_MODEL is emitted by the v0.3
+// Ollama Looter (OllamaInstance → AIModel).
 var RawEdgeKinds = map[string]bool{
 	"TRUSTS_SERVER":      true,
 	"PROVIDES_TOOL":      true,
@@ -40,9 +73,12 @@ var RawEdgeKinds = map[string]bool{
 	"HAS_ENV_VAR":        true,
 	"LOADS_INSTRUCTIONS": true,
 	"SAME_AUTH_DOMAIN":   true,
+	"EXPOSES":            true,
+	"EXPOSES_CREDENTIAL": true,
+	"PROVIDES_MODEL":     true,
 }
 
-// AllowedEdgeKinds includes all 21 edge kinds (13 raw + 8 composite) for Neo4j writer dispatch.
+// AllowedEdgeKinds includes all 24 edge kinds (16 raw + 8 composite) for Neo4j writer dispatch.
 var AllowedEdgeKinds = map[string]bool{
 	// Raw (collector-produced)
 	"TRUSTS_SERVER":      true,
@@ -58,6 +94,9 @@ var AllowedEdgeKinds = map[string]bool{
 	"HAS_ENV_VAR":        true,
 	"LOADS_INSTRUCTIONS": true,
 	"SAME_AUTH_DOMAIN":   true,
+	"EXPOSES":            true,
+	"EXPOSES_CREDENTIAL": true,
+	"PROVIDES_MODEL":     true,
 	// Composite (post-processor produced)
 	"HAS_ACCESS_TO":         true,
 	"CAN_EXECUTE":           true,
@@ -106,6 +145,9 @@ var EdgeKindEndpoints = map[string]EdgeEndpoints{
 	"POISONED_DESCRIPTION":  {SourceKinds: []string{"MCPTool"}, TargetKinds: []string{"MCPTool"}},
 	"CAN_IMPERSONATE":       {SourceKinds: []string{"A2AAgent"}, TargetKinds: []string{"A2AAgent"}},
 	"POISONED_INSTRUCTIONS": {SourceKinds: []string{"InstructionFile"}, TargetKinds: []string{"InstructionFile"}},
+	"EXPOSES":               {SourceKinds: []string{"AIService"}, TargetKinds: []string{"AIService"}},
+	"EXPOSES_CREDENTIAL":    {SourceKinds: []string{"AIService"}, TargetKinds: []string{"Credential"}},
+	"PROVIDES_MODEL":        {SourceKinds: []string{"OllamaInstance"}, TargetKinds: []string{"AIModel"}},
 }
 
 // ResolveEdgeEndpoints returns the source and target node kinds for an edge,

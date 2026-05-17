@@ -26,6 +26,23 @@ const COMPONENT_KEYS: Record<string, { label: string; key: string }[]> = {
     { label: "Access Sensitivity", key: "access_sensitivity_risk" },
     { label: "Input Validation", key: "input_validation_risk" },
   ],
+  // v0.3 — AI service kinds. The component keys below are populated by the
+  // v0.3 RiskScore post-processor extension; until that lands, values
+  // surface as 0 (honest signal — "we know about this kind but have no
+  // computed risk yet"). This eliminates the "Risk breakdown not
+  // available" fallback for the two v0.2 emitters.
+  OllamaInstance: [
+    { label: "Anonymous Exposure", key: "anonymous_exposure_risk" },
+    { label: "Model Inventory", key: "model_inventory_risk" },
+    { label: "Compute Exposure", key: "compute_exposure_risk" },
+    { label: "Weight Exfil Risk", key: "weight_exfil_risk" },
+  ],
+  LiteLLMGateway: [
+    { label: "Master Key Exposure", key: "master_key_risk" },
+    { label: "Upstream Provider Fanout", key: "upstream_provider_risk" },
+    { label: "Virtual Key Sprawl", key: "virtual_key_risk" },
+    { label: "Audit Trail Coverage", key: "audit_trail_risk" },
+  ],
 };
 
 const SUPPORTED_KINDS = new Set(Object.keys(COMPONENT_KEYS));

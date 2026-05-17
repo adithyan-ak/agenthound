@@ -8,6 +8,7 @@
 #      packages must NOT land in the collector.
 #
 # Step 5: advisory. Step 7: blocking via deps-check.sh integration.
+archive/tar
 bufio
 bytes
 cmp
@@ -100,7 +101,24 @@ github.com/adithyan-ak/agenthound/collector/cmd/agenthound
 github.com/adithyan-ak/agenthound/collector/internal/clientcfg
 github.com/adithyan-ak/agenthound/modules/a2a
 github.com/adithyan-ak/agenthound/modules/config
+github.com/adithyan-ak/agenthound/modules/instructionpoison
+github.com/adithyan-ak/agenthound/modules/jupyterfp
+github.com/adithyan-ak/agenthound/modules/jupyterloot
+github.com/adithyan-ak/agenthound/modules/langservefp
 github.com/adithyan-ak/agenthound/modules/mcp
+github.com/adithyan-ak/agenthound/modules/litellmfp
+github.com/adithyan-ak/agenthound/modules/litellmloot
+github.com/adithyan-ak/agenthound/modules/mcpconfigimplant
+github.com/adithyan-ak/agenthound/modules/mcppoison
+github.com/adithyan-ak/agenthound/modules/mlflowfp
+github.com/adithyan-ak/agenthound/modules/mlflowloot
+github.com/adithyan-ak/agenthound/modules/networkscan
+github.com/adithyan-ak/agenthound/modules/ollamafp
+github.com/adithyan-ak/agenthound/modules/ollamaloot
+github.com/adithyan-ak/agenthound/modules/openwebuifp
+github.com/adithyan-ak/agenthound/modules/protoscan
+github.com/adithyan-ak/agenthound/modules/qdrantfp
+github.com/adithyan-ak/agenthound/modules/vllmfp
 github.com/adithyan-ak/agenthound/sdk/action
 github.com/adithyan-ak/agenthound/sdk/collector
 github.com/adithyan-ak/agenthound/sdk/common
@@ -212,6 +230,7 @@ net/textproto
 net/url
 os
 os/exec
+os/user
 path
 path/filepath
 reflect

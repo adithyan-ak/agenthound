@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	apimw "github.com/adithyan-ak/agenthound/server/internal/api/middleware"
@@ -85,4 +87,44 @@ func TestServer_GatesMutatingEndpointsWithToken(t *testing.T) {
 			t.Errorf("status = 401 with valid token; middleware should have admitted the request")
 		}
 	})
+}
+
+// TestServer_ServesUIFallbackWhenDistEmpty asserts that when the binary
+// is built with only the ui/dist/.gitkeep marker (no real React UI), the
+// server serves the embedded "UI not built" page instead of returning a
+// 500. This guards against the footgun where `go build` succeeds but the
+// resulting server serves a broken page.
+//
+// In CI and production, ui-build runs first and ui/dist contains a real
+// index.html, so this test exercises only the fallback branch. We detect
+// which branch is active by inspecting the response body.
+func TestServer_ServesUIFallbackOrRealUI(t *testing.T) {
+	srv := NewServer(ServerDeps{})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("GET /: Content-Type = %q, want text/html", ct)
+	}
+	body, err := io.ReadAll(rec.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(body) == 0 {
+		t.Error("GET /: empty body; expected either real UI or fallback page")
+	}
+	// Either the real UI (contains React mount point) or the fallback
+	// (contains the "UI not built" heading) is acceptable. Anything else
+	// — empty page, raw error, 404 — is a regression.
+	hasReactRoot := strings.Contains(string(body), `id="root"`)
+	hasFallback := strings.Contains(string(body), "UI not built")
+	if !hasReactRoot && !hasFallback {
+		t.Errorf("GET /: body is neither real UI nor fallback page; first 200 bytes: %q",
+			string(body[:min(len(body), 200)]))
+	}
 }

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -237,4 +238,155 @@ func TestEdgeCypherForKinds(t *testing.T) {
 			t.Error("expected label-free target MATCH")
 		}
 	})
+}
+
+// TestGroupNodesByKindTuple is the v0.2 multi-label regression guard. The
+// design (kinds.go: AIService umbrella, schema.go: skip umbrella constraints,
+// writer.go: MERGE on per-kind + SET umbrella) only works if the writer's
+// grouping function produces a separate Cypher template for every distinct
+// (primary, sorted-extras) tuple.
+func TestGroupNodesByKindTuple(t *testing.T) {
+	t.Run("single-label nodes group by primary kind", func(t *testing.T) {
+		nodes := []ingest.Node{
+			{ID: "a1", Kinds: []string{"MCPServer"}},
+			{ID: "a2", Kinds: []string{"MCPServer"}},
+			{ID: "a3", Kinds: []string{"MCPTool"}},
+		}
+		grouped := groupNodesByKindTuple(nodes)
+
+		if len(grouped) != 2 {
+			t.Fatalf("expected 2 groups, got %d", len(grouped))
+		}
+		mcpSrv, ok := grouped["MCPServer"]
+		if !ok {
+			t.Fatal("missing MCPServer group")
+		}
+		if mcpSrv.PrimaryKind != "MCPServer" || len(mcpSrv.ExtraLabels) != 0 || len(mcpSrv.Nodes) != 2 {
+			t.Errorf("MCPServer: got primary=%q extras=%v nodes=%d, want MCPServer/[]/2",
+				mcpSrv.PrimaryKind, mcpSrv.ExtraLabels, len(mcpSrv.Nodes))
+		}
+	})
+
+	t.Run("multi-label nodes group by primary+sorted-extras", func(t *testing.T) {
+		nodes := []ingest.Node{
+			{ID: "g1", Kinds: []string{"LiteLLMGateway", "AIService"}},
+			{ID: "g2", Kinds: []string{"LiteLLMGateway", "AIService"}},
+			{ID: "o1", Kinds: []string{"OllamaInstance", "AIService"}},
+		}
+		grouped := groupNodesByKindTuple(nodes)
+
+		if len(grouped) != 2 {
+			t.Fatalf("expected 2 groups, got %d", len(grouped))
+		}
+		litellm, ok := grouped["LiteLLMGateway+AIService"]
+		if !ok {
+			t.Fatal("missing LiteLLMGateway+AIService group")
+		}
+		if litellm.PrimaryKind != "LiteLLMGateway" {
+			t.Errorf("primary: got %q, want LiteLLMGateway", litellm.PrimaryKind)
+		}
+		if len(litellm.ExtraLabels) != 1 || litellm.ExtraLabels[0] != "AIService" {
+			t.Errorf("extras: got %v, want [AIService]", litellm.ExtraLabels)
+		}
+		if len(litellm.Nodes) != 2 {
+			t.Errorf("nodes: got %d, want 2", len(litellm.Nodes))
+		}
+	})
+
+	t.Run("kinds [A,B] and [B,A] are NOT merged (primary kind matters)", func(t *testing.T) {
+		// LiteLLMGateway+AIService and AIService+LiteLLMGateway encode different
+		// primary kinds. The first uses LiteLLMGateway as the merge key (correct);
+		// the second uses AIService as the merge key (incorrect — umbrella has no
+		// uniqueness constraint). They MUST stay distinct so a malformed emitter
+		// can't silently pollute graphs.
+		nodes := []ingest.Node{
+			{ID: "ok", Kinds: []string{"LiteLLMGateway", "AIService"}},
+			{ID: "bad", Kinds: []string{"AIService", "LiteLLMGateway"}},
+		}
+		grouped := groupNodesByKindTuple(nodes)
+		if len(grouped) != 2 {
+			t.Fatalf("expected 2 groups, got %d", len(grouped))
+		}
+	})
+
+	t.Run("empty Kinds defaults to Node primary", func(t *testing.T) {
+		nodes := []ingest.Node{{ID: "x", Kinds: nil}}
+		grouped := groupNodesByKindTuple(nodes)
+		if g, ok := grouped["Node"]; !ok || g.PrimaryKind != "Node" {
+			t.Errorf("expected Node group, got %v", grouped)
+		}
+	})
+}
+
+func TestNodeCypherForKindTuple(t *testing.T) {
+	t.Run("single-label produces a plain MERGE", func(t *testing.T) {
+		c := nodeCypherForKindTuple("MCPServer", nil)
+		if !strings.Contains(c, "MERGE (n:MCPServer {objectid: node.id})") {
+			t.Errorf("expected MERGE on MCPServer; got:\n%s", c)
+		}
+		if strings.Contains(c, "SET n:") {
+			t.Errorf("expected no extra SET n:Label clauses for single-label node; got:\n%s", c)
+		}
+	})
+
+	t.Run("multi-label appends SET n:Label per umbrella", func(t *testing.T) {
+		c := nodeCypherForKindTuple("LiteLLMGateway", []string{"AIService"})
+		if !strings.Contains(c, "MERGE (n:LiteLLMGateway {objectid: node.id})") {
+			t.Errorf("MERGE primary: got:\n%s", c)
+		}
+		if !strings.Contains(c, "SET n:AIService") {
+			t.Errorf("missing SET n:AIService; got:\n%s", c)
+		}
+		if !strings.Contains(c, "RETURN count(*) AS written") {
+			t.Errorf("missing RETURN; got:\n%s", c)
+		}
+	})
+
+	t.Run("multiple umbrella labels stack", func(t *testing.T) {
+		c := nodeCypherForKindTuple("LiteLLMGateway", []string{"AIService", "Reachable"})
+		if !strings.Contains(c, "SET n:AIService") {
+			t.Error("missing SET n:AIService")
+		}
+		if !strings.Contains(c, "SET n:Reachable") {
+			t.Error("missing SET n:Reachable")
+		}
+	})
+}
+
+// TestWriteNodes_MultiLabel asserts the end-to-end behavior via the in-memory
+// execFn recorder: a multi-label node produces exactly one Cypher batch whose
+// statement contains both the per-kind MERGE and the umbrella SET. This is
+// the regression guard that catches a future refactor that might silently
+// drop umbrella labels and break the credential-chain demo.
+func TestWriteNodes_MultiLabel(t *testing.T) {
+	var captured []string
+	w := &Writer{
+		batchSize: defaultBatchSize,
+		execFn: func(_ context.Context, cypher string, _ map[string]any) (int, error) {
+			captured = append(captured, cypher)
+			return 1, nil
+		},
+	}
+
+	nodes := []ingest.Node{
+		{ID: "sha256:llm1", Kinds: []string{"LiteLLMGateway", "AIService"},
+			Properties: map[string]any{"endpoint": "http://lab:4000"}},
+	}
+	written, err := w.WriteNodes(context.Background(), nodes, "scan-multilabel-test")
+	if err != nil {
+		t.Fatalf("WriteNodes: %v", err)
+	}
+	if written != 1 {
+		t.Errorf("written: got %d, want 1", written)
+	}
+	if len(captured) != 1 {
+		t.Fatalf("expected 1 cypher batch, got %d", len(captured))
+	}
+	c := captured[0]
+	if !strings.Contains(c, "MERGE (n:LiteLLMGateway {objectid: node.id})") {
+		t.Errorf("missing MERGE on LiteLLMGateway; cypher:\n%s", c)
+	}
+	if !strings.Contains(c, "SET n:AIService") {
+		t.Errorf("missing SET n:AIService; cypher:\n%s", c)
+	}
 }
