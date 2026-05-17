@@ -1,0 +1,186 @@
+// Package networkscan implements AgentHound's narrow network scanner for AI
+// services. The scanner is intentionally NOT a general-purpose tool — it
+// covers a fixed set of high-value AI/ML service ports (Ollama, vLLM,
+// Qdrant, MLflow, LiteLLM, Jupyter, LangServe, Open WebUI). For everything
+// else, use Nmap.
+package networkscan
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"net/netip"
+	"os"
+	"strings"
+
+	"github.com/adithyan-ak/agenthound/sdk/common"
+)
+
+// MaxCIDRBitsWithoutFlag caps unguarded CIDR expansion. Anything larger
+// than /16 (IPv4) or /112 (IPv6, ~64k hosts) requires --allow-large-cidr
+// because the operator probably did not mean to scan that much address
+// space. The cap is on host count: 2^16 = 65,536.
+const (
+	MaxIPv4PrefixLen = 16
+	MaxIPv6PrefixLen = 112
+)
+
+// ExpandError categorises why a target was rejected. Callers can match on
+// the sentinel to distinguish operator error (e.g. forgot a flag) from
+// hostile inputs (e.g. trying to scan multicast).
+var (
+	ErrLargeCIDR        = errors.New("CIDR is larger than the safe cap; pass --allow-large-cidr to override")
+	ErrPublicTarget     = errors.New("public IP space refused; pass --allow-public-targets and complete the AUTHORIZED prompt")
+	ErrLinkLocal        = errors.New("link-local addresses cannot be scanned (cannot route off-host)")
+	ErrMulticast        = errors.New("multicast addresses are not unicast scanning targets")
+	ErrInvalidCIDR      = errors.New("invalid CIDR / host / target spec")
+	ErrTargetsFileEmpty = errors.New("targets file contains no valid entries")
+)
+
+// ExpandOptions controls the safety gates on target expansion. The default
+// zero value is strict: refuse public IP space, refuse CIDRs larger than
+// the safe cap. Callers explicitly opt-in to looser settings.
+type ExpandOptions struct {
+	AllowLargeCIDR     bool
+	AllowPublicTargets bool
+}
+
+// Expand turns a single spec (CIDR / host / IP / file://...) into a
+// bounded slice of host strings. It refuses link-local, multicast, and
+// (by default) public IP space. Hostnames are returned unchanged — the
+// scanner resolves them at probe time.
+//
+// The result is materialized rather than streamed. Callers that need to
+// scan a /16 with the override flag should be prepared for ~65k entries.
+func Expand(spec string, opts ExpandOptions) ([]string, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil, fmt.Errorf("%w: empty spec", ErrInvalidCIDR)
+	}
+
+	// File-of-targets: file://path or @path.
+	if strings.HasPrefix(spec, "file://") {
+		return expandFile(strings.TrimPrefix(spec, "file://"), opts)
+	}
+	if strings.HasPrefix(spec, "@") {
+		return expandFile(strings.TrimPrefix(spec, "@"), opts)
+	}
+
+	// CIDR notation: x.x.x.x/N or x:x::/N.
+	if strings.Contains(spec, "/") {
+		return expandCIDR(spec, opts)
+	}
+
+	// Single IP or hostname.
+	return expandSingle(spec, opts)
+}
+
+// expandSingle classifies a single host token and returns it as a one-element
+// slice if it passes the safety gates.
+func expandSingle(host string, opts ExpandOptions) ([]string, error) {
+	info := common.ClassifyHost(host)
+	if info.IsLinkLocal {
+		return nil, fmt.Errorf("%w: %s", ErrLinkLocal, host)
+	}
+	if info.IsMulticast {
+		return nil, fmt.Errorf("%w: %s", ErrMulticast, host)
+	}
+	if info.IsPublic && !opts.AllowPublicTargets {
+		return nil, fmt.Errorf("%w: %s", ErrPublicTarget, host)
+	}
+	return []string{host}, nil
+}
+
+// expandCIDR enumerates every host in the CIDR after applying the safety
+// gates. The check happens twice: once on the network address itself
+// (catches link-local/multicast/public network bases) and again per-IP as
+// it is enumerated (catches CIDRs that span across classifications, which
+// shouldn't happen for normal RFC1918 ranges but does happen if the
+// operator types something like 169.254.0.0/15 by mistake).
+func expandCIDR(spec string, opts ExpandOptions) ([]string, error) {
+	prefix, err := netip.ParsePrefix(spec)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidCIDR, err)
+	}
+
+	bits := prefix.Bits()
+	maxLen := MaxIPv4PrefixLen
+	if prefix.Addr().Is6() {
+		maxLen = MaxIPv6PrefixLen
+	}
+	if bits < maxLen && !opts.AllowLargeCIDR {
+		return nil, fmt.Errorf("%w: %s (prefix /%d, cap is /%d)",
+			ErrLargeCIDR, spec, bits, maxLen)
+	}
+
+	// Pre-flight check on the network address.
+	netAddr := prefix.Addr().String()
+	netInfo := common.ClassifyHost(netAddr)
+	if netInfo.IsLinkLocal {
+		return nil, fmt.Errorf("%w: %s", ErrLinkLocal, spec)
+	}
+	if netInfo.IsMulticast {
+		return nil, fmt.Errorf("%w: %s", ErrMulticast, spec)
+	}
+	if netInfo.IsPublic && !opts.AllowPublicTargets {
+		return nil, fmt.Errorf("%w: %s", ErrPublicTarget, spec)
+	}
+
+	// Enumerate. For /32 (IPv4) or /128 (IPv6) just return the single addr.
+	addr := prefix.Masked().Addr()
+	var out []string
+	for prefix.Contains(addr) {
+		// Per-address gate — catches CIDRs that span classifications.
+		info := common.ClassifyHost(addr.String())
+		if info.IsLinkLocal {
+			return nil, fmt.Errorf("%w: %s within %s", ErrLinkLocal, addr, spec)
+		}
+		if info.IsMulticast {
+			return nil, fmt.Errorf("%w: %s within %s", ErrMulticast, addr, spec)
+		}
+		out = append(out, addr.String())
+		next := addr.Next()
+		if !next.IsValid() {
+			break
+		}
+		addr = next
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%w: %s expanded to zero hosts", ErrInvalidCIDR, spec)
+	}
+	return out, nil
+}
+
+// expandFile reads a newline-separated list of specs (one per line), runs
+// each through Expand recursively, and concatenates the results. Comments
+// (`# ...`) and empty lines are skipped.
+func expandFile(path string, opts ExpandOptions) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("targets file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	var out []string
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		hosts, err := Expand(line, opts)
+		if err != nil {
+			return nil, fmt.Errorf("targets file %s: %w", path, err)
+		}
+		out = append(out, hosts...)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("targets file %s: %w", path, err)
+	}
+	if len(out) == 0 {
+		return nil, ErrTargetsFileEmpty
+	}
+	return out, nil
+}

@@ -4,6 +4,32 @@ package prebuilt
 
 // Critical Paths
 
+// CypherLitellmCredentialLeak surfaces the full v0.2 credential-chain
+// finding: an Agent instance whose Config Collector emission has the
+// same value_hash as a LiteLLM master-key Credential, and that
+// LiteLLM gateway exposes upstream provider keys. The
+// cross_service_credential_chain post-processor pre-populates the
+// agent → upstream-key CAN_REACH edge; this query joins the path
+// for human-readable findings output.
+const CypherLitellmCredentialLeak = `
+MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s:MCPServer)-[:HAS_ENV_VAR]->(c1:Credential)
+WHERE c1.value_hash IS NOT NULL
+MATCH (gw:LiteLLMGateway)-[:EXPOSES_CREDENTIAL]->(c1master:Credential)
+WHERE c1master.value_hash = c1.value_hash AND c1master.objectid <> c1.objectid
+MATCH (gw)-[:EXPOSES_CREDENTIAL]->(c2:Credential)
+WHERE c2.type IN ['apiKey', 'virtual_key']
+RETURN a.name AS agent_name,
+       s.name AS via_server,
+       c1.name AS via_credential,
+       gw.name AS via_gateway,
+       gw.endpoint AS gateway_endpoint,
+       c2.name AS upstream_credential,
+       coalesce(c2.provider, 'unknown') AS upstream_provider,
+       a.objectid AS agent_id,
+       gw.objectid AS gateway_id,
+       c2.objectid AS upstream_credential_id
+ORDER BY a.name, gw.name`
+
 const CypherAgentsShellAccess = `
 MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s:MCPServer)-[:PROVIDES_TOOL]->(t:MCPTool)
 WHERE ANY(cap IN t.capability_surface WHERE cap = 'shell_access')

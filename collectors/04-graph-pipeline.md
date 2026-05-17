@@ -1,5 +1,9 @@
 # Graph Construction Pipeline — Technical Implementation Specification
 
+> **Status: historical design spec, kept for reference.**
+> This document is the original design spec for the ingest + post-processing pipeline. Architecture (validate → normalize → dedupe → write → post-process), the eight composite edges and their dependency order, risk-scoring weights, rug-pull detection, and the Cypher path-query patterns are all still load-bearing.
+> One area has drifted: the API auth model in §9 ("admin only", "RBAC") describes the v0.1.0 multi-user posture that was removed in the two-binary split. The current model is single-user with a localhost bearer token gating mutating endpoints — see [`docs/security.md`](../docs/security.md) and [`docs/api-reference.md`](../docs/api-reference.md). The post-processor at [`server/internal/analysis/processors/poisoned_instructions.go`](../server/internal/analysis/processors/poisoned_instructions.go) and the `InstructionFile` node label (in `sdk/ingest.AllNodeLabels`) extend the original eight composite edges with a ninth, `POISONED_INSTRUCTIONS`. [`docs/graph-model.md`](../docs/graph-model.md) is canonical.
+
 ## 1. Purpose
 
 This document specifies how three isolated collector outputs merge into a single directed graph, how post-processing computes composite edges (`CAN_REACH`, `CAN_EXFILTRATE_VIA`, `SHADOWS`, `POISONED_DESCRIPTION`), and how shortest-path queries discover attack chains across MCP and A2A protocol boundaries.
@@ -149,7 +153,7 @@ This is the same merge behavior [BloodHound uses](https://specterops.io/blog/202
 
 ### 3.4 Neo4j Schema (Created at First Boot)
 
-Schema initialization detects Neo4j version and uses the appropriate syntax. See `plan/phase01.md` Section 4.1 for both Neo4j 5.x (`FOR...REQUIRE`) and 4.4 (`ON...ASSERT`) constraint variants.
+Schema initialization detects Neo4j version and uses the appropriate syntax — Neo4j 5.x uses `FOR...REQUIRE` and 4.4 uses `ON...ASSERT`. See `server/internal/graph/schema.go` for the implementation.
 
 ```cypher
 // Neo4j 5.x syntax (use ON...ASSERT for 4.4):

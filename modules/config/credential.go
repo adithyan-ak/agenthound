@@ -8,9 +8,17 @@ import (
 )
 
 type CredentialInfo struct {
-	Type        string // "envVar", "hardcoded", "vaultRef", "inputPrompt"
-	Name        string
-	Value       string // SHA-256 hash by default, actual value only if includeValues=true
+	Type      string // "envVar", "hardcoded", "vaultRef", "inputPrompt"
+	Name      string
+	Value     string // SHA-256 hash by default, actual value only if includeValues=true
+	ValueHash string // SHA-256 hash of the original raw value, ALWAYS populated.
+	// ValueHash is the cross-collector merge primitive (v0.2). Even
+	// when includeValues=false replaces Value with the same hash, the
+	// LiteLLM Looter (which never sees the hashed form) needs an
+	// independent always-populated field to set on its Credential
+	// emissions so the cross_service_credential_chain post-processor
+	// can join Config Collector emissions to Looter emissions on this
+	// property. See sdk/common/hasher.go HashCredentialValue.
 	Source      string
 	IsExposed   bool
 	HighEntropy bool
@@ -49,10 +57,11 @@ func classifyCredentialType(name, value string, engine *rules.Engine) string {
 
 func classifyAndBuild(name, value, source string, includeValues bool, engine *rules.Engine) CredentialInfo {
 	ci := CredentialInfo{
-		Name:   name,
-		Source: source,
-		Format: detectFormat(value, engine),
-		Type:   classifyCredentialType(name, value, engine),
+		Name:      name,
+		Source:    source,
+		Format:    detectFormat(value, engine),
+		Type:      classifyCredentialType(name, value, engine),
+		ValueHash: common.HashCredentialValue(value),
 	}
 
 	switch ci.Type {
@@ -68,7 +77,7 @@ func classifyAndBuild(name, value, source string, includeValues bool, engine *ru
 	if includeValues {
 		ci.Value = value
 	} else {
-		ci.Value = common.HashSHA256(value)
+		ci.Value = ci.ValueHash
 	}
 
 	return ci

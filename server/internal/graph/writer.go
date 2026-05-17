@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
@@ -65,19 +67,15 @@ func (w *Writer) WriteNodes(ctx context.Context, nodes []ingest.Node, scanID str
 }
 
 func (w *Writer) writeNodesBatched(ctx context.Context, nodes []ingest.Node, scanID string) (int, error) {
-	grouped := groupNodesByKind(nodes)
+	grouped := groupNodesByKindTuple(nodes)
 	total := 0
 
-	for kind, kindNodes := range grouped {
-		cypher := fmt.Sprintf(`UNWIND $nodes AS node
-MERGE (n:%s {objectid: node.id})
-ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.first_seen = datetime(), n.last_seen = datetime()
-ON MATCH SET n.previous_description_hash = n.description_hash, n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()
-RETURN count(*) AS written`, kind)
+	for tupleKey, group := range grouped {
+		cypher := nodeCypherForKindTuple(group.PrimaryKind, group.ExtraLabels)
 
-		for i := 0; i < len(kindNodes); i += w.batchSize {
-			end := min(i+w.batchSize, len(kindNodes))
-			batch := kindNodes[i:end]
+		for i := 0; i < len(group.Nodes); i += w.batchSize {
+			end := min(i+w.batchSize, len(group.Nodes))
+			batch := group.Nodes[i:end]
 
 			params := make([]map[string]any, len(batch))
 			for j, n := range batch {
@@ -92,12 +90,30 @@ RETURN count(*) AS written`, kind)
 				"scan_id": scanID,
 			})
 			if err != nil {
-				return total, fmt.Errorf("fallback node batch %s at offset %d: %w", kind, i, err)
+				return total, fmt.Errorf("fallback node batch %s at offset %d: %w", tupleKey, i, err)
 			}
 			total += written
 		}
 	}
 	return total, nil
+}
+
+// nodeCypherForKindTuple builds a MERGE-on-primary-label, then-SET-umbrella-labels
+// statement. Kinds[1:] cannot be parameterized in Cypher (labels are a syntactic
+// element, not a value), so the labels are inlined into the template; we
+// rely on `ingest.AllowedNodeKinds` having already validated each label
+// upstream so this is safe from injection.
+func nodeCypherForKindTuple(primaryKind string, extraLabels []string) string {
+	var sb strings.Builder
+	sb.WriteString("UNWIND $nodes AS node\n")
+	fmt.Fprintf(&sb, "MERGE (n:%s {objectid: node.id})\n", primaryKind)
+	sb.WriteString("ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.first_seen = datetime(), n.last_seen = datetime()\n")
+	sb.WriteString("ON MATCH SET n.previous_description_hash = n.description_hash, n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()")
+	for _, lbl := range extraLabels {
+		fmt.Fprintf(&sb, "\nSET n:%s", lbl)
+	}
+	sb.WriteString("\nRETURN count(*) AS written")
+	return sb.String()
 }
 
 func (w *Writer) WriteEdges(ctx context.Context, edges []ingest.Edge, scanID string) (int, error) {
@@ -240,6 +256,54 @@ func (w *Writer) driverExecBatch(ctx context.Context, cypher string, params map[
 	return written, nil
 }
 
+// nodeKindTuple captures a node's MERGE shape: the primary label that owns the
+// uniqueness constraint plus the extra umbrella labels that get applied via
+// SET. Nodes that share a tuple share a Cypher template and a write batch.
+type nodeKindTuple struct {
+	PrimaryKind string
+	ExtraLabels []string
+	Nodes       []ingest.Node
+}
+
+// groupNodesByKindTuple partitions nodes by their full Kinds shape so that
+// multi-label nodes (e.g. ["LiteLLMGateway", "AIService"]) get a Cypher
+// template that MERGEs on the per-kind label and SETs the umbrella, while
+// single-label nodes ([\"MCPServer\"]) take the original code path
+// transparently. Extra labels are sorted so [A,B] and [B,A] hash to the
+// same group.
+func groupNodesByKindTuple(nodes []ingest.Node) map[string]*nodeKindTuple {
+	grouped := make(map[string]*nodeKindTuple)
+	for _, n := range nodes {
+		primary := "Node"
+		var extras []string
+		if len(n.Kinds) > 0 {
+			primary = n.Kinds[0]
+			if len(n.Kinds) > 1 {
+				extras = make([]string, len(n.Kinds)-1)
+				copy(extras, n.Kinds[1:])
+				sort.Strings(extras)
+			}
+		}
+		key := primary
+		if len(extras) > 0 {
+			key = primary + "+" + strings.Join(extras, ",")
+		}
+		group, ok := grouped[key]
+		if !ok {
+			group = &nodeKindTuple{
+				PrimaryKind: primary,
+				ExtraLabels: extras,
+			}
+			grouped[key] = group
+		}
+		group.Nodes = append(group.Nodes, n)
+	}
+	return grouped
+}
+
+// groupNodesByKind is kept for backwards compatibility with existing tests
+// that assert grouping by primary kind only. New code should use
+// groupNodesByKindTuple.
 func groupNodesByKind(nodes []ingest.Node) map[string][]ingest.Node {
 	grouped := make(map[string][]ingest.Node)
 	for _, n := range nodes {

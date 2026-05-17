@@ -21,6 +21,12 @@ var indexDefs = []struct{ Label, Property string }{
 	{"MCPServer", "is_pinned"},
 	{"A2AAgent", "is_signed"},
 	{"InstructionFile", "type"},
+	// v0.2 — AIService umbrella label gets indexes only (no uniqueness
+	// constraint, per ingest.UmbrellaLabels). These power generic
+	// post-processors that span all AI service kinds.
+	{"AIService", "endpoint"},
+	{"AIService", "is_anonymous_loot"},
+	{"Credential", "value_hash"},
 }
 
 func InitSchema(ctx context.Context, driver neo4j.DriverWithContext) error {
@@ -33,17 +39,28 @@ func InitSchema(ctx context.Context, driver neo4j.DriverWithContext) error {
 
 	useForRequire := major > 4 || (major == 4 && minor >= 4)
 
-	// Create uniqueness constraints for all 14 node labels
+	// Create uniqueness constraints for every per-kind label. Skip umbrella
+	// labels (e.g. :AIService) — multiple per-service nodes carry the
+	// umbrella, so a uniqueness constraint on it would falsely collide
+	// between distinct services. Per-kind uniqueness is the merge key;
+	// the umbrella is a query convenience only.
+	constraintCount := 0
 	for _, label := range ingest.AllNodeLabels {
+		if ingest.UmbrellaLabels[label] {
+			slog.Debug("skipping umbrella label for constraint", "label", label)
+			continue
+		}
 		cypher := constraintCypher(label, useForRequire)
 		if err := runDDL(ctx, driver, cypher); err != nil {
 			if isConstraintExistsError(err) {
 				slog.Info("constraint already exists", "label", label)
+				constraintCount++
 				continue
 			}
 			return fmt.Errorf("create constraint %s: %w", label, err)
 		}
 		slog.Info("created constraint", "label", label)
+		constraintCount++
 	}
 
 	// Create indexes
@@ -64,7 +81,7 @@ func InitSchema(ctx context.Context, driver neo4j.DriverWithContext) error {
 		return fmt.Errorf("schema version: %w", err)
 	}
 
-	slog.Info("schema initialization complete", "constraints", len(ingest.AllNodeLabels), "indexes", len(indexDefs))
+	slog.Info("schema initialization complete", "constraints", constraintCount, "indexes", len(indexDefs))
 	return nil
 }
 

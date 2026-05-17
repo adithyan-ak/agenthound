@@ -23,6 +23,14 @@ import (
 //go:embed all:ui/dist
 var uiFS embed.FS
 
+// uiFallbackFS is a tiny "UI not built" page that ships in every server
+// binary. It's served only when ui/dist is empty — i.e. when someone built
+// the binary without running `make ui-build` first. It's a separate embed
+// so the build pipeline (which clears ui/dist) can never overwrite it.
+//
+//go:embed ui/fallback/index.html
+var uiFallbackFS embed.FS
+
 type Server struct {
 	router     *chi.Mux
 	httpServer *http.Server
@@ -117,22 +125,40 @@ func NewServer(deps ServerDeps) *Server {
 	uiContent, _ := fs.Sub(uiFS, "ui/dist")
 	fileServer := http.FileServer(http.FS(uiContent))
 
+	// distHasIndex is the signal that the React UI was actually built into
+	// this binary. If false, the binary was compiled with only the dist
+	// marker file present — serve the embedded fallback page instead.
+	distHasIndex := false
+	if f, err := uiContent.Open("index.html"); err == nil {
+		f.Close()
+		distHasIndex = true
+	}
+
 	r.Handle("/assets/*", fileServer)
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
-		f, err := uiContent.Open(req.URL.Path[1:])
-		if err == nil {
-			f.Close()
-			fileServer.ServeHTTP(w, req)
-			return
+		if distHasIndex {
+			f, err := uiContent.Open(req.URL.Path[1:])
+			if err == nil {
+				f.Close()
+				fileServer.ServeHTTP(w, req)
+				return
+			}
+			index, err := uiContent.Open("index.html")
+			if err == nil {
+				defer index.Close()
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = io.Copy(w, index)
+				return
+			}
 		}
-		index, err := uiContent.Open("index.html")
+		fallback, err := uiFallbackFS.Open("ui/fallback/index.html")
 		if err != nil {
-			http.Error(w, "index.html not found", http.StatusInternalServerError)
+			http.Error(w, "ui not available", http.StatusInternalServerError)
 			return
 		}
-		defer index.Close()
+		defer fallback.Close()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.Copy(w, index)
+		_, _ = io.Copy(w, fallback)
 	})
 
 	return &Server{router: r}

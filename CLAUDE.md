@@ -144,7 +144,9 @@ See `modules/README.md` for the cleanest existing example.
 
 **Core principle:** Edges = exploitable relationships. Direction = access flow. `Agent → Server → Tool → Resource`.
 
-### Node Types (12 collector-produced)
+### Node Types (22 collector-produced + 2 synthetic)
+
+The first 12 are the v0.1 set; the next 8 are per-service AI-service kinds added in v0.2 (`OllamaInstance`, `VLLMInstance`, `QdrantInstance`, `MLflowServer`, `LiteLLMGateway`, `JupyterServer`, `LangServeApp`, `OpenWebUIInstance`); `AIService` is the multi-label umbrella every per-service node also carries; `AIModel` is the v0.3 model-artifact kind emitted by the Ollama Looter.
 
 | Label | Source | Key Properties |
 |-------|--------|----------------|
@@ -156,10 +158,24 @@ See `modules/README.md` for the cleanest existing example.
 | `A2ASkill` | A2A | `id`, `name`, `description`, `input_modes`, `output_modes`, `description_hash`, `has_injection_patterns` |
 | `AgentInstance` | Config | `name`, `framework`, `config_path` |
 | `Identity` | Config + MCP | `type` (none/apiKey/oauth/bearer/mtls), `scope`, `is_static` |
-| `Credential` | Config | `type` (envVar/hardcoded/vaultRef/inputPrompt), `name`, `source`, `is_exposed`, `high_entropy` |
+| `Credential` | Config + LiteLLM Looter | `type` (envVar/hardcoded/vaultRef/inputPrompt/master_key/apiKey/virtual_key), `name`, `source`, `is_exposed`, `high_entropy`, **`value_hash`** (SHA-256, cross-collector merge primitive) |
 | `Host` | Config + A2A | `hostname`, `ip`, `is_local`, `is_private`, `is_public` |
 | `ConfigFile` | Config | `path`, `client`, `server_count` |
 | `InstructionFile` | Config | `path`, `type` (agents.md/claude.md/cursorrules/copilot-instructions/memory.md), `hash`, `is_suspicious` |
+| `OllamaInstance` | Network scan + Ollama fingerprinter | `endpoint`, `version`, `auth_method=none`, `is_anonymous_loot=true`, `discovered_via` |
+| `VLLMInstance` | Network scan + vLLM fingerprinter (v0.3) | `endpoint`, `version`, `auth_method`, `is_anonymous_loot` |
+| `QdrantInstance` | Network scan + Qdrant fingerprinter (v0.4) | `endpoint`, `version`, `collection_count` |
+| `MLflowServer` | Network scan + MLflow fingerprinter (v0.4) | `endpoint`, `version`, `experiment_count` |
+| `LiteLLMGateway` | Network scan + LiteLLM fingerprinter | `endpoint`, `auth_method=master_key`, `is_anonymous_loot=false`, `docs_enabled` |
+| `JupyterServer` | Network scan + Jupyter fingerprinter (v0.3) | `endpoint`, `version`, `token_required` |
+| `LangServeApp` | Network scan + LangServe fingerprinter (v0.4) | `endpoint`, `chains` |
+| `OpenWebUIInstance` | Network scan + Open WebUI fingerprinter (v0.3) | `endpoint`, `version`, `webui_auth_enabled` |
+| `AIService` | Multi-label umbrella on every per-service node | (no unique constraint — see `sdk/ingest/UmbrellaLabels`) |
+| `AIModel` | Ollama Looter (v0.3) — one per `/api/tags` entry | `name`, `digest`, `family`, `parameters`, `is_finetune`, `value_hash` (modelfile content), `modelfile_size_bytes`, `has_system_prompt`, optional `weight_artifact_path` (with `--include-weights`) |
+
+**The `value_hash` property on `Credential` is load-bearing** — it's the cross-collector merge primitive that lets the `cross_service_credential_chain` post-processor join Config Collector emissions (`HAS_ENV_VAR` from MCP server to a credential) with LiteLLM Looter emissions (`EXPOSES_CREDENTIAL` from a LiteLLM gateway to its master + upstream provider keys). Same secret value → same `value_hash` → joined node, regardless of how each collector derives the `objectid`. Computed via `sdk/common.HashCredentialValue`. Every v0.3+ Looter MUST populate it on every emitted Credential.
+
+The 2 synthetic labels (`ResourceGroup`, `TrustZone`) are populated by post-processors and live in `AllNodeLabels` but not `AllowedNodeKinds`.
 
 ### Node ID Strategy (deterministic, content-based SHA-256)
 
@@ -195,6 +211,9 @@ Host:            SHA-256("Host:" + hostname_or_ip)
 | `HAS_ENV_VAR` | MCPServer → Credential | Config |
 | `LOADS_INSTRUCTIONS` | AgentInstance → InstructionFile | Config |
 | `SAME_AUTH_DOMAIN` | A2AAgent → A2AAgent | A2A |
+| `EXPOSES` | AIService → AIService | v0.3 fingerprinters (Open WebUI → Ollama backend) |
+| `EXPOSES_CREDENTIAL` | AIService → Credential | LiteLLM Looter (gateway → master + upstream provider keys + virtual keys) |
+| `PROVIDES_MODEL` | OllamaInstance → AIModel | v0.3 Ollama Looter (one edge per `/api/tags` entry) |
 
 **Post-processed composite edges (computed from graph state):**
 
@@ -213,7 +232,7 @@ Host:            SHA-256("Host:" + hostname_or_ip)
 **All edges carry:** `scan_id`, `last_seen`, `confidence` (0.0-1.0), `risk_weight`, `is_composite`, `evidence`. Composite edges also carry: `source_collector` (`'mcp'` or `'a2a'`) — used by stale edge cleanup to scope partial scan deletions.
 
 **Post-processor execution order (dependencies):**
-1. HAS_ACCESS_TO → 2. CAN_EXECUTE → 3. SHADOWS → 4. POISONED_DESCRIPTION → 5. CAN_REACH (depends on 1) → 6. CAN_EXFILTRATE_VIA (depends on 5) → 7. CAN_IMPERSONATE → 8. Cross-protocol CAN_REACH (depends on 1) → 9. RiskScore (depends on 1-8)
+1. HAS_ACCESS_TO → 2. CAN_EXECUTE → 3. SHADOWS → 4. POISONED_DESCRIPTION → 5. POISONED_INSTRUCTIONS → 6. CAN_REACH (depends on 1) → 7. **cross_service_credential_chain** (depends on 1, 6 — joins on `Credential.value_hash` across Config Collector and LiteLLM Looter emissions) → 8. CAN_EXFILTRATE_VIA (depends on 6) → 9. CAN_IMPERSONATE → 10. Cross-protocol CAN_REACH (depends on 1) → 11. RiskScore (depends on 1-10)
 
 ## Three Collectors (now under `modules/`)
 
@@ -462,12 +481,10 @@ AGENTHOUND_CORS_ORIGINS=http://localhost:8080
 | `docs/graph-model.md` | Node/edge types, ID strategy, risk scoring |
 | `docs/detection-rules.md` | All 17 detections with OWASP mappings |
 | `docs/architecture.md` | Architecture for contributors |
-| `architecture/01-vision.md` through `architecture/09-roadmap.md` | PRD sections (gitignored, local only) |
 | `collectors/01-mcp-collector.md` | MCP collector spec + Go SDK usage |
 | `collectors/02-a2a-collector.md` | A2A collector spec + card schema |
 | `collectors/03-config-collector.md` | Config collector spec + 12 client formats |
 | `collectors/04-graph-pipeline.md` | Full ingest → post-process → query pipeline |
 | `collectors/05-visual-architecture.md` | Mermaid diagrams of the graph |
 | `collectors/06-ui-scenarios.md` | UI graph rendering scenarios |
-| `plan/phase01.md` through `plan/phase05.md` | Detailed implementation plans for original phases |
 | `research/mcp-spec-2025-11-25.md` | MCP protocol reference (JSON-RPC, transports, OAuth, Tasks) |

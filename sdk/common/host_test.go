@@ -167,6 +167,53 @@ func TestClassifyHost(t *testing.T) {
 	}
 }
 
+// TestClassifyHost_v0_2 covers the IPv6 + link-local + multicast
+// classifications added in v0.2. The scanner refuses link-local and
+// multicast targets outright, so the classification is load-bearing for
+// safety, not just metadata.
+func TestClassifyHost_v0_2(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		linkLocal bool
+		multicast bool
+		isPrivate bool
+		isPublic  bool
+		isLocal   bool
+	}{
+		{name: "ipv6 ula fc00::1", input: "fc00::1", isPrivate: true},
+		{name: "ipv6 ula fd00::1", input: "fd00::1", isPrivate: true},
+		{name: "ipv6 link-local fe80::1", input: "fe80::1", linkLocal: true, isPublic: true},
+		{name: "ipv6 multicast ff02::1", input: "ff02::1", multicast: true, isPublic: true},
+		{name: "ipv4 link-local 169.254.0.5", input: "169.254.0.5", linkLocal: true, isPublic: true},
+		{name: "ipv4 multicast 224.0.0.1", input: "224.0.0.1", multicast: true, isPublic: true},
+		// Cloud metadata literal stays private (preserved from v0.1).
+		{name: "cloud metadata stays private", input: "169.254.169.254", isPrivate: true},
+		// Public IPv6.
+		{name: "ipv6 public", input: "2001:db8::1", isPublic: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ClassifyHost(tt.input)
+			if got.IsLinkLocal != tt.linkLocal {
+				t.Errorf("IsLinkLocal = %v, want %v", got.IsLinkLocal, tt.linkLocal)
+			}
+			if got.IsMulticast != tt.multicast {
+				t.Errorf("IsMulticast = %v, want %v", got.IsMulticast, tt.multicast)
+			}
+			if got.IsPrivate != tt.isPrivate {
+				t.Errorf("IsPrivate = %v, want %v", got.IsPrivate, tt.isPrivate)
+			}
+			if got.IsPublic != tt.isPublic {
+				t.Errorf("IsPublic = %v, want %v", got.IsPublic, tt.isPublic)
+			}
+			if got.IsLocal != tt.isLocal {
+				t.Errorf("IsLocal = %v, want %v", got.IsLocal, tt.isLocal)
+			}
+		})
+	}
+}
+
 func TestHostNodeID(t *testing.T) {
 	id := HostNodeID("example.com")
 	if !strings.HasPrefix(id, "sha256:") {

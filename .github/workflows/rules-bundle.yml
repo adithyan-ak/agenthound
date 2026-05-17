@@ -1,0 +1,121 @@
+name: Rules bundle release
+
+# Cosign-signed rules bundle releases. Decoupled from binary releases so
+# operators can pick up fingerprint-rule fixes without rebuilding the
+# collector. Triggered manually (workflow_dispatch) or by pushing a
+# rules-vYYYY.MM.DD tag. NO on:schedule — bundle releases are
+# content-driven, not calendar-driven.
+#
+# Security note: every step that touches the resolved tag goes through
+# the TAG environment variable (not direct ${{ }} interpolation in
+# shell). Defense-in-depth against GitHub Actions command injection
+# even though the tag is constrained to git-ref characters.
+# Reference: https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Bundle tag (e.g. rules-v2026.05.17). Must match git tag if pushed.'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'rules-v*'
+
+permissions:
+  contents: write   # GitHub release create + asset upload
+  id-token: write   # cosign keyless OIDC signing
+
+jobs:
+  release:
+    name: Build + sign + publish bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_TAG}" ]; then
+            tag="${INPUT_TAG}"
+          else
+            tag="${REF_NAME}"
+          fi
+          # Whitelist: rules-v + dot-separated digits.
+          if ! printf '%s' "${tag}" | grep -qE '^rules-v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?$'; then
+            echo "::error::tag '${tag}' does not match rules-vMAJOR.MINOR.PATCH[-suffix]"
+            exit 1
+          fi
+          echo "name=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify bundle dir exists and is non-empty
+        run: |
+          set -euo pipefail
+          if [ ! -d sdk/rules/builtin/fingerprints ]; then
+            echo "::error::sdk/rules/builtin/fingerprints/ not found"
+            exit 1
+          fi
+          if [ -z "$(find sdk/rules/builtin/fingerprints -name '*.yaml' -type f)" ]; then
+            echo "::error::no .yaml rules in sdk/rules/builtin/fingerprints/"
+            exit 1
+          fi
+
+      - name: Pack bundle
+        id: pack
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tarball="dist/agenthound-rules-${TAG}.tar.gz"
+          # Tar from sdk/rules/builtin so the archive is rooted at
+          # fingerprints/ — matches what LoadFingerprintBundle expects.
+          tar -czf "${tarball}" -C sdk/rules/builtin fingerprints/
+          ls -lh dist/
+          sha256sum "${tarball}" > "${tarball}.sha256"
+          echo "tarball=${tarball}" >> "${GITHUB_OUTPUT}"
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac  # v3.9.1
+
+      - name: Sign bundle with cosign keyless
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes \
+            --output-signature "${TARBALL}.sig" \
+            --output-certificate "${TARBALL}.pem" \
+            "${TARBALL}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.name }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          notes="Cosign-signed fingerprint rules bundle.
+
+          Verify with:
+
+              cosign verify-blob \\
+                --certificate agenthound-rules-${TAG}.tar.gz.pem \\
+                --signature agenthound-rules-${TAG}.tar.gz.sig \\
+                --certificate-identity-regexp 'https://github.com/.*' \\
+                --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \\
+                agenthound-rules-${TAG}.tar.gz"
+          gh release create "${TAG}" \
+            --title "Rules bundle ${TAG}" \
+            --notes "${notes}" \
+            "${TARBALL}" \
+            "${TARBALL}.sha256" \
+            "${TARBALL}.sig" \
+            "${TARBALL}.pem"

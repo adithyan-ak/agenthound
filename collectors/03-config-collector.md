@@ -1,5 +1,11 @@
 # Config Collector — Technical Implementation Specification
 
+> **Status: historical design spec, kept for reference.**
+> This document is the original design spec for the Config Collector. The 12-parser inventory, format-specific quirks (VS Code `servers`, Windsurf `serverUrl`, Zed `context_servers`, Cline `autoApprove`, Continue YAML), unpinned-package detection, credential entropy thresholds (4.5 base64 / 3.0 hex), and the trust-boundary narrative are all still load-bearing. Two areas have drifted:
+> - **CLI surface:** the `agenthound collect config ...` examples reflect the pre-split CLI. Today it's `agenthound scan --config` (see [`docs/cli-reference.md`](../docs/cli-reference.md)).
+> - **Property casing:** properties shown as camelCase here are stored as `snake_case` in Neo4j. [`docs/graph-model.md`](../docs/graph-model.md) is canonical.
+> The actual implementation lives in [`modules/config/`](../modules/config/).
+
 ## 1. Purpose
 
 The Config Collector parses MCP client configuration files from the local filesystem, extracting server definitions, credential references, transport configurations, and host bindings. It produces the **trust relationship edges** that connect AgentInstance nodes to MCPServer nodes — the `TRUSTS_SERVER` edges that are foundational to every attack path in the graph.

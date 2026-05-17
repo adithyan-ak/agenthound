@@ -6,81 +6,84 @@
 git clone https://github.com/adithyan-ak/agenthound.git
 cd agenthound
 docker compose -f docker/docker-compose.yml up -d   # Neo4j + PostgreSQL
-make build                                            # Build Go binary + UI
+make build                                            # Build collector + server (UI auto-built)
 make test                                             # Run all tests
 ```
 
+`make build` invokes `make ui-build` first, which compiles the React UI (`server/ui`) and copies the output into `server/internal/api/ui/dist/` so `go:embed` finds it. Raw `go build ./...` also works on a fresh clone — a placeholder fallback page ships at `server/internal/api/ui/fallback/index.html`.
+
 ## Development workflow
 
-1. Fork the repo and create a feature branch from `main`
-2. Make your changes
+1. Fork the repo and create a feature branch from `main`.
+2. Make your changes.
 3. Run pre-commit checks (mandatory):
    ```bash
    gofmt -l .          # Must produce no output
    go build ./...      # Must pass
    go vet ./...        # Must pass
-   make test           # Must pass
+   make test           # Must pass (race detector enabled)
    ```
-4. Commit with a clear message describing what changed and why
-5. Open a PR against `main`
+4. Commit with a clear message describing what changed and why.
+5. Open a PR against `main`.
+
+CI additionally runs `golangci-lint`, `govulncheck`, `go-licenses`, `scripts/deps-check.sh` (collector dep-boundary), and `scripts/size-check.sh` (collector binary stays within baseline + 10%).
 
 ## Code style
 
-- **Go:** `gofmt` formatting, `errcheck` compliance (handle all error return values)
-- **TypeScript:** Prettier + ESLint (run `cd ui && npm run lint`)
-- **No manual alignment padding** -- `golangci-lint` enforces this
-- **Intentionally discarded errors** use `_, _ =` (e.g., `_, _ = fmt.Fprintf(os.Stderr, ...)`)
-- **Property keys** in Neo4j are always `snake_case`
+- **Go:** `gofmt` formatting, `errcheck` compliance (handle all error return values).
+- **TypeScript:** Prettier + ESLint (`cd server/ui && npm run lint`).
+- **No manual alignment padding** — `golangci-lint` enforces this.
+- **Intentionally discarded errors** use `_, _ =` (e.g., `_, _ = fmt.Fprintf(os.Stderr, ...)`).
+- **Property keys** in Neo4j are always `snake_case`. Collectors may emit camelCase JSON; the ingest normalizer converts on the server side.
 
-## How to add a new collector
+## How to add a new module (collector / fingerprinter / looter)
 
-Collectors implement the `Collector` interface in `pkg/collector/collector.go`.
+Modules live under `modules/` and self-register at init time. The module system supersedes the older `pkg/collector/` layout — you don't need to touch the CLI or anything in `server/` to add one.
 
-1. Create a new directory under `internal/collector/<protocol>/`
-2. Implement the `Collector` interface:
+1. Create a new directory: `modules/<name>/`.
+2. Implement an action interface from `sdk/action/` — typically `Enumerator` for collectors, `Fingerprinter` for service detection, or `Looter` for credential extraction.
+3. Add `register.go` calling `module.Register(...)` in `init()`.
+4. Blank-import your module in `collector/cmd/agenthound/main.go`:
    ```go
-   type Collector interface {
-       Name() string
-       Collect(ctx context.Context, opts CollectOptions) (*model.IngestData, error)
-   }
+   _ "github.com/adithyan-ak/agenthound/modules/<name>"
    ```
-3. Produce `model.IngestData` with the standard JSON schema (see `docs/graph-model.md`)
-4. Register the CLI subcommand in `internal/cli/collect_<protocol>.go`
-5. Add test data in `testdata/`
-6. Node IDs must be deterministic SHA-256 hashes (see graph model docs)
+5. Produce JSON output matching `sdk/ingest.IngestData` (see `docs/graph-model.md` for the schema). Node IDs must be deterministic SHA-256 hashes per `sdk/common`.
+6. Add tests + fixtures under `modules/<name>/testdata/` (or repo-root `testdata/` for shared fixtures).
 
-## How to add a detection rule (post-processor)
+See `modules/README.md` for the canonical example and `modules/mcp/`, `modules/a2a/`, `modules/config/` for working modules.
 
-Post-processors implement the `PostProcessor` interface in `pkg/analysis/postprocessor.go`.
+## How to add a post-processor
 
-1. Create a file in `internal/analysis/processors/<name>.go`
-2. Implement the interface:
+Post-processors implement the `PostProcessor` interface in `server/internal/analysis/postprocessor.go`. They run after every ingest and compute composite edges from the raw graph state.
+
+1. Create `server/internal/analysis/processors/<name>.go`.
+2. Implement:
    ```go
    type PostProcessor interface {
        Name() string
-       DependsOn() []string
+       Dependencies() []string
        Process(ctx context.Context, db graph.GraphDB) error
    }
    ```
-3. `DependsOn()` returns the names of processors that must run before this one
-4. Register the processor in `internal/analysis/postprocessor.go`
-5. Add a corresponding test file `<name>_test.go`
-6. If the detection should appear as a pre-built query, add it to `internal/analysis/prebuilt/queries.go`
+3. `Dependencies()` returns processor names that must run before this one (e.g. `CAN_REACH` depends on `HAS_ACCESS_TO`).
+4. Register the processor by appending to `allProcessors()` in `server/internal/analysis/registry.go`.
+5. Add `<name>_test.go` against the mock `GraphDB` in `server/internal/graph/mock_test.go`.
+6. If the detection should appear as a pre-built query, also add it under `server/internal/analysis/prebuilt/`.
 
 ## How to add a pre-built query
 
-1. Add the Cypher constant in `internal/analysis/prebuilt/cypher.go`
-2. Register it in `internal/analysis/prebuilt/queries.go` with:
-   - Unique ID (kebab-case)
-   - Name, description, category, severity
-   - OWASP mapping (MCP01-MCP10, ASI01-ASI10)
-3. The query is automatically available via the CLI (`--prebuilt`) and API (`/analysis/prebuilt/{id}`)
+1. Add the Cypher constant to `server/internal/analysis/prebuilt/cypher.go`.
+2. Register it in `server/internal/analysis/prebuilt/queries.go` with:
+   - Unique ID (kebab-case).
+   - Name, description, category, severity.
+   - OWASP mapping (`MCP01`–`MCP10`, `ASI01`–`ASI10`).
+3. The query is automatically available via the CLI (`agenthound-server query --prebuilt <id>`) and the API (`GET /api/v1/analysis/prebuilt/{id}`).
 
 ## How to add a config parser
 
-Config parsers implement the `ConfigParser` interface in `internal/collector/config/`.
+Config parsers live in `modules/config/parsers/` and implement the `ConfigParser` interface (defined in `modules/config/`).
 
-1. Create a file in `internal/collector/config/parsers/<client>.go`
+1. Create `modules/config/parsers/<client>.go`.
 2. Implement:
    ```go
    type ConfigParser interface {
@@ -89,24 +92,33 @@ Config parsers implement the `ConfigParser` interface in `internal/collector/con
        Parse(path string, data []byte) (*ParseResult, error)
    }
    ```
-3. `ConfigPaths()` returns platform-specific default config file locations
-4. Register the parser in the config collector's parser list
-5. Add test fixtures in `testdata/`
+3. `ConfigPaths()` returns platform-specific default config file locations.
+4. Register the parser in the parser registry inside `modules/config/`.
+5. Add test fixtures in `modules/config/testdata/<client>/`.
+
+## How to add a detection rule (YAML)
+
+Rules engine: `sdk/rules/`. Builtin rules: `sdk/rules/builtin/*.yaml`.
+
+1. Create `sdk/rules/builtin/<id>.yaml` with `id`, `description`, `severity`, `matcher`, and (optionally) OWASP mapping. Matcher types: `keyword`, `prefix`, `regex`, `entropy`, `compound`. See existing files for examples.
+2. Add a test fixture in `sdk/rules/builtin_tests/<id>.yaml` with sample inputs/expected matches. Test fixtures live OUTSIDE the runtime `//go:embed builtin` path — attacker-shaped strings never ship in production binaries.
+3. Run `make test` (executes `agenthound rules test` under the hood).
 
 ## Testing
 
-- All new features must include tests
-- Run `make test` for Go tests, `cd ui && npm test` for frontend tests
-- Use `testdata/` fixtures for collector and ingest tests
-- Post-processor tests should verify edge creation with known graph states
+- All new features must include tests.
+- Run `make test` for Go (race detector enabled), `cd server/ui && npm test` for frontend.
+- Use `testdata/` fixtures for collector and ingest tests.
+- Post-processor tests should verify edge creation against a known graph state via `server/internal/graph/mock_test.go`.
+- DB-touching tests skip locally unless `AGENTHOUND_NEO4J_URI` and a Postgres URI are set; CI runs them with services.
 
 ## Reporting bugs
 
 Open a [GitHub issue](https://github.com/adithyan-ak/agenthound/issues) with:
-- Steps to reproduce
-- Expected vs actual behavior
-- AgentHound version (`agenthound --version`)
-- Neo4j version and OS
+- Steps to reproduce.
+- Expected vs. actual behavior.
+- AgentHound version (`agenthound version` and `agenthound-server version`).
+- Neo4j version and OS.
 
 ## Security vulnerabilities
 

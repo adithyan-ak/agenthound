@@ -1,7 +1,7 @@
 # AgentHound Dark Dashboard Theme System
 
 **Version:** 1.0.0
-**Stack:** React 18 + TypeScript + Tailwind CSS 3.x + shadcn/ui + Recharts 2.x + Sigma.js 3
+**Stack:** React 18 + TypeScript + Tailwind CSS 3.x + shadcn/ui + Recharts 2.x + React Flow (`@xyflow/react`) + ELK (`elkjs`)
 **WCAG Target:** AA (minimum), AAA where achievable without compromising readability
 **Reference:** ByteArmor security dashboard aesthetic
 

@@ -1,10 +1,16 @@
 # Sprint 3 — Offensive primitives (network scanner + first Looter)
 
-> **Status:** Draft for design review.
+> **Status:** Draft for design review (refreshed 2026-05-16).
 > **Authors:** AgentHound architect (research + plan).
-> **Date:** 2026-04-23.
+> **Date:** 2026-04-23, refreshed 2026-05-16.
 > **Audience:** Adithyan AK + future contributors.
-> **Scope of this document:** research-grounded plan for AgentHound's "ship the offensive surface" milestone (v0.2). **This is a plan, not an implementation.** No code in this repo changes as a result of this document beyond its own creation.
+> **Scope of this document:** research-grounded plan for AgentHound's "ship the offensive surface" milestone (v0.2). **This is a plan, not an implementation.** No code in this repo has changed in service of this plan since 2026-04-26.
+>
+> **2026-05-16 refresh + architect review.** Two passes landed on this date:
+>
+> 1. **CFP refresh.** §7 + §8 rewritten around **DEF CON 34 Red Team Village (CFP closes 2026-05-31)** as the new primary v0.2 target. The original Demo Labs / BSidesLV deadlines passed before any v0.2 implementation could ship. fwd:cloudsec EU 2026 (2026-06-12) + OWASP Global AppSec US 2026 SF (2026-06-29) are now secondary/tertiary.
+>
+> 2. **Architect review (corrections #39–#58).** Three parallel reviewers swept the plan for vision/cohesion gaps, code-grounded technical drift, and internal contradictions. Twenty-two true findings landed; ~25 were verified false positives and rejected. The most consequential changes: (a) added the **credential merge-key strategy** (`value_hash`) without which the central credential-chain demo cannot fire across collectors (§3.7 + §4.5); (b) added the missing `UmbrellaLabels` skip-list so the umbrella `:AIService` label doesn't trigger duplicate Neo4j uniqueness constraints (§3.5 + §6 + §11); (c) added the missing `model_test.go` count bumps for new node kinds (§6 + §11); (d) reconciled `cross_service_credential_chain.Dependencies()` to `["has_access_to", "can_reach"]` consistently (§6 + §11); (e) renamed the `--scan-output` / `--scan-concurrency` flags to remove documentation-vs-implementation drift; (f) removed all effort/timeline estimates — phases are now ordered-and-deliverable-defined, execution speed is left to the implementer.
 
 ---
 
@@ -29,9 +35,9 @@ Concrete deliverables, ranked by load-bearing-ness:
 
 1. **`agenthound scan <cidr|host|host-list>`** — CIDR/host expansion + bounded port sweep + AI-service fingerprinting. v0.2 commits to **2 services** (Ollama + LiteLLM); the remaining 6 fingerprinters slip to v0.3+ per the scope-creep correction in §9.8. Output: ingest JSON containing per-service nodes (e.g. `:OllamaInstance:AIService`, `:LiteLLMGateway:AIService`), `Host` nodes (already exists), and `RUNS_ON` edges (already exists).
 2. **`agenthound loot <host> --type litellm [--master-key sk-...]`** — LiteLLM looter. Output: ingest JSON containing extracted `Credential` nodes with provenance (`source: 'litellm'`, `provider: 'openai'`, etc.), plus `EXPOSES_CREDENTIAL` edges from the LiteLLM gateway node to those credentials.
-3. **Ten new node kinds** (8 per-service + `AIService` umbrella + `AIModel` reservation per §3.5 Option B multi-label) and **two new edge kinds** (`EXPOSES`, `EXPOSES_CREDENTIAL`) wired through the ingest schema, the validator (including the SHIP-BLOCKER fix at `server/internal/ingest/validator.go:80` per §6), the writer, and the UI.
-4. **Demo seed file** (`testdata/demo/scan_lab.json`) showing a credential chain that reaches a LiteLLM-extracted OpenAI key. Generated from a real run of the §8.5 docker-compose lab plus an anonymization pass — NOT hand-fabricated.
-5. **One submitted talk** to DEF CON 34 Demo Labs (May 1, 2026 deadline) + BSidesLV breaking-ground (May 8, 2026 verified deadline). DEF CON main-stage is intentionally NOT a v0.2 target — see §7's critical-scheduling-tension and §8.2 for reasoning. Aim DEF CON 35 (2027) main-stage with Phase 5+6 results. ([Demo Labs CFP](https://defcon.org/html/defcon-34/dc-34-cfdl.html))
+3. **Nine new node kinds** (8 per-service + `AIService` umbrella per §3.5 Option B multi-label) and **two new edge kinds** (`EXPOSES`, `EXPOSES_CREDENTIAL`) wired through the ingest schema, the validator (including the SHIP-BLOCKER fix at `server/internal/ingest/validator.go:80` per §6), the writer, and the UI. The `AIModel` reservation originally proposed for v0.2 was deferred to v0.3 — see `docs/plans/v0.2-implementation.md` decision E for rationale (no v0.2 emitter, dead schema entry confuses readers, and adding it later is a five-line PR).
+4. **Demo seed file** (`testdata/demo/scan_lab.json`) showing a credential chain that reaches a LiteLLM-extracted OpenAI key. Generated from a real run of the v0.2 demo lab (`docker/demo/docker-compose.yml`, 2 services per §9.8) plus an anonymization pass — NOT hand-fabricated. The §8.5 8-VM lab is the v0.3/v0.4 target.
+5. **One submitted talk** to DEF CON 34 Red Team Village (CFP closes 2026-05-31). Secondary submissions: fwd:cloudsec EU 2026 (deadline 2026-06-12), OWASP Global AppSec US 2026 SF (deadline 2026-06-29). DEF CON main-stage is intentionally NOT a v0.2 target — see §7 and §8.2 for reasoning. Aim DEF CON 35 (2027) main-stage once Phase 3 + 5 results are real.
 
 What's *not* in v0.2: the other six action interfaces (`Extractor`, `Poisoner`, `Implanter`, `Reverter` for non-trivial cases). The three other concrete Looters (Ollama, Jupyter, MLflow). The template ecosystem split. Per-action binaries. Those are v0.3+ and outside this plan.
 
@@ -546,7 +552,9 @@ Implementation note: Go's `net/netip` package (preferred over `net.IP` for new c
 
 ### 3.3 Port sweep
 
-For each target host, probe each configured port with a TCP connect (no SYN scan — we are not raw-socket-privileged, and connect scans are sufficient for our threat model). Bounded concurrency via a semaphore — default 50 in-flight connections, override `--scan-concurrency`. Connection timeout 3 seconds (the rule-of-thumb for "is this port open"). Failed connections are dropped silently.
+For each target host, probe each configured port with a TCP connect (no SYN scan — we are not raw-socket-privileged, and connect scans are sufficient for our threat model). Bounded concurrency via a semaphore — default 50 in-flight network probes, override `--network-scan-concurrency`. Connection timeout 3 seconds (the rule-of-thumb for "is this port open"). Failed connections are dropped silently.
+
+The existing `--scan-concurrency` flag (default 5) governs MCP/A2A enumeration worker count and is kept as-is — these have different cost profiles (MCP/A2A do JSON-RPC handshakes; network probes do raw TCP connects), so a single knob would be the wrong abstraction.
 
 For each open port, dispatch to the appropriate fingerprinter for that port (the registry maps port → fingerprinter module).
 
@@ -611,7 +619,7 @@ The earlier draft of this plan recommended a single `AIService` node kind with `
 
 - `sdk/ingest/kinds.go:4-17` enumerates 12 distinct labels (`MCPServer`, `MCPTool`, `A2AAgent`, `Credential`, etc.) — every existing service-like entity has its own label, not a `kind: "MCPServer"` property on a generic `Service` node.
 - Every post-processor matches by label. `server/internal/analysis/processors/has_access_to.go:20` opens with `MATCH (s:MCPServer)`; the same pattern is in every other processor file. Switching to `MATCH (s:AIService {service_kind: "ollama"})` for AI services and keeping `MATCH (s:MCPServer)` for MCP servers introduces inconsistency without solving any problem the existing codebase has.
-- UI dispatches on `kinds[0]` label in `server/ui/src/lib/node-styles.ts:9-14`, `server/ui/src/theme/tokens.ts:5-21`, and `server/ui/src/lib/explorer/hex-config.ts:37-150`. The hex-config map is keyed by Neo4j label. A property-based discriminator would force a runtime branch in UI code that today is a clean lookup.
+- UI dispatches on Neo4j labels in `server/ui/src/lib/node-styles.ts:9-14` (color: `for (const kind of kinds)` — first match in order), `node-styles.ts:17` (size: `kinds[0]`), `server/ui/src/theme/tokens.ts:5-20`, and `server/ui/src/lib/explorer/hex-config.ts:37-150`. Per-kind label MUST be `kinds[0]` so size dispatch picks the right service; color lookup walks the array but gets the same answer because per-kind comes first. A property-based discriminator would force a runtime branch in UI code that today is a clean lookup.
 
 The "schema simplicity" argument for a single `AIService` kind is correct in the abstract, but the existing codebase has already paid the per-label cost 12 times. Adding eight more labels keeps the codebase consistent; using a single `AIService` kind makes it inconsistent.
 
@@ -647,18 +655,26 @@ var AllowedNodeKinds = map[string]bool{
     "LangServeApp":      true,  // NEW
     "OpenWebUIInstance": true,  // NEW
     "AIService":         true,  // NEW — umbrella label, multi-label companion
-    "AIModel":           true,  // NEW — for model artifacts surfaced via Looter
+    // AIModel deferred to v0.3 — no v0.2 emitter; see v0.2-implementation.md decision E.
 }
 
 var AllNodeLabels = []string{
     // ... existing 14 ...
     "OllamaInstance", "VLLMInstance", "QdrantInstance", "MLflowServer",
     "LiteLLMGateway", "JupyterServer", "LangServeApp", "OpenWebUIInstance",
-    "AIService", "AIModel",
+    "AIService",
+    // AIModel lands in v0.3 with the first model-artifact emitter.
+}
+
+// Labels for which `objectid` uniqueness constraints must NOT be created
+// (the umbrella label is shared across multiple per-kind nodes; constraining
+// it would create false collisions during MERGE).
+var UmbrellaLabels = map[string]bool{
+    "AIService": true,
 }
 ```
 
-Each emitted node carries `kinds: ["OllamaInstance", "AIService"]` (per-service first for primary dispatch, umbrella second). The writer `MERGE`s on the per-service label and applies both labels to the merged node.
+Each emitted node carries `kinds: ["OllamaInstance", "AIService"]` (per-service first for primary dispatch, umbrella second). The writer `MERGE`s on the per-service label and applies both labels to the merged node. The Neo4j constraint-creation loop in `server/internal/graph/schema.go:37` iterates `AllNodeLabels` and skips any label in `UmbrellaLabels` so the umbrella gets indexes only, not constraints — see §6 for the schema delta.
 
 Per-kind node properties (common to all `:AIService` nodes):
 
@@ -679,7 +695,7 @@ Two new edge kinds:
 
 | Edge | Source | Target | Meaning |
 |---|---|---|---|
-| `EXPOSES` | `AIService` | `AIService` (or other resource) | An AI service exposes another resource — e.g., `OpenWebUI EXPOSES Ollama` (UI → backend), `LiteLLM EXPOSES OpenAI-virtual-credential`. |
+| `EXPOSES` | `AIService` | `AIService` | An AI service exposes another AI service it has a backend dependency on — e.g., `OpenWebUI EXPOSES Ollama` (chat UI → inference backend). For v0.2 this edge is reserved (added to allow-lists) but not emitted by any v0.2 collector; Phase 3 (v0.3) populates it. |
 | `EXPOSES_CREDENTIAL` | `AIService` | `Credential` | An AI service holds a credential reachable through the service's API — produced by Looter, e.g., LiteLLM master key compromise yields N OpenAI keys. |
 
 These compose with existing edges:
@@ -705,6 +721,31 @@ RETURN p
 Note the per-kind label `:LiteLLMGateway` (Option B in §3.5). The same node also carries the `:AIService` umbrella label, so a more general processor that should fire for any service holding upstream credentials would `MATCH (svc:AIService)` instead.
 
 This path — `Agent → MCPServer → Env-var-cred → LiteLLM Gateway → Provider key` — is the demo we want.
+
+#### Credential merge keys (load-bearing for the demo)
+
+The Cypher above joins on `(c1:Credential)` being the same node from two different collectors:
+
+- **Config Collector** emits `c1` with `objectid = ComputeNodeID("Credential", source, name)` where `source` is the config-file path and `name` is the env-var name (see `modules/config/collector.go:165`).
+- **LiteLLM Looter** emits `c1` (the master key it received from the operator) and `c2` (the upstream provider keys it extracted via `/key/list` and `/model/info`). These have no relation to a config-file path — the Looter doesn't see one.
+
+For the chain to fire, the Looter MUST emit the master-key `Credential` node with an `objectid` that matches whatever the Config Collector emitted for the same secret. The plan's merge strategy:
+
+1. **`Credential` nodes carry a `value_hash` property** — SHA-256 of the credential's actual value (already produced by the Config Collector via `sdk/common/hasher.go`). This lets us merge across collectors without sharing `objectid` derivation.
+2. **The cross-service-credential-chain processor joins on `value_hash`, not `objectid`**:
+   ```cypher
+   MATCH p = (a:AgentInstance)-[:TRUSTS_SERVER]->(s:MCPServer)
+                 -[:HAS_ENV_VAR]->(c1:Credential)
+   MATCH (svc:AIService)-[:EXPOSES_CREDENTIAL]->(c1master:Credential
+                 {value_hash: c1.value_hash})
+   MATCH (svc)-[:EXPOSES_CREDENTIAL]->(c2:Credential)
+   WHERE c2.provider IN ["openai", "anthropic", "aws_bedrock"]
+   RETURN p, svc, c2
+   ```
+3. **The Looter's `Credential` `objectid` derivation is independent** — `ComputeNodeID("Credential", "litellm", endpoint, name)` for v0.2 — but `value_hash` is what bridges to Config Collector emissions.
+4. **When `--include-credential-values=false` (default)**, the Looter still computes `value_hash` over the master key; the value itself is not stored. The Config Collector already does the same. This makes the join secret-safe.
+
+§4.5 (Looter output) commits to populating `value_hash` on every emitted `Credential` node. Without this property, the §3.7 chain cannot fire — a `Credential`-merge gap was the demo's biggest hidden ship-blocker before this subsection landed.
 
 ### 3.8 CLI surface
 
@@ -988,8 +1029,9 @@ For each LiteLLM master-key loot, the Looter emits:
 | Node | Properties | Source |
 |---|---|---|
 | `LiteLLMGateway` (multi-labeled `:LiteLLMGateway:AIService`, already in graph from scan) | `endpoint`, `version`, `auth_method=master_key`, `docs_enabled` | Refresh from loot session |
-| `Credential` × N | `type=apiKey`, `name=upstream-<provider>`, `provider=openai\|anthropic\|aws_bedrock\|...`, `is_exposed=true`, `source=litellm`, `evidence_ref=model_info_response_<idx>` | One per upstream provider key found in `/model/info` |
-| `Credential` × N | `type=virtual_key`, `name=<virtual_key_id>`, `is_exposed=true`, `source=litellm`, `spend_usd=...`, `models=[...]` | One per entry in `/key/list` |
+| `Credential` × N | `type=apiKey`, `name=upstream-<provider>`, `provider=openai\|anthropic\|aws_bedrock\|...`, `is_exposed=true`, `source=litellm`, `value_hash=<sha256>` (per §3.7 merge convention), `evidence_ref=model_info_response_<idx>` | One per upstream provider key found in `/model/info` |
+| `Credential` × N | `type=virtual_key`, `name=<virtual_key_id>`, `is_exposed=true`, `source=litellm`, `value_hash=<sha256>`, `spend_usd=...`, `models=[...]` | One per entry in `/key/list` |
+| `Credential` (master) | `type=master_key`, `name=litellm-master`, `is_exposed=true`, `source=litellm`, `value_hash=<sha256>` — used by §3.7's `cross_service_credential_chain` join | The master key the operator supplied at loot time; stored as hash, not value (unless `--include-credential-values`) |
 
 Edges:
 
@@ -1017,9 +1059,11 @@ agenthound loot 10.0.0.42 --type litellm --master-key sk-... --output - | \
   agenthound-server ingest -
 ```
 
-The `--master-key` flag is module-specific. It binds via the proposed `Module.Flags()` extension (see §5). Convention: `--<credential-name>` flags are module-scoped — Ollama's looter would use `--auth-token` (none today, future); Jupyter's would use `--token`; Open WebUI's would use `--admin-cookie`.
+For v0.2, the `--master-key` flag is registered directly on the `loot` cobra command (`collector/cli/loot.go`) — it's not module-discoverable yet. The generic mechanism is `--credential KEY=VALUE`, which the looter reads as `Credentials[KEY]` from `LootOptions`. So `--credential master_key=sk-...` works for any future Looter without per-module flag registration; `--master-key` is sugar for the LiteLLM-specific case.
 
-**Ergonomic alternative** (for the v0 implementation, before `Module.Flags()` lands): the CLI accepts a generic `--credential KEY=VALUE` flag and the module reads `Credentials[KEY]` from `LootOptions`. So `--credential master_key=sk-...` works without per-module flag registration. This is uglier but avoids the SDK extension blocking the first concrete Looter.
+The `Module.Flags()` / `FlagsModule` sidecar interface (see §5.4) is deferred until the second concrete Looter ships — it would let modules self-register their flags rather than the CLI hard-coding them. v0.2 hard-codes `--master-key` because the cost of the abstraction isn't paid back until there are 2+ Looters with module-specific flags.
+
+Future convention (when `FlagsModule` lands): `--<credential-name>` flags are module-scoped — Ollama's looter would use `--auth-token`; Jupyter's would use `--token`; Open WebUI's would use `--admin-cookie`.
 
 ### 4.7 Reverter contract
 
@@ -1408,9 +1452,8 @@ This sprint introduces (per the Option B multi-label decision in §3.5):
 | `LangServeApp` | `:AIService` | same + `chains` | LangServe fingerprinter |
 | `OpenWebUIInstance` | `:AIService` | same + `webui_auth_enabled` | Open WebUI fingerprinter |
 | `AIService` | (umbrella label only) | union of common fields | Generic post-processors that span all AI services |
-| `AIModel` | none | `name`, `service_id`, `digest`, `family`, `parameters`, `is_finetune` | Future Ollama/MLflow looters (not v0.2; reserved here) |
 
-`AIModel` is included in this PR's schema additions even though no v0.2 Looter emits it, because adding it later requires a schema migration. Adding it now while we're modifying the schema costs nothing.
+**Note (v0.2 deferral):** the `AIModel` kind originally listed in this table moved to v0.3. The v0.2 LiteLLM Looter does not emit model artifacts; the v0.3 Ollama Looter will be the first. Adding a kind later is a five-line PR (one entry in `AllowedNodeKinds`, one in `AllNodeLabels`, two test count bumps, one Neo4j constraint) — cheaper than carrying a dead schema entry that confuses onboarding for an entire release cycle. See `docs/plans/v0.2-implementation.md` decision E.
 
 Every emitted AI-service node carries both labels: e.g. an Ollama node has `kinds: ["OllamaInstance", "AIService"]`. Per-kind label first for primary dispatch (UI hex-config keys on `kinds[0]`); umbrella label second so unified queries can match `(s:AIService)`.
 
@@ -1428,10 +1471,10 @@ Edge endpoint validation uses the `:AIService` umbrella label so any per-kind no
 ```go
 // AllowedNodeKinds — additions
 "AIService": true,
-"AIModel":   true,
+// AIModel deferred to v0.3 — see note above.
 
 // AllNodeLabels — additions
-"AIService", "AIModel",
+"AIService",
 
 // AllowedEdgeKinds — additions
 "EXPOSES":             true,
@@ -1463,9 +1506,11 @@ Two ways to fix this; pick (a):
 
 Required edits:
 - `sdk/ingest/kinds.go` — add `EXPOSES` and `EXPOSES_CREDENTIAL` to BOTH `AllowedEdgeKinds` and `RawEdgeKinds`.
-- `sdk/ingest/model_test.go:112` — bump `if len(AllowedEdgeKinds) != 21` to `23`.
+- `sdk/ingest/model_test.go:100` — bump `if len(AllowedNodeKinds) != 12` to `21` (12 existing + 9 new: 8 per-service + `AIService`; `AIModel` deferred to v0.3).
+- `sdk/ingest/model_test.go:106` — bump `if len(AllNodeLabels) != 14` to `23` (14 existing + 9 new).
+- `sdk/ingest/model_test.go:112` — bump `if len(AllowedEdgeKinds) != 21` to `23` (21 existing + `EXPOSES` + `EXPOSES_CREDENTIAL`).
 - `sdk/ingest/model_test.go:117` — `TestRawEdgeKindsSubsetOfAllowed` continues to pass automatically since we add to both maps.
-- New test in `sdk/ingest/model_test.go` — assert `EXPOSES` and `EXPOSES_CREDENTIAL` are present in BOTH maps (regression guard against future drift).
+- New test in `sdk/ingest/model_test.go` — assert `EXPOSES`, `EXPOSES_CREDENTIAL`, `AIService`, and the 8 per-service labels are present in their respective maps (regression guard against future drift). (`AIModel` lands with v0.3 — its corresponding assertion ships with the Ollama Looter PR.)
 
 **Neo4j schema additions** (constraints + indexes — version-detected `ON ASSERT` vs `FOR REQUIRE`). Constraints go on the per-kind labels because `objectid` uniqueness is per-kind (an Ollama node and a vLLM node could in principle share an endpoint string; the SHA-256 ID prefixed with the kind name disambiguates them). The umbrella `:AIService` label gets indexes only, no uniqueness constraint.
 
@@ -1479,7 +1524,7 @@ CREATE CONSTRAINT IF NOT EXISTS ON (n:LiteLLMGateway)    ASSERT n.objectid IS UN
 CREATE CONSTRAINT IF NOT EXISTS ON (n:JupyterServer)     ASSERT n.objectid IS UNIQUE;
 CREATE CONSTRAINT IF NOT EXISTS ON (n:LangServeApp)      ASSERT n.objectid IS UNIQUE;
 CREATE CONSTRAINT IF NOT EXISTS ON (n:OpenWebUIInstance) ASSERT n.objectid IS UNIQUE;
-CREATE CONSTRAINT IF NOT EXISTS ON (n:AIModel)           ASSERT n.objectid IS UNIQUE;
+-- AIModel constraint deferred to v0.3 — no v0.2 emitter.
 
 -- Indexes on the umbrella label for unified-query post-processors.
 CREATE INDEX IF NOT EXISTS FOR (n:AIService) ON (n.is_anonymous_loot);
@@ -1494,21 +1539,21 @@ CREATE CONSTRAINT FOR (n:LiteLLMGateway)    REQUIRE n.objectid IS UNIQUE;
 CREATE CONSTRAINT FOR (n:JupyterServer)     REQUIRE n.objectid IS UNIQUE;
 CREATE CONSTRAINT FOR (n:LangServeApp)      REQUIRE n.objectid IS UNIQUE;
 CREATE CONSTRAINT FOR (n:OpenWebUIInstance) REQUIRE n.objectid IS UNIQUE;
-CREATE CONSTRAINT FOR (n:AIModel)           REQUIRE n.objectid IS UNIQUE;
+-- AIModel constraint deferred to v0.3.
 CREATE INDEX FOR (n:AIService) ON (n.is_anonymous_loot);
 CREATE INDEX FOR (n:AIService) ON (n.endpoint);
 ```
 
-These statements live in `server/internal/graph/schema.go:13-24` (the existing schema-init helper). The version-detection path that decides between `ON...ASSERT` and `FOR...REQUIRE` already exists; we just add to the per-version Cypher block lists.
+These statements live in `server/internal/graph/schema.go:13-77` (`indexDefs` slice + `InitSchema` + `constraintCypher` helper, where the 4.4-vs-5.x version fork actually lives). The version-detection path that decides between `ON...ASSERT` and `FOR...REQUIRE` already exists; we just add to the per-version Cypher block lists.
 
 **Post-processor wiring (`server/internal/analysis/registry.go:5`)** — the new `cross_service_credential_chain` processor (described in §3.7) must be registered in the `allProcessors()` slice. Verified location: `server/internal/analysis/registry.go:5` (NOT `postprocessor.go` — `postprocessor.go` holds the runner; the slice lives in `registry.go`). Concrete edits:
 
-- Create `server/internal/analysis/processors/cross_service_credential_chain.go` implementing `Name() string` (returns `"cross_service_credential_chain"`), `Dependencies() []string` (returns `[]string{"has_access_to"}`; the chain reads `EXPOSES_CREDENTIAL` edges plus existing `HAS_ACCESS_TO` paths), and `Process(ctx, db, scanID) (ProcessingStats, error)`.
+- Create `server/internal/analysis/processors/cross_service_credential_chain.go` implementing `Name() string` (returns `"cross_service_credential_chain"`), `Dependencies() []string` (returns `[]string{"has_access_to", "can_reach"}` — the chain reads `EXPOSES_CREDENTIAL` edges plus the agent-to-resource state populated by `CanReach`; ordering is enforced by `validateDependencyOrder` in `postprocessor.go`), and `Process(ctx, db, scanID) (ProcessingStats, error)`.
 - Edit `server/internal/analysis/registry.go:6-17` to append `&processors.CrossServiceCredentialChain{}` to the slice. Add it after `&processors.CanReach{}` (line 12) since the chain depends on `CanReach`-derived state and must run after it.
 - Add a smoke test in `server/internal/analysis/processors/cross_service_credential_chain_test.go`: build a synthetic graph with `(:AgentInstance)-[:HAS_ENV_VAR]->(:Credential)<-[:EXPOSES_CREDENTIAL]-(:LiteLLMGateway:AIService)-[:EXPOSES_CREDENTIAL]->(:Credential {provider:"openai"})`, run the processor, assert it emits the expected `CAN_REACH`-style edge from the agent to the upstream credential.
 - The dependency order check in `validateDependencyOrder` (`server/internal/analysis/registry.go` is exported by `postprocessor.go`) will fail-fast if dependencies are wrong.
 
-**UI integration scope.** The CLAUDE.md "Node Visual Encoding" reference in earlier drafts is misleading: CLAUDE.md is stale (it cites `Sigma+graphology` but the actual UI stack per `server/ui/package.json:26,29` is React Flow + ELK). The actual UI files that change for this milestone are:
+**UI integration scope.** CLAUDE.md correctly documents the UI stack as React Flow + ELK (verified against `server/ui/package.json:26,29`). The actual UI files that change for this milestone are:
 
 | File | Change |
 |---|---|
@@ -1530,166 +1575,193 @@ Color and icon proposals (per-kind label dispatch in the UI):
 | `LangServeApp` | `#7E57C2` purple | `Link2` |
 | `OpenWebUIInstance` | `#66BB6A` green | `MessageSquare` |
 
-A separate (out-of-scope for this sprint) follow-up should update CLAUDE.md to reflect the actual frontend stack — that doc claims Sigma+graphology, but `server/ui/package.json:26,29` shows the production stack is React Flow + ELK. Track this as a docs-fix task.
+CLAUDE.md was already updated to reflect the actual React Flow + ELK frontend stack — no separate doc-fix follow-up is required for this sprint.
 
 ---
 
 ## 7. Phased roadmap
 
-**Important: these estimates are 1.5–2.5× optimistic per two independent verification reviews.** The phase-by-phase numbers below show "original (optimistic)" and "realistic" ranges. The realistic total for one full-time engineer is **18–30 weeks (~4.5–7 months)**, not the 8–12 weeks the original draft implied. Re-plan accordingly. The CFP/conference strategy in §8 has been updated to reflect this — DEF CON 34 main-stage is no longer the v0.2 target.
+This section defines the phase ordering, deliverables, and acceptance criteria. Effort estimates and timelines are deliberately omitted — execution speed is a function of who's working on this and at what cadence. The dependency order is what matters: each phase produces artifacts that later phases consume, and skipping ahead breaks the chain.
 
-Effort estimates assume one engineer at full focus. Adjust for context-switching, on-call interruptions, and the inevitable rabbit holes that emerge in week 3 of every phase.
+The CFP deadlines in §8 are external, not a per-phase clock; they constrain *what must demonstrably exist by submission time*, not how phase-1 takes.
 
-### Phase 0 — Design review (week 0, 2026-04-23 → 2026-04-29)
+**Phase ordering at a glance:**
+
+```
+Phase 0 (design review)
+   ↓
+Phase 1 (scanner skeleton, no fingerprinting)
+   ↓
+Phase 2 (rules engine v2 + Ollama fingerprinter + AIService node kind)
+   ↓
+Phase 4 (LiteLLM fingerprinter + LiteLLM Looter + EXPOSES_CREDENTIAL edge)
+   ↓
+Phase 6 (demo data + docs + UI integration + credential-chain query)
+   ↓
+Phase 7 (CFP submission + talk prep + lab build)
+
+Phase 3 (vLLM / Open WebUI / Jupyter fingerprinters)   ─── deferred to v0.3
+Phase 5 (Qdrant / MLflow / LangServe fingerprinters)   ─── deferred to v0.4
+```
+
+Phases 3 and 5 are intentionally numbered out of execution order — they were originally planned in this sprint but moved to v0.3/v0.4 per §9.8 scope discipline. The numbering is preserved so the v0.3/v0.4 plans can reference "Phase 3 / Phase 5 of the original Sprint 3 plan" without renumbering everything.
+
+### Phase 0 — Design review
+
 - **Deliverable:** This document, reviewed and approved.
-- **Acceptance:** User accepts the multi-label schema decision (§3.5 Option B), the LiteLLM-first prioritization, the CFP target list (DEF CON Demo Labs + BSidesLV; not DEF CON main-stage), the validator update (§6 ship-blocker), and the realistic effort estimates below.
-- **Owner:** TBD (likely Adithyan AK with architect feedback loop).
-- **Risk:** Schema decision (multi-label) gets pushed back to single `AIService` kind; rework is significant. Mitigation: §3.5 presents both sides; if the user reverses to single-kind, every per-kind processor query rewrites to property predicates, every UI hex-config entry consolidates into a single entry with runtime dispatch, every Neo4j constraint consolidates into one. Mechanical but tedious — ~2 days of cleanup.
+- **Acceptance:** Multi-label schema decision (§3.5 Option B) accepted, LiteLLM-first prioritization accepted, validator update (§6 ship-blocker) acknowledged, CFP target (§8) acknowledged.
+- **Risk:** Schema decision (multi-label) gets reversed to single `AIService` kind; per-kind processor queries rewrite to property predicates, UI hex-config entries consolidate, Neo4j constraints consolidate. Mechanical cleanup — §3.5 presents both sides.
 
-### Phase 1 — Scanner skeleton (weeks 1–2, 2026-04-29 → 2026-05-13; **realistic 2–3 weeks**)
+### Phase 1 — Scanner skeleton
+
 - **Deliverables:**
-  - `modules/networkscan/scanner.go` — CIDR/host expansion + bounded port sweep.
+  - `modules/networkscan/scanner.go` — CIDR/host expansion + bounded port sweep with a fixed-size worker pool (default 50 workers) consuming a buffered task channel. `O(workers)` goroutines regardless of target count.
   - `expandTargets` for IPv4 + IPv6, handles /N CIDRs, single hosts, file-of-hosts, DNS names.
   - CIDR cap enforcement (`--allow-large-cidr` flag).
-  - Public-IP guard (`--allow-public-targets` flag).
+  - Public-IP guard (`--allow-public-targets` flag) plus the §9.6 hardening: interactive "type AUTHORIZED" confirmation, `--authorization-file` alternative, scan-output watermark.
   - Returns `[]action.Target` with Meta populated. **No fingerprinting in this phase** — Meta carries `candidate_kinds` only.
   - Unit tests for expansion (CIDR sizes, IPv6, edge cases like /32, /31, /128).
-  - Unit tests for the public/private classification (reuses `sdk/common/host.go`).
+  - Unit tests for public/private classification. `sdk/common/host.go` already exports `ClassifyHost(string) HostInfo` with `IsLocal`/`IsPrivate`/`IsPublic` fields covering IPv4 + RFC 1918. Phase 1 EXTENDS this file to handle: IPv6 ULA (`fc00::/7`), IPv6 link-local (`fe80::/10`), IPv6 multicast (`ff00::/8`), IPv4 link-local (`169.254.0.0/16`), and IPv4 multicast (`224.0.0.0/4`). The scanner refuses link-local and multicast outright (documented in `docs/scanner.md`).
+  - `select` checking `ctx.Done()` BEFORE every `tasks <-` send so Ctrl-C does not spawn additional work.
+  - `defer recover()` around each worker task body for panic isolation; logs and continues.
 - **Acceptance criteria:**
   - `agenthound scan 10.0.0.0/30` returns 4 targets.
   - `agenthound scan 10.0.0.0/16 --allow-large-cidr=false` errors with the cap explanation.
   - `agenthound scan 1.1.1.1` errors without `--allow-public-targets`.
   - Race-detector-clean tests.
-- **Risk:** IPv6 expansion has many edge cases (link-local, unique-local, multicast). Mitigation: refuse multicast and link-local entirely; document the policy.
+- **Risk:** IPv6 expansion edge cases (link-local, unique-local, multicast). Mitigation: refuse multicast and link-local entirely; document the policy.
 
-### Phase 2 — Rules engine v2 + first Fingerprinter: Ollama (weeks 2–3 optimistic; **realistic 4–5 weeks** — the rules-engine extension is architecturally significant)
+### Phase 2 — Rules engine v2 + first Fingerprinter (Ollama)
+
 - **Deliverables:**
   - `sdk/rules/MatcherSpec.Version: 2` extension landed (`http_status`, `http_header`, `json_path` matchers).
   - `rules/builtin/fingerprints/ollama.yaml` shipped.
   - `modules/ollamafp/fingerprinter.go` implementing `sdk/action.Fingerprinter`.
-  - Integration test: a stub HTTP server emitting `{"version":"0.5.1"}` is correctly fingerprinted.
-  - The CLI dispatcher: `agenthound scan 10.0.0.42` → port sweep → fingerprint dispatch → emit `AIService` node.
-  - New `AIService` node kind landed in `sdk/ingest/kinds.go` + Neo4j schema migration + UI rendering.
+  - Integration test: a stub HTTP server emitting `{"version":"0.5.1"}` on `GET /api/version` is correctly fingerprinted.
+  - CLI dispatcher: `agenthound scan 10.0.0.42` → port sweep → fingerprint dispatch → emit `AIService` node.
+  - New `AIService` umbrella + `OllamaInstance` per-kind labels landed in `sdk/ingest/kinds.go` (BOTH `AllowedNodeKinds` AND `AllNodeLabels`) + Neo4j schema migration + UI rendering.
 - **Acceptance criteria:**
-  - `agenthound scan <stub-host>` produces ingest JSON containing one node with `kinds: ["OllamaInstance", "AIService"]` (multi-label per §3.5 Option B), `version=0.5.1`.
-  - The server ingests the JSON with no validation errors.
-  - The UI displays the new node with the orange-red Ollama color.
-- **Risk:** Rules-engine extension is the architecturally significant piece. Mitigation: land the `Version: 2` boundary as a separate PR; fingerprint rule depends on it.
+  - `agenthound scan <stub-host>` produces ingest JSON containing one node with `kinds: ["OllamaInstance", "AIService"]`, `version=0.5.1`.
+  - Server ingests the JSON with no validation errors.
+  - UI displays the new node with the orange-red Ollama color.
+- **Risk:** Rules-engine extension is the architecturally significant piece. Mitigation: land the `Version: 2` boundary as its own PR; fingerprint rule depends on it.
 
-### Phase 3 — REVISED: deferred to v0.3. (Was: more Fingerprinters in weeks 3–4. Per the §9.8 scope-creep correction, vLLM / Open WebUI / Jupyter fingerprinters slip to v0.3.)
-- **Deliverables:**
-  - `rules/builtin/fingerprints/{vllm,openwebui,jupyter}.yaml`.
-  - `modules/{vllmfp,openwebuifp,jupyterfp}/` — three more Fingerprinter modules.
-  - `EXPOSES` edge kind landed (Open WebUI → Ollama is the canonical example).
-- **Acceptance criteria:**
-  - `agenthound scan` against a docker-compose lab with all four services (Ollama + vLLM + Open WebUI + Jupyter) produces a graph containing all four `AIService` nodes.
-  - Open WebUI's backend connection to Ollama emerges as an `EXPOSES` edge.
-- **Risk:** vLLM and LangServe both default to port 8000 — fingerprint dispatch must try both and the first match wins. Mitigation: explicit priority in the fingerprint rule (`priority: 100`).
+### Phase 3 — DEFERRED to v0.3
 
-### Phase 4 — First Looter: LiteLLM (weeks 5–6 optimistic; **realistic 6–8 weeks** — LiteLLM's `/model/info` shape varies across versions and the version-tolerance work is non-trivial)
+Originally planned: vLLM / Open WebUI / Jupyter fingerprinters + first emission of the `EXPOSES` edge (Open WebUI → Ollama is the canonical case). Deferred per §9.8 scope discipline.
+
+**The `EXPOSES` edge KIND itself lands in v0.2** (added to `AllowedEdgeKinds` + `RawEdgeKinds` + `EdgeKindEndpoints` in Phase 4 alongside `EXPOSES_CREDENTIAL`) — this is a one-time schema migration we want to ship now so v0.3 doesn't need a second migration. v0.2 simply has zero collectors emitting `EXPOSES` until v0.3's fingerprinters arrive.
+
+Numbered phases preserved so v0.3 can reference "Phase 3 of Sprint 3" cleanly.
+
+### Phase 4 — First Looter (LiteLLM)
+
 - **Deliverables:**
   - LiteLLM Fingerprinter (`rules/builtin/fingerprints/litellm.yaml` + `modules/litellmfp/`).
   - LiteLLM Looter (`modules/litellmloot/`).
-  - `EXPOSES_CREDENTIAL` edge kind landed.
-  - `agenthound loot <host> --type litellm --master-key sk-...` CLI verb wired (replaces today's stub).
-  - The first concrete `LootResult` shape — replaces the v0 `struct{}` stub.
+  - `EXPOSES_CREDENTIAL` edge kind landed in BOTH `AllowedEdgeKinds` AND `RawEdgeKinds` (per the §6 SHIP-BLOCKER), plus `EdgeKindEndpoints`.
+  - `agenthound loot <host> --type litellm --master-key sk-... [--include-credential-values]` CLI verb wired (replaces today's stub in `collector/cli/stubs.go`).
+  - First concrete `LootResult` shape (per §4.4) — replaces the v0 `struct{}` stub in `sdk/action/looter.go`.
+  - `cross_service_credential_chain` post-processor wired into `server/internal/analysis/registry.go` after `CanReach`.
   - Integration test: against a stub LiteLLM server (FastAPI with mocked `/model/info` + `/key/list`), looting produces the expected `Credential` nodes + `EXPOSES_CREDENTIAL` edges.
-  - GET-only assertion in test suite.
+  - GET-only assertion in test suite (looter MUST NOT issue mutating HTTP methods).
+  - Master-key redaction in slog output, with a unit test asserting the full master key never appears in logs.
 - **Acceptance criteria:**
   - Stub-server loot session emits ≥3 `Credential` nodes (one per fake provider).
   - `EXPOSES_CREDENTIAL` edges connect the LiteLLM `AIService` node to each credential.
   - The credential-chain detector fires on the resulting graph.
   - Server ingests the JSON with no validation errors.
-- **Risk:** LiteLLM's `/model/info` response shape differs across versions. Mitigation: parse the response leniently, log unknown shapes as warnings, do not fail-fast on schema drift.
+- **Risk:** LiteLLM's `/model/info` response shape differs across versions. Mitigation: parse leniently, log unknown shapes as warnings, do not fail-fast on schema drift; record partial results in `LootResult.PartialErrors`.
 
-### Phase 5 — REVISED: deferred to v0.4. (Was: Qdrant / MLflow / LangServe fingerprinters in weeks 6–7. Per scope-creep correction, these slip to v0.4.)
+### Phase 5 — DEFERRED to v0.4
+
+Originally planned: Qdrant / MLflow / LangServe fingerprinters + 8-service docker-compose lab. Deferred per §9.8 scope discipline.
+
+### Phase 6 — Demo data + docs + UI integration
+
 - **Deliverables:**
-  - Three more Fingerprinter modules + rules.
-  - End-to-end docker-compose lab covering all 8 services.
+  - `docker/demo/docker-compose.yml` — minimal lab covering the two v0.2 service kinds (Ollama + LiteLLM). The full 8-service lab is the v0.3/v0.4 target.
+  - `testdata/demo/scan_lab.json` — anonymized real-lab capture (per §10.5 recipe). NOT hand-fabricated.
+  - `scripts/anonymize-scan.sh` — anonymization helper used by the demo capture pipeline.
+  - `docs/scanner.md` — operator guide for the network scanner with the §9.1 legal warning at the top.
+  - `docs/loot-litellm.md` — LiteLLM-specific loot guide with master-key safety notes + the §9.5 audit-trail residue caveat.
+  - UI updates: 8 entries in `server/ui/src/theme/tokens.ts` (`NODE_KIND_COLORS`) and 8 entries in `server/ui/src/lib/explorer/hex-config.ts` (`HEX_CONFIG`) — 2 final (Ollama, LiteLLM), 6 stubbed for v0.3/v0.4 — so the schema is forward-compatible. Size dispatch in `server/ui/src/lib/node-styles.ts` for `:AIService`. Inspector per-kind property panels for the 2 v0.2 kinds; generic `:AIService` panel covers the others. New prebuilt query option in `server/ui/src/components/queries/` for `litellm-credential-leak`. TypeScript types in `server/ui/src/api/types.ts` for the new node shapes.
+  - New pre-built query: `litellm-credential-leak` (LiteLLM `AIService` with `EXPOSES_CREDENTIAL` edges).
+  - The existing 17 pre-built queries audited for breakage against the new schema.
 - **Acceptance criteria:**
-  - `agenthound scan` against the lab CIDR produces 8 `AIService` nodes — one per service kind.
-  - `agenthound query --findings --severity critical` returns ≥1 critical finding involving an `AIService` node.
+  - `make demo` produces a graph with the v0.2 service kinds (Ollama + LiteLLM) and ≥1 credential-chain finding.
+  - Credential-chain detector fires on the demo data and surfaces in the Findings panel.
+  - The new `litellm-credential-leak` query is wired and runnable from both CLI and UI.
 
-### Phase 6 — Demo data + docs + UI integration (weeks 7–8 optimistic; **realistic 3–4 weeks**)
-- **Deliverables:**
-  - `testdata/demo/scan_lab.json` — anonymized real-lab capture (per §10.5 recipe — NOT hand-fabricated) of the v0.2 lab environment + LiteLLM loot + a credential chain. v0.2 lab realistically contains 2 service kinds (Ollama + LiteLLM); §8.5's full 8-service lab is the v0.3+ target.
-  - `docs/scanner.md` — operator guide for the network scanner.
-  - `docs/loot-litellm.md` — LiteLLM-specific loot guide with master-key safety notes.
-  - UI legend updated for the eight new icon variants.
-  - The 17 pre-built queries audited for breakage; new pre-built query: `litellm-credential-leak` (LiteLLM AIService with EXPOSES_CREDENTIAL edges).
-- **Acceptance criteria:**
-  - User clicks "Demo" in the UI, sees a graph with all 8 service kinds.
-  - The credential-chain detector fires on the demo data, surfaces in the Findings panel.
-  - Two new pre-built queries (network exposure + LiteLLM credential leak) are wired and runnable from CLI + UI.
+### Phase 7 — CFP submission + talk prep + lab build
 
-### Phase 7 — CFP submission + talk prep + lab build (weeks 8–12 optimistic; **realistic 5–7 weeks**)
 - **Deliverables:**
-  - DEF CON 34 main-stage CFP submission. **Hard deadline: 2026-05-01 23:59 UTC.** ([DEF CON 34 CFP](https://defcon.org/html/defcon-34/dc-34-cfp.html)) **NOTE: This deadline is BEFORE Phase 4 ends.** See §8 for resolution.
-  - BSidesLV 2026 CFP submission. ([BSidesLV CFP](https://bsideslv.org/cfp))
-  - DEF CON Demo Labs CFP submission (same May 1, 2026 deadline). ([DEF CON 34 Demo Labs CFP](https://defcon.org/html/defcon-34/dc-34-cfdl.html))
+  - DEF CON 34 Red Team Village CFP submission. Hard deadline 2026-05-31. Primary v0.2 CFP target.
+  - fwd:cloudsec EU 2026 submission (deadline 2026-06-12) — secondary, cloud-AI framing.
+  - OWASP Global AppSec US 2026 SF submission (deadline 2026-06-29) — tertiary, OWASP Agentic Top 10 framing.
   - Slide deck draft.
-  - Demo recording for the talk acceptance package.
+  - Demo recording captured at 1080p, ≤8 minutes, in OBS, with the master key and any incidentally captured tokens redacted.
 - **Acceptance criteria:**
-  - At least one CFP submitted by deadline.
+  - DEF CON RTV CFP submitted by 2026-05-31.
+  - fwd:cloudsec EU 2026 CFP submitted by 2026-06-12 (secondary).
+  - OWASP Global AppSec US 2026 SF CFP submitted by 2026-06-29 (tertiary).
   - Demo recording captures end-to-end flow: `agenthound scan` → `agenthound loot litellm` → server graph → credential-chain finding.
 
-### Critical scheduling tension — RESOLVED: drop DEF CON main-stage from this cycle
+### Critical scheduling tension — DEF CON Red Team Village is the new primary
 
-Phase 4 (LiteLLM Looter) finishes ~2026-06-10 under optimistic estimates; **late June or later under realistic estimates**. DEF CON 34 main-stage CFP closes 2026-05-01.
+The earlier May-1 / May-8 venues (DEF CON main, Demo Labs, Workshops, BSidesLV) all closed before any v0.2 implementation could ship. The new primary is **DEF CON 34 Red Team Village (RTV)**, CFP closing **2026-05-31**.
 
-**Submitting a main-stage CFP for work that doesn't exist yet is risky.** Main-stage reviewers favor "this is done now" over "this will be done in August"; an aspirational pitch competes against polished pitches from groups with completed research, and AgentHound is not yet that. Better path:
+RTV is a stronger fit than the missed venues anyway: its audience is exactly AgentHound's audience — red teamers building and using offensive AI/ML tooling. The acceptance bar is "working tool walkthrough with a credible offensive use case," not "finished published research." That matches what v0.2 will plausibly look like at submission time: scanner skeleton landed, Ollama fingerprinter working, LiteLLM Looter prototype, demo lab capable of producing one credential-chain finding end-to-end.
 
-1. **Drop DEF CON 34 main-stage from this cycle.** Aim for DEF CON 35 (2027) once Phase 5+6 results are real.
-2. **Submit DEF CON Demo Labs by 2026-05-01.** Lower bar than main-stage; reviewers expect working-tool walkthroughs, not finished research. We will have scanner skeleton + LiteLLM fingerprinter + LiteLLM Looter (or close) by August. 45-minute interactive slot is the right format.
-3. **Submit BSidesLV breaking-ground by 2026-05-08 (verified deadline).** Acceptances roll from week of 2026-05-25; feedback comes early enough to inform Demo Labs prep. Lower stakes than DEF CON; explicitly accepts later-stage tools.
-4. **Aim Hexacon 2026 (Oct, Paris) when CFP opens.** Strong fit for offensive-research framing once Phase 5+6 results are in.
+Path forward:
 
-Closed venues for context: RSAC 2026 (deadline 2025-08-18); Black Hat USA 2026 main briefings (2026-03-20); Black Hat Arsenal (2026-03-16); BSidesSF 2026 (already happened 2026-03-21–22 — flag for BSidesSF 2027 cycle); fwd:cloudsec NA 2026 (2026-03-20). fwd:cloudsec Europe 2026 still open through 2026-06-12.
+1. **Submit DEF CON 34 Red Team Village by 2026-05-31.** Primary v0.2 target. Talk title proposal: "AgentHound: Mapping the Cross-Protocol Attack Surface of AI Agent Infrastructure."
+2. **Submit fwd:cloudsec EU 2026 by 2026-06-12.** Secondary; cloud-AI framing. Different audience overlap.
+3. **Submit OWASP Global AppSec US 2026 SF by 2026-06-29.** Tertiary; OWASP Agentic Top 10 framing on top of AgentHound's existing OWASP mapping.
+4. **Track Hexacon 2026 (Oct 16–17, Paris) — CFP TBD.** Strong fit for offensive-research framing once Phase 5+6 results are in.
+5. **Aim DEF CON 35 (2027) main-stage** — the real main-stage target. By then Phase 5+6+7 have shipped, the lab dataset is mature, and the talk has empirical findings to anchor on.
+
+Closed venues for context: DEF CON 34 main-stage / Demo Labs / Workshops (closed 2026-05-01); BSidesLV 2026 breaking-ground (closed 2026-05-08); RSAC 2026 (closed 2025-08-18); Black Hat USA 2026 main briefings (closed 2026-03-20); Black Hat Arsenal (closed 2026-03-16); BSidesSF 2026 (already happened — flag for BSidesSF 2027); fwd:cloudsec NA 2026 (closed 2026-03-20); OWASP Global AppSec EU 2026 Vienna (closed 2026-02-03).
 
 ---
 
 ## 8. CFP / conference strategy
 
-### 8.1 Target conferences (verified deadlines)
+### 8.1 Target conferences (status as of 2026-05-16)
 
 | Conference | Dates | CFP closes | Status | Track fit |
 |---|---|---|---|---|
-| **DEF CON 34 main stage** | 2026-08-06 → 09 | **2026-05-01 23:59 UTC** | Open | Strong fit but timing-risky (see §7 critical scheduling tension). Hacker-research focus, AI security trending. ([DEF CON 34 CFP](https://defcon.org/html/defcon-34/dc-34-cfp.html)) |
-| **DEF CON 34 Demo Labs** | 2026-08-06 → 09 | **2026-05-01 23:59 UTC** | Open | **Strongest fit for v0.2.** 45-minute interactive slot, lower bar than main stage — working tool walkthrough is sufficient and exactly what we will have. ([Demo Labs CFP](https://defcon.org/html/defcon-34/dc-34-cfdl.html)) |
-| **DEF CON 34 Workshops** | 2026-08-06 → 09 | **2026-05-01 23:59 UTC** | Open | Moderate fit if we can frame a hands-on lab around scanning + pathfinding. Same May 1 deadline as main-stage and Demo Labs. ([DEF CON 34 CFP umbrella](https://defcon.org/html/defcon-34/dc-34-cfp.html)) |
-| **DEF CON 34 Policy track** | 2026-08-06 → 09 | **2026-05-01 23:59 UTC** | Open | Weak fit. Policy-oriented. |
-| **BSidesLV 2026 (breaking-ground track)** | 2026-08-03 → 05 | **2026-05-08 23:59 PT** (verified) — acceptances rolling from week of 2026-05-25 | Open | Strong fit. Track explicitly seeks "newest attack or defensive research, tools, new and novel approaches." Lower stakes than DEF CON main stage; accepts later-stage tools more readily. ([BSidesLV CFP](https://bsideslv.org/cfp)) |
-| **BSidesSF 2026** | 2026-03-21 → 22 | **CLOSED — already happened** | Past | N/A — flag for **BSidesSF 2027** as a future cycle (typical CFP closes in winter; AgentHound v0.3+ would be a stronger fit by then). |
-| **Hexacon 2026** | 2026-10-16 → 17 | CFP details TBD as of 2025-10; **monitor** | Likely opens summer 2026 | **Strong fit.** Offensive-research focus, Paris venue, attracts deep technical talks on novel tooling. Track this and submit when CFP opens. |
-| **fwd:cloudsec EU 2026** | TBD | **2026-06-12** | Open | Moderate fit if framed as cloud-AI. ([fwd:cloudsec NA 2026](https://fwdcloudsec.org/conference/north-america/cfp.html)) |
-| **OWASP Global AppSec EU 2026 (Vienna)** | 2026-06-25 → 26 | **CLOSED 2026-02-03** | Closed | Moderate fit (would have been). |
-| **OWASP Global AppSec US 2026 (SF)** | 2026-11-05 → 06 | **2026-04-08 → 06-29 23:59 PDT** | Open | Strong fit. AppSec audience increasingly AI-aware. ([OWASP US 2026 CFP](https://sessionize.com/owasp-global-appsec-us-2026-cfp-SF/)) |
-| **Black Hat USA 2026 main briefings** | 2026-08-04 (Vegas summits) / 2026-10-07 → 08 (Toronto briefings) | **CLOSED 2026-03-20** | Closed | N/A — closed. |
-| **Black Hat USA 2026 Arsenal (tools)** | 2026-08-04 | **CLOSED 2026-03-16** | Closed | N/A — closed. |
-| **RSAC 2026** | 2026-03-23 → 26 | **CLOSED 2025-08-18** | Closed (already happened) | N/A — already happened. |
-| **SAINTCON 2026** | 2026-10-27 → 30 | Date `unverified — not in search results` | Unknown | Moderate fit. ([SAINTCON 2026](https://www.saintcon.org/)) |
+| **DEF CON 34 Red Team Village** | 2026-08-06 → 09 | **2026-05-31** | **OPEN — primary v0.2 target** | Audience match: red teamers building AI/ML offensive tooling. Acceptance bar = working-tool walkthrough with a credible offensive use case. |
+| **fwd:cloudsec EU 2026** | TBD (June 2026) | **2026-06-12** | Open | Secondary. Cloud-AI angle for the European audience. |
+| **OWASP Global AppSec US 2026 (SF)** | 2026-11-05 → 06 | **2026-06-29 23:59 PDT** | Open | Tertiary. AppSec audience increasingly AI-aware; AgentHound's existing OWASP MCP / Agentic Top-10 mapping is the framing. ([OWASP US 2026 CFP](https://sessionize.com/owasp-global-appsec-us-2026-cfp-SF/)) |
+| **Hexacon 2026 (Paris)** | 2026-10-16 → 17 | CFP TBD as of audit time; **monitor** | Likely opens summer 2026 | Strong fit for offensive-research framing once Phase 5+6 results are in. Track and submit when open. |
+| **SAINTCON 2026** | 2026-10-27 → 30 | Unverified | Unknown | Moderate fit. ([SAINTCON 2026](https://www.saintcon.org/)) |
+| **DEF CON 35 (2027) main-stage** | 2027 dates TBD | TBD (typically opens Jan, closes May) | Future | The real main-stage target — by then Phase 5+6+7 have shipped and the lab dataset is mature. |
+| **BSidesSF 2027** | TBD | TBD (typical CFP closes winter) | Future | Flag for the next cycle once v0.3+ ships. |
+| **DEF CON 34 main stage / Demo Labs / Workshops** | 2026-08-06 → 09 | **CLOSED 2026-05-01** | Closed | N/A this cycle. |
+| **BSidesLV 2026 (breaking-ground)** | 2026-08-03 → 05 | **CLOSED 2026-05-08** | Closed | N/A this cycle. |
+| **Black Hat USA 2026 main briefings** | 2026-08-04 / 2026-10-07 → 08 | **CLOSED 2026-03-20** | Closed | N/A. |
+| **Black Hat USA 2026 Arsenal** | 2026-08-04 | **CLOSED 2026-03-16** | Closed | N/A. |
+| **OWASP Global AppSec EU 2026 (Vienna)** | 2026-06-25 → 26 | **CLOSED 2026-02-03** | Closed | N/A. |
+| **fwd:cloudsec NA 2026** | passed | **CLOSED 2026-03-20** | Closed | N/A. |
+| **BSidesSF 2026** | 2026-03-21 → 22 | passed | Past | N/A — see BSidesSF 2027 above. |
+| **RSAC 2026** | 2026-03-23 → 26 | **CLOSED 2025-08-18** | Past | N/A. |
 
 ### 8.2 Recommended submission portfolio
 
-**Realistic stance.** DEF CON 34 main-stage CFP closes 2026-05-01; Phase 4 (LiteLLM Looter) ships ~late June at earliest under realistic 1.5-2.5× estimates (see §7). Submitting a main-stage CFP for work that doesn't exist yet is risky — main-stage reviewers favor "this is done now" over "this will be done in August." Better to drop main-stage from this cycle and aim for it at DEF CON 35 (2027) once Phase 5+6 results are in.
+Priority order:
 
-Updated priority order:
+1. **DEF CON 34 Red Team Village** — submit by **2026-05-31**. **This is the primary v0.2 target.** Talk title proposal: "AgentHound: Mapping the Cross-Protocol Attack Surface of AI Agent Infrastructure." RTV explicitly accepts working-tool walkthroughs from offensive practitioners; the demo (scanner → LiteLLM Looter → graph → credential chain) is exactly the format. The CFP submission must be honest about what's shipped vs. in flight at submission time — RTV reviewers value working code over aspirational pitches.
+2. **fwd:cloudsec EU 2026** — submit by **2026-06-12**. Cloud-AI framing for a different audience. Lower acceptance volatility.
+3. **OWASP Global AppSec US 2026 SF** — submit by **2026-06-29**. AppSec audience values the OWASP Agentic Top-10 mapping AgentHound already does. Framing: "OWASP Agentic Top 10 in practice — what we found scanning agent infrastructure."
+4. **Hexacon 2026 (Paris)** — monitor CFP open and submit when available. Offensive-research framing once Phase 5+6 results are in.
+5. **DEF CON 35 (2027) main stage** — the *real* main-stage target. By then Phase 5+6+7 have shipped, the lab dataset is mature, and the talk has empirical findings to anchor on. Plan the v0.3 milestone with this in mind.
 
-1. **DEF CON 34 Demo Labs** — submit by 2026-05-01. **This is the primary v0.2 target.** 45-minute interactive slot. Demo Labs reviewers expect a working tool walkthrough, not finished research; that is exactly what we will have at submission time (Phase 0–2 done, Phase 3+ in flight). Talk title proposal: "AgentHound: A Working Demo of Cross-Protocol Attack-Path Mapping for AI Agent Infrastructure."
-2. **BSidesLV 2026 breaking-ground** — submit by **2026-05-08 23:59 PT** (verified). Lower stakes than DEF CON main stage; explicitly accepts later-stage tools. Acceptances roll from the week of 2026-05-25, so feedback comes early enough to inform the Demo Labs prep.
-3. **DEF CON 34 Workshops** — submit by 2026-05-01 if we have bandwidth. Hands-on workshop framing: attendees scan a lab CIDR, ingest results, find a credential chain. Higher prep cost than Demo Labs.
-4. **Hexacon 2026** (October Paris) — monitor CFP open and submit when available. Strong fit for offensive-research framing once Phase 5+6 results are in.
-5. **OWASP Global AppSec US 2026 SF** — submit by 2026-06-29. AppSec audience values the OWASP Top-10 mapping AgentHound already does. Different framing: "OWASP Agentic Top 10 in practice — what we found scanning agent infrastructure".
-6. **fwd:cloudsec EU 2026** — submit by 2026-06-12. Cloud-AI angle for the European audience.
-7. **DEF CON 35 (2027) main stage** — the *real* main-stage target. By then Phase 5+6+7 have shipped, the lab dataset is mature, and the talk has empirical findings to anchor on. Plan the v0.3 milestone with this in mind.
-
-**Explicitly NOT recommended:** DEF CON 34 main stage. Reasoning above. If you choose to submit anyway as a backup, the abstract must be honest about what is shipped vs. what will ship by August — main-stage reviewers see through aspirational pitches.
-
-### 8.3 Talk angle — "Mapping AI agent attack paths in the wild"
+### 8.3 Talk angle — "Mapping the Cross-Protocol Attack Surface of AI Agent Infrastructure"
 
 **One-paragraph abstract draft:**
 
-> Self-hosted AI infrastructure has eaten enterprise networks faster than security tooling has kept up. Ollama instances expose model weights to the internet (12,269 found in February 2026 alone). LiteLLM gateways aggregate provider keys behind a single master credential. Vector databases hold customer prompts in plaintext. We built AgentHound — a BloodHound-style attack-path mapper for AI agent infrastructure — and pointed it at consenting environments. This talk shows what we found: cross-protocol credential chains that span agent clients, MCP servers, A2A delegates, and exposed AI gateways, surfaced as graph paths a defender can read in seconds. We will demonstrate the live tool against a representative lab environment, walk through three real findings (anonymized) from authorized engagements, and release the v0.2 build of AgentHound at talk time.
+> Self-hosted AI infrastructure has eaten enterprise networks faster than security tooling has kept up. Ollama instances expose model weights to the internet (12,269 found in February 2026 alone). LiteLLM gateways aggregate provider API keys — OpenAI, Anthropic, Bedrock, Azure, Cohere — behind a single master credential. Once you compromise the master, the whole upstream provider stack is yours. We built AgentHound — a BloodHound-style attack-path mapper for AI agent infrastructure — and pointed it at consenting environments. This talk shows what we found: cross-protocol credential chains that span agent clients, MCP servers, A2A delegates, and exposed AI gateways, surfaced as graph paths a defender can read in seconds. We will demonstrate the live tool — `agenthound scan` to discover Ollama and LiteLLM on a lab CIDR, `agenthound loot litellm` to extract upstream provider keys, the graph showing the credential chain from agent to compromised provider — and release the v0.2 build at talk time. Vector stores, MLflow tracking servers, and notebook hosts are on the v0.3+ roadmap.
 
 ### 8.4 Differentiation pitch — what makes this slot-worthy
 
@@ -1803,16 +1875,17 @@ A Looter cannot un-log endpoint hits. The strict Reverter contract — "every ch
 
 This is the actual mitigation for service version drift. The earlier framing ("future template ecosystem in `docs/future-modules.md`") deferred it; deferring it is what kills the project on Phase 6+.
 
-### 9.8 Scope creep — the "16 modules" math doesn't fit one engineer
+### 9.8 Scope creep — staged module rollout, not a big-bang sprint
 
-**Issue.** 8 services × 2 actions (Fingerprinter + Looter) = 16 modules. Each module is realistically 4–6 weeks for design + implementation + tests + integration + docs. That is **64–96 weeks** of engineering work, or 14–21 months for one full-time engineer. The plan as initially written implies all 16 are within this sprint; reality is **LiteLLM only is the v0.2 deliverable; Ollama and one other service are stretch goals; the remaining services are v0.3+.**
+**Issue.** 8 target services × 2 actions (Fingerprinter + Looter) = 16 modules. Treating all 16 as one milestone is the wrong unit of delivery — each new service kind requires a fingerprint rule, a Looter (where applicable), node-kind plumbing, UI hex-config, and demo data. Bundling 16 of those into v0.2 produces an undemoable mass; staging them produces a working tool early.
 
-**Mitigations.**
+**Resolution — staged scope:**
 
-- v0.2 commits to: scanner skeleton, **2** fingerprinters (Ollama + LiteLLM), **1** looter (LiteLLM). Drop the implication of 8 fingerprinters in this milestone.
-- v0.3 adds: 3 more fingerprinters (vLLM, Open WebUI, Jupyter). One looter (Ollama).
-- v0.4 adds: remaining 3 fingerprinters (Qdrant, MLflow, LangServe). One looter (Jupyter or MLflow).
-- The roadmap §7 has been revised to reflect this.
+- **v0.2:** scanner skeleton, **2** fingerprinters (Ollama + LiteLLM), **1** Looter (LiteLLM). This is the minimum that lets the credential-chain demo land end-to-end.
+- **v0.3:** 3 more fingerprinters (vLLM, Open WebUI, Jupyter); 1 Looter (Ollama).
+- **v0.4:** remaining 3 fingerprinters (Qdrant, MLflow, LangServe); 1 Looter (Jupyter or MLflow — chosen by which lab finding lands first).
+
+The roadmap §7 reflects this — Phases 3 and 5 are explicitly deferred to v0.3 / v0.4.
 
 ### 9.9 Module-CLI-flag binding
 
@@ -1849,7 +1922,7 @@ The milestone is "shipped" when ALL of the following hold:
 
 ### 10.2 Schema acceptance
 
-- [ ] `sdk/ingest/kinds.go` contains `AIService` and `AIModel` in `AllowedNodeKinds`.
+- [ ] `sdk/ingest/kinds.go` contains `AIService` in `AllowedNodeKinds`. (`AIModel` deferred to v0.3 — no v0.2 emitter.)
 - [ ] `sdk/ingest/kinds.go` contains `EXPOSES` and `EXPOSES_CREDENTIAL` in `AllowedEdgeKinds`.
 - [ ] `EdgeKindEndpoints` covers both new edges.
 - [ ] Neo4j schema migration runs cleanly on Neo4j 4.4 and 5.x (the existing version-detection path).
@@ -1857,10 +1930,11 @@ The milestone is "shipped" when ALL of the following hold:
 
 ### 10.3 UI acceptance
 
-- [ ] The Graph Explorer renders `AIService` nodes with eight distinct service-kind icons.
+- [ ] The Graph Explorer renders the two v0.2 `AIService` node kinds (Ollama + LiteLLM) with distinct service-kind icons.
+- [ ] The remaining 6 service kinds (vLLM, Qdrant, MLflow, Jupyter, LangServe, Open WebUI) have UI plumbing wired ahead of v0.3/v0.4 — entries present in `NODE_KIND_COLORS` (`tokens.ts`), `HEX_CONFIG` (`hex-config.ts`), and the legend — but no demo nodes of those kinds in the v0.2 graph.
 - [ ] The Findings panel surfaces the new `litellm-credential-leak` finding.
-- [ ] The Inspector shows `service_kind`, `endpoint`, `version`, `auth_method`, `is_anonymous_loot` for `AIService` nodes.
-- [ ] The Legend lists the eight service variants.
+- [ ] The Inspector shows `service_kind`, `endpoint`, `version`, `auth_method`, `is_anonymous_loot` for `AIService` nodes. Per-kind property panels for the 2 v0.2 kinds; generic `:AIService` panel for the remaining 6.
+- [ ] The Legend lists all 8 service variants (the two v0.2 kinds active; the other 6 grayed-out / "v0.3+").
 
 ### 10.4 CLI acceptance
 
@@ -1879,8 +1953,8 @@ The milestone is "shipped" when ALL of the following hold:
   scripts/anonymize-scan.sh testdata/demo/scan_lab.raw.json > testdata/demo/scan_lab.json
   rm testdata/demo/scan_lab.raw.json
   ```
-- [ ] `make demo` produces a graph with whatever service kinds the v0.2 lab actually exposes (per scope-creep correction in §9.8: this is realistically 2 service kinds at v0.2 — Ollama + LiteLLM — not 8) and ≥1 credential chain finding.
-- [ ] A 5-minute screen recording exists showing: scan → loot → graph → finding.
+- [ ] `make demo` produces a graph with the two v0.2 service kinds (Ollama + LiteLLM, per §9.8) and ≥1 credential chain finding.
+- [ ] A screen recording at 1080p, ≤8 minutes, captured in OBS (per §7 Phase 7 + §8.5), showing: scan → loot → graph → finding. The master key and any incidentally captured tokens are redacted.
 
 ### 10.6 Documentation acceptance
 
@@ -1916,9 +1990,9 @@ For implementer scoping. Every file that changes in this milestone, with phase m
 
 | File | Phase | Change kind | What changes |
 |---|---|---|---|
-| `sdk/ingest/kinds.go` | 1, 2, 4 | Edit | Add 8 per-kind labels + `AIService` umbrella + `AIModel` to `AllowedNodeKinds` and `AllNodeLabels`. Add `EXPOSES`, `EXPOSES_CREDENTIAL` to BOTH `AllowedEdgeKinds` AND `RawEdgeKinds`. Add edge endpoints in `EdgeKindEndpoints`. |
-| `sdk/ingest/model_test.go:112,117` | 1 | Edit | Bump `TestAllowedEdgeKindsComplete` count from 21 → 23. Add regression test asserting both new edges in BOTH maps. |
-| `sdk/action/looter.go` | 4 | Edit | Replace v0 stub `LootOptions` and `LootResult` structs with concrete shapes per §4.4. Add `IncludeCredentialValues bool` field. |
+| `sdk/ingest/kinds.go` | 1, 2, 4 | Edit | Add 8 per-kind labels + `AIService` umbrella to `AllowedNodeKinds` and `AllNodeLabels`. Add `EXPOSES`, `EXPOSES_CREDENTIAL` to BOTH `AllowedEdgeKinds` AND `RawEdgeKinds`. Add edge endpoints in `EdgeKindEndpoints`. (`AIModel` deferred to v0.3 — see Section 3.5 deferral note.) |
+| `sdk/ingest/model_test.go:100,106,112,117` | 1 | Edit | Bump `TestAllowedNodeKindsComplete` 12 → 22, `TestAllNodeLabelsComplete` 14 → 24, `TestAllowedEdgeKindsComplete` 21 → 23. Add regression test asserting the new edges and per-service node labels are present in their respective maps. |
+| `sdk/action/looter.go` | 4 | Edit | Replace v0 stub `LootOptions` and `LootResult` structs with concrete shapes per §4.4 (incl. `Credentials map[string]string`, `MaxItems int`, `Timeout time.Duration`, `IncludeCredentialValues bool`). Add the `LootSummary` type and the `(r *LootResult) ToIngest() *ingest.IngestData` method. Update the file-level doc comment to drop "added when the first Looter implementation lands." |
 | `sdk/module/module.go` | 4 (sidecar) | Unchanged | Existing `Module` interface stays as-is (`Description`, `Version` preserved). |
 | `sdk/module/flags.go` | 4 (sidecar) | NEW | Define `FlagsModule` sidecar interface (§5.4). Land only when 2nd Looter exists. |
 | `sdk/module/state.go` | future | NEW | Define `StatefulModule` sidecar interface (§5.5). Defer to first Poisoner/Implanter. |
@@ -1926,20 +2000,23 @@ For implementer scoping. Every file that changes in this milestone, with phase m
 | `sdk/rules/engine.go` | 2 | Edit | Add probe orchestrator for HTTP fingerprinting (HTTP request → match against rule probes). |
 | `sdk/rules/validate.go` | 2 | Edit | Validate the new matcher types under `Version: 2`. |
 | `server/internal/ingest/validator.go:80` | 1 | Edit | Add new edges to RawEdgeKinds (already covered by sdk-side edit; this file's check at line 80 does not need its logic changed if RawEdgeKinds is extended). Confirm with a regression test. |
-| `server/internal/graph/schema.go:13-24` | 1 | Edit | Add per-kind constraints + `:AIService` indexes per §6 Cypher block. Both 4.4 and 5.x branches. |
+| `server/internal/graph/schema.go:13-24, 26-69, 71-77` | 1 | Edit | Three non-contiguous regions: (a) `indexDefs` slice at lines 13-24 — append per-kind indexes; (b) `InitSchema` constraint-creation loop at lines 26-69 — skip labels listed in `ingest.UmbrellaLabels` so `:AIService` does NOT get a uniqueness constraint (a duplicate constraint on a multi-labeled node would falsely collide); (c) `constraintCypher` at lines 71-77 — no syntax change, just relies on the loop's filter. Both 4.4 (`ON...ASSERT`) and 5.x (`FOR...REQUIRE`) branches inherit the filter automatically. |
 | `server/internal/analysis/registry.go:5` | 4 | Edit | Append `&processors.CrossServiceCredentialChain{}` to `allProcessors()` slice (after `&processors.CanReach{}`). |
 | `server/internal/analysis/processors/cross_service_credential_chain.go` | 4 | NEW | New processor: `Name() = "cross_service_credential_chain"`, `Dependencies() = []string{"has_access_to"}` plus `"can_reach"`, `Process()` runs the §3.7 Cypher path query. |
 | `server/internal/analysis/processors/cross_service_credential_chain_test.go` | 4 | NEW | Smoke test on a synthetic graph. |
-| `collector/cli/scan.go` | 1 | Edit | Add positional CIDR/host argument; dispatch to Scanner module when set; preserve existing flag-based mode for backwards compat. |
-| `collector/cli/loot.go` | 4 | NEW | Replace the `stubs.go` loot entry with a real `loot` cobra command. `--type litellm`, `--master-key`, `--credential KEY=VALUE`, `--include-credential-values`. |
+| `server/internal/analysis/prebuilt/litellm_credential_leak.go` | 6 | NEW | New prebuilt query: `litellm-credential-leak` (LiteLLM `:AIService` nodes with `EXPOSES_CREDENTIAL` edges). Severity: critical. OWASP: MCP03/ASI04 (credential exposure). Wires to `GET /api/v1/analysis/prebuilt/{id}` and `agenthound-server query --prebuilt litellm-credential-leak`. Brings the prebuilt count from 17 → 18. |
+| `collector/cli/scan.go` | 1 | Edit | Add positional CIDR/host argument; dispatch to Scanner module when set; preserve existing flag-based mode for backwards compat. **Rename the local `--scan-output` flag (line 64) to `--output`** so the docs and the §3.8 CLI examples match what the binary actually accepts (today the persistent root `--output` is the documented form; the local `--scan-output` shadows it confusingly). Add `--allow-public-targets` + `--authorization-file` per §9.6, and the AUTHORIZED interactive prompt. Add `--network-scan-concurrency` (default 50) for the network-probe worker pool, distinct from the existing `--scan-concurrency` (default 5) which keeps governing MCP/A2A enumeration. |
+| `collector/cli/loot.go` | 4 | NEW | Replace the `stubs.go` loot entry with a real `loot` cobra command. Flags: `--type litellm`, `--master-key`, `--credential KEY=VALUE`, `--include-credential-values`, `--engagement-id <ID>` (per §9.5; recorded in every log line for attribution). On first invocation, prompts for AUTHORIZED confirmation and writes `~/.agenthound/loot-acknowledged` sentinel (per §9.5). |
+| `sdk/rules/bundle.go` | 4 | NEW | Versioned-rules-bundle loader (per §9.7). Reads `--rules-bundle <path>` (tar.gz or directory), overlays or replaces the embedded `sdk/rules/builtin/*.yaml` set at startup. Required before Phase 3 ships so the rules-update path doesn't depend on cutting binaries. |
+| `collector/cli/scan.go` (extended) | 1 | Edit | (already enumerated above; for completeness it ALSO adds the `--allow-public-targets` AUTHORIZED prompt and `--authorization-file` per §9.6, plus scan-output watermark with `engagement_id` + authorization-file SHA-256.) |
 | `collector/cli/stubs.go` | 4 | Edit | Remove `loot` from the not-implemented stub list (poison/implant/extract remain). |
-| `collector/scanner/scanner.go` | 1 | Edit | Implement worker-pool Scanner per §3.9 sketch. Conform to `sdk/action.Scanner`. |
-| `modules/networkscan/` | 1 | NEW (dir) | Scanner module + `register.go` for self-registration. |
+| `collector/scanner/scanner.go` | 1 | Delete | Retire the `Stub` package; the real implementation lives at `modules/networkscan/` per §3.9. Any call site that references `scanner.Stub` switches to looking up the registered scanner module via `sdk/module`. |
+| `modules/networkscan/` | 1 | NEW (dir) | Scanner module per §3.9 sketch (worker-pool, ctx-cancel guards, panic-recover). Includes `register.go` for self-registration. Conforms to `sdk/action.Scanner`. |
 | `modules/ollamafp/` | 2 | NEW (dir) | Ollama Fingerprinter module + rule file `rules/builtin/fingerprints/ollama.yaml`. |
 | `modules/litellmfp/` | 4 | NEW (dir) | LiteLLM Fingerprinter module + rule file `rules/builtin/fingerprints/litellm.yaml`. |
 | `modules/litellmloot/` | 4 | NEW (dir) | LiteLLM Looter module per §4.8 sketch. Tests: GET-only assertion, master-key-redaction assertion. |
-| `server/ui/src/theme/tokens.ts` | 6 | Edit | Add 8 entries to `NODE_KIND_COLORS` map keyed by per-kind label. |
-| `server/ui/src/lib/explorer/hex-config.ts:37-150` | 6 | Edit | Add 8 entries to `HEX_CONFIG`, keyed by per-kind label. Include `strokeColor`, `fillColor`, `icon`, `kindTag`, `column`, `groupLabel`. |
+| `server/ui/src/theme/tokens.ts` | 6 | Edit | Add 8 entries to `NODE_KIND_COLORS` keyed by per-kind label. The 2 v0.2 service kinds (Ollama, LiteLLM) get final colors; the remaining 6 get placeholder colors so v0.3/v0.4 don't require theme-token edits — they only swap the placeholders for chosen colors. |
+| `server/ui/src/lib/explorer/hex-config.ts:37-150` | 6 | Edit | Add 8 entries to `HEX_CONFIG`, keyed by per-kind label. Include `strokeColor`, `fillColor`, `icon`, `kindTag`, `column`, `groupLabel`. As with `tokens.ts`: 2 v0.2 entries final, 6 stubbed. |
 | `server/ui/src/lib/explorer/layout.ts` | 6 | Edit | Update partition-column logic if columns shift; likely a no-op. |
 | `server/ui/src/lib/node-styles.ts` | 6 | Edit | Update size switch — `:AIService` size scales with `EXPOSES_CREDENTIAL` out-degree. |
 | `server/ui/src/api/scans.ts` | 6 | Possibly edit | Possible additions for new scan-type filter. Verify when wiring. |
@@ -1948,9 +2025,7 @@ For implementer scoping. Every file that changes in this milestone, with phase m
 | `testdata/demo/scan_lab.json` | 6 | NEW | Real lab capture, anonymized. NOT hand-fabricated. |
 | `scripts/anonymize-scan.sh` | 6 | NEW | Anonymization helper for the lab capture. |
 | `docker/demo/docker-compose.yml` | 6 | NEW | The §8.5 docker-compose lab definition. |
-| `CLAUDE.md` | 6 | Edit | Add new node kinds + edge kinds to "Graph Data Model" section. Separately: a follow-up should fix the stale Sigma+graphology reference (real stack is React Flow + ELK per `server/ui/package.json`). |
-
-**Stale-doc note (out of scope for this sprint, but tracked).** `CLAUDE.md` claims the frontend uses Sigma 3.0.2 + graphology + @react-sigma/core, but `server/ui/package.json:26,29` shows the actual production stack is `@xyflow/react` (React Flow) + `elkjs` for layout. CLAUDE.md was written before that migration. Anyone reading the doc to set up local dev will be confused. Open a separate PR fixing CLAUDE.md to reflect the real stack.
+| `CLAUDE.md` | 6 | Edit | Add new node kinds + edge kinds to "Graph Data Model" section. (The earlier-drafted Sigma+graphology stale-doc fix is already done — no separate follow-up needed.) |
 
 ---
 
@@ -2048,8 +2123,8 @@ This section records every correction applied to this document on 2026-04-23 aga
 | 5 | §2.8 Open WebUI CVEs | Added Direct Connections-disabled-by-default caveat for CVE-2025-64496; CVSS 7.3 with `PR:L` AND `UI:R`. | verifier #2 |
 | 6 | §2.8 Open WebUI CVEs | Clarified CVE-2025-63681 is CVSS 4.0/2.1 LOW — DoS only, not load-bearing. | verifier #1 |
 | 7 | §2.1 Ollama CVEs | Added Ollama-default-unauthenticated context to CVE-2024-37032's PR:L; in practice effectively unauthenticated. | verifier #2 |
-| 8 | §8.1 CFP table | Marked BSidesLV deadline as verified: 2026-05-08, acceptances rolling from week of 2026-05-25. | verifier #1 |
-| 9 | §8.1 CFP table | Added DEF CON 34 Workshops & Demo Labs as separate venues alongside main-stage (same May 1, 2026 deadline). | verifier #1 |
+| 8 | §8.1 CFP table | (Historical: BSidesLV 2026-05-08 deadline now passed; superseded by the 2026-05-16 RTV refresh below.) | verifier #1 |
+| 9 | §8.1 CFP table | (Historical: DEF CON 34 Demo Labs / Workshops / main-stage 2026-05-01 deadlines all passed; superseded by the RTV refresh below.) | verifier #1 |
 | 10 | §8.1 CFP table | Added BSidesSF 2026 (past, March 21–22, 2026) flagged for BSidesSF 2027 future cycle. | verifier #2 |
 | 11 | §8.1 CFP table | Added Hexacon 2026 (Oct 16–17, 2026; CFP TBD as of Oct 2025) as candidate. | verifier #2 |
 | 12 | §6 Schema | Added explicit "Validator update" subsection — SHIP-BLOCKER. `server/internal/ingest/validator.go:80` checks `RawEdgeKinds`; new edges must be added to BOTH `RawEdgeKinds` and `AllowedEdgeKinds`. Recommendation (a) extends `RawEdgeKinds`. | verifier #1 + verifier #2 |
@@ -2063,16 +2138,40 @@ This section records every correction applied to this document on 2026-04-23 aga
 | 20 | §4.8 Looter sketch | Replaced ignored `error` returns from `http.NewRequestWithContext` with explicit checks: `req, err := ...; if err != nil { return ... fmt.Errorf("build request: %w", err) }`. errcheck-clean. | verifier #1 |
 | 21 | §4.8 Looter sketch | Now actually populates `LootResult.PartialErrors` when `getKeyList` fails; logs a warning and falls through with empty result. | verifier #1 + verifier #2 |
 | 22 | §4.8 Looter sketch | Added explicit `redact()` helper, slog redaction pattern (`masterKey[:8] + "..."`), and a mandatory unit test asserting the full master key never appears in `slog` output. | verifier #2 |
-| 23 | §3.5 Schema decision | Reversed the single-`AIService` recommendation. Rewrote to recommend Option B: per-service kinds (`OllamaInstance`, `VLLMInstance`, etc.) WITH multi-label `:AIService` umbrella for unified queries. Cited evidence: `sdk/ingest/kinds.go:4-17` (12 distinct labels), `server/internal/analysis/processors/has_access_to.go:20` (every processor matches by label), UI dispatches on `kinds[0]` in `server/ui/src/lib/node-styles.ts:9-14`, `theme/tokens.ts:5-21`, `lib/explorer/hex-config.ts:37-150`. | verifier #1 + verifier #2 |
+| 23 | §3.5 Schema decision | Reversed the single-`AIService` recommendation. Rewrote to recommend Option B: per-service kinds (`OllamaInstance`, `VLLMInstance`, etc.) WITH multi-label `:AIService` umbrella for unified queries. Cited evidence: `sdk/ingest/kinds.go:4-17` (12 distinct labels), `server/internal/analysis/processors/has_access_to.go:20` (every processor matches by label), UI dispatches on `kinds[0]` in `server/ui/src/lib/node-styles.ts:9-14`, `theme/tokens.ts:5-20`, `lib/explorer/hex-config.ts:37-150`. | verifier #1 + verifier #2 |
 | 24 | §6 Schema additions | Added explicit instruction to wire `cross_service_credential_chain` processor into `allProcessors()` at `server/internal/analysis/registry.go:5` (verified path; the user's correction said `postprocessor.go:15` but the actual location is `registry.go:5`). Declared dependencies, smoke test path. | verifier #1 |
-| 25 | §6 UI integration | Replaced misleading reference to CLAUDE.md "Node Visual Encoding" with the actual UI files that change: `server/ui/src/theme/tokens.ts`, `lib/explorer/hex-config.ts`, `lib/explorer/layout.ts`, `lib/node-styles.ts`. Noted that CLAUDE.md is stale (claims Sigma+graphology; actual stack is React Flow + ELK per `server/ui/package.json:26,29`). | verifier #1 + verifier #2 |
+| 25 | §6 UI integration | Replaced misleading reference to CLAUDE.md "Node Visual Encoding" with the actual UI files that change: `server/ui/src/theme/tokens.ts`, `lib/explorer/hex-config.ts`, `lib/explorer/layout.ts`, `lib/node-styles.ts`. (The earlier CLAUDE.md Sigma+graphology drift was fixed before this sprint started.) | verifier #1 + verifier #2 |
 | 26 | (multiple) `docs/future-modules.md` | Verified the file exists at `/Users/akoffsec/dev/agenthound/docs/future-modules.md`. References preserved as-is — no action required. | verifier #1 |
 | 27 | §9.5 Reverter contract | Rewrote from "Reverter is N/A — looting is read-only" to acknowledge audit-trail residue (LiteLLM Postgres, cloud HTTP logs, LangFuse, defender SIEMs). Added one-time interactive confirmation, `--engagement-id` flag, and `docs/loot-litellm.md` documentation as mitigations. | verifier #1 + verifier #2 |
 | 28 | §9.6 (new) | Added CFAA-exposure risk: `--allow-public-targets` is one flag away. Stronger gates: interactive "type AUTHORIZED" confirmation, `--authorization-file` alternative, scan-output watermark. | verifier #1 |
 | 29 | §9.7 (new) | Added maintenance-burden risk. Committed to versioned-rules-bundle path BEFORE Phase 3 ships, not as a future-template aspiration. Concrete mechanism: `--rules-bundle <path>` + signed monthly tarball releases. | verifier #1 + verifier #2 |
-| 30 | §9.8 (new) | Added scope-creep risk. 8 services × 2 actions × 4–6 weeks = 14–21 months for one engineer. v0.2 commits to scanner + 2 fingerprinters + 1 looter; remaining services slip to v0.3+. | verifier #1 + verifier #2 |
-| 31 | §7 Phased roadmap | Added bold note that estimates are 1.5–2.5× optimistic; realistic total 18–30 weeks (~4.5–7 months). Per-phase realistic ranges added. Phases 3 and 5 deferred to v0.3 / v0.4. | verifier #1 + verifier #2 |
-| 32 | §7 Critical scheduling tension + §8.2 portfolio | Dropped DEF CON 34 main-stage from this cycle. Primary v0.2 target: DEF CON 34 Demo Labs (May 1) + BSidesLV breaking-ground (May 8). Aim DEF CON 35 (2027) main-stage with Phase 5+6 results. | verifier #1 + verifier #2 |
+| 30 | §9.8 | Added scope-creep risk. v0.2 commits to scanner + 2 fingerprinters + 1 Looter; remaining services staged into v0.3 / v0.4. Phases 3 and 5 explicitly deferred. | verifier #1 + verifier #2 |
+| 31 | §7 Phased roadmap | Removed effort/timeline estimates. Phases now defined by deliverables, dependency order, and acceptance criteria only — execution speed is left to the implementer. | doc-sweep audit |
+| 32 | §7 Critical scheduling tension + §8.2 portfolio | (Historical: original recommendation was Demo Labs + BSidesLV; both deadlines passed before implementation could ship. Superseded by the 2026-05-16 RTV refresh below.) | verifier #1 + verifier #2 |
+| 36 | §7 + §8 (2026-05-16 refresh) | Replaced the now-passed Demo Labs / BSidesLV / DEF CON main-stage targets with **DEF CON 34 Red Team Village (CFP closes 2026-05-31)** as the primary v0.2 target. fwd:cloudsec EU 2026 (2026-06-12) and OWASP Global AppSec US 2026 SF (2026-06-29) are secondary/tertiary. CFP table reorganized to show open vs. closed clearly. | doc-sweep audit |
+| 37 | §3.5 + §11 line-range fixes (2026-05-16 refresh) | Corrected `tokens.ts:5-21` → `5-20` (map closes at line 20). Widened `schema.go:13-24` → `13-77` to include the constraint creation loop and the 4.4-vs-5.x version fork in `constraintCypher()` where the actual edits land. | doc-sweep audit |
+| 38 | §6 + §11 stale-doc note (2026-05-16 refresh) | Removed the "CLAUDE.md still says Sigma+graphology, fix in a follow-up PR" notes. CLAUDE.md was already updated to React Flow + ELK before this sprint started; the follow-up is moot. | doc-sweep audit |
+| 39 | §1 v0.2 deliverables (2026-05-16 architect review) | Replaced the now-passed Demo Labs / BSidesLV CFP citation with DEF CON RTV (closes 2026-05-31) + secondary fwd:cloudsec EU + OWASP US targets. Demo seed source updated from §8.5 8-VM lab to v0.2 2-service `docker/demo/docker-compose.yml`. | architect review |
+| 40 | §6 model_test.go count bumps (architect review) | Original §6 only specified the edge-count bump (21 → 23). Added the missing node-count bumps: `TestAllowedNodeKindsComplete` 12 → 22 and `TestAllNodeLabelsComplete` 14 → 24. Without these, the build breaks the moment new labels land. | architect review |
+| 41 | §3.7 + §4.5 credential merge keys (architect review) | The cross-service-credential-chain Cypher joins `(c1:Credential)` from the Config Collector to `(c1:Credential)` from the LiteLLM Looter. Without a shared merge predicate, these are two distinct nodes and the chain returns zero rows. Added `value_hash` (SHA-256 of credential value) as the cross-collector merge key; both emitters MUST populate it. | architect review |
+| 42 | §11 looter.go scope (architect review) | Original §11 row only said "replace stubs"; expanded to enumerate the `LootSummary` type and the `(r *LootResult) ToIngest()` method that the file's doc comment promises. | architect review |
+| 43 | §11 scanner module home (architect review) | Original §11 had two conflicting rows: edit `collector/scanner/scanner.go` AND create `modules/networkscan/`. Resolved: the `Stub` package is retired; real implementation lives at `modules/networkscan/` per §3.9. | architect review |
+| 44 | §3.5 + §3.8 + §11 `--scan-output` rename (architect review) | `collector/cli/scan.go:64` registers `--scan-output` while every doc example uses `--output`. Renamed in the implementation to match documentation. | architect review |
+| 45 | §3.3 + §11 scanner concurrency (architect review) | The existing `--scan-concurrency` flag (default 5) governs MCP/A2A enumeration. The plan also wanted a 50-default network-probe concurrency on the same flag, which is two contradictory semantics. Renamed the new flag to `--network-scan-concurrency` (default 50). | architect review |
+| 46 | §6 + §11 `Dependencies()` (architect review) | §6 said `["has_access_to"]`, §11 said `["has_access_to", "can_reach"]`. Standardized on the latter, which matches "after CanReach" ordering in `registry.go`. | architect review |
+| 47 | §3.5 + §6 + §11 umbrella label schema (architect review) | Putting `:AIService` in `AllNodeLabels` would make the constraint-creation loop in `schema.go` create a uniqueness constraint on the umbrella label — but every per-kind node also carries `:AIService`, so two nodes with different per-kind `objectid`s would falsely collide. Added `UmbrellaLabels` set in `sdk/ingest`; `schema.go` skips constraint creation for entries in that set. | architect review |
+| 48 | §10.3 + §7 Phase 6 + §11 UI scope (architect review) | §10.3 said "renders eight distinct service-kind icons" while §9.8 caps v0.2 at 2 service kinds. Reworded: 2 v0.2 kinds rendered live, remaining 6 stubbed in the UI plumbing for forward-compat with v0.3/v0.4. | architect review |
+| 49 | §8.3 talk abstract (architect review) | Removed the vector-database sentence (Qdrant ships in v0.4). Reframed the abstract around what v0.2 actually demos: Ollama discovery + LiteLLM Looter + cross-protocol credential chain. | architect review |
+| 50 | §10.5 demo recording length (architect review) | §10.5 said "5-minute"; §7 Phase 7 + §8.5 said "≤8 minutes". Standardized on ≤8 minutes. | architect review |
+| 51 | §4.6 master-key flag binding (architect review) | §4.6 said `--master-key` binds via `Module.Flags()` extension; §5.4 + §9.9 say `FlagsModule` is deferred. Reworded: `--master-key` is hard-coded on the `loot` cobra command for v0.2; the generic mechanism is `--credential KEY=VALUE`; `FlagsModule` lands when the second Looter does. | architect review |
+| 52 | §3.6 + §6 EXPOSES target (architect review) | §3.6 said "EXPOSES → AIService (or other resource)"; §6 declared `TargetKinds: ["AIService"]`. Closed the door — EXPOSES is `:AIService → :AIService` only. | architect review |
+| 53 | §7 Phase 3 EXPOSES ownership (architect review) | Phase 3 (deferred) was described as introducing EXPOSES, but §6/§11 land it in v0.2. Clarified: the edge KIND is reserved in v0.2 to avoid a future schema migration, but no v0.2 collector emits it; Phase 3 (v0.3) populates it. | architect review |
+| 54 | §11 missing rows (architect review) | Added rows for: new `litellm-credential-leak` prebuilt query, new `sdk/rules/bundle.go` rules-bundle loader, expansion of `collector/cli/loot.go` to include `--engagement-id` + AUTHORIZED prompt + sentinel file, expansion of `collector/cli/scan.go` to include `--authorization-file` + scan-output watermark per §9.6. | architect review |
+| 55 | §7 Phase 7 acceptance (architect review) | Phase 7 listed three CFP submissions but only RTV had an acceptance criterion. Added explicit acceptance bullets for fwd:cloudsec EU 2026 and OWASP Global AppSec US 2026 SF deadlines. | architect review |
+| 56 | §3.5 UI dispatch precision (architect review) | "UI dispatches on `kinds[0]`" was imprecise; `node-styles.ts` uses `kinds[0]` for size but iterates `kinds` for color (first match wins). Documented the actual contract: per-kind label MUST be `kinds[0]` so size dispatch picks the right service. | architect review |
+| 57 | §7 Phase 1 host.go scope (architect review) | "Reuses `sdk/common/host.go`" understated the work. The existing file covers IPv4 + RFC 1918 only. Phase 1 EXTENDS it for IPv6 ULA/link-local/multicast and IPv4 link-local/multicast, which the scanner refuses outright. | architect review |
+| 58 | §7 effort/timeline removal (architect review) | All week-number / effort-estimate language removed from §7. Phases now defined by deliverables, dependency order, and acceptance criteria only — execution speed is left to the implementer. The dependency graph is what matters; the calendar isn't a contract. | architect review |
+| 59 | §3.5 + §6 + §11 + §10 — `AIModel` deferred to v0.3 | The original v0.2 design reserved `AIModel` in `AllowedNodeKinds` "because adding it later requires a schema migration." During implementation the user accepted decision E in `docs/plans/v0.2-implementation.md`: defer to v0.3 with the Ollama Looter that produces the first model artifact. Adding the kind later is a five-line PR; carrying a dead schema entry confuses onboarding for an entire release cycle. v0.2 ships **9 new node kinds** (8 per-service + `AIService`), counts bumped 12→21 / 14→23 (not 22 / 24). | implementation review |
 | 33 | §10.6 Documentation acceptance | Removed "Blog post or CFP submission references this milestone" from acceptance criteria — marketing fluff. Moved to Phase 7 deliverable. | verifier #1 |
 | 34 | §10.5 Demo acceptance | Tightened: demo data is GENERATED via the §8.5 docker-compose lab + real scan capture + anonymization, NOT hand-fabricated. Concrete recipe added. Filename changed to `testdata/demo/scan_lab.json`. | verifier #2 |
 | 35 | §11 (new) | Added "Critical files to modify" table enumerating every file that changes per phase, verified against current repo. Original §11 ("What this plan is NOT") renumbered to §12. | verifier #1 + verifier #2 |

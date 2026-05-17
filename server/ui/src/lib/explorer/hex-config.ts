@@ -15,6 +15,15 @@ import {
   Layers,
   ShieldCheck,
   Hexagon,
+  Brain,
+  Rocket,
+  Database,
+  FlaskConical,
+  GitFork,
+  Notebook,
+  Link2,
+  MessageSquare,
+  Boxes,
 } from "lucide-react";
 import { SEVERITY } from "@/theme/tokens";
 import type { SeverityLevel } from "./lens-config";
@@ -146,6 +155,103 @@ export const HEX_CONFIG: Record<string, HexKindConfig> = {
     kindTag: "TRUST ZONE",
     column: 3,
     groupLabel: "Infra",
+  },
+
+  // v0.2 AI services. All sit in column 2 ("Tools & Skills") so they
+  // place between :MCPServer and :MCPResource in the layered explorer
+  // view — visually consistent with how a LiteLLM gateway sits between
+  // an MCP server (which knows the master key) and the upstream
+  // provider credentials it exposes. Per-kind label is kinds[0]; the
+  // umbrella :AIService is rendered via the AIService entry only when
+  // a node has NO known per-kind label (defensive fallback for
+  // forward-compat with v0.3+ kinds the UI hasn't been taught yet).
+  OllamaInstance: {
+    strokeColor: "#FF7043",
+    fillColor: "#0B1220",
+    icon: Brain,
+    kindTag: "OLLAMA",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  LiteLLMGateway: {
+    strokeColor: "#EC407A",
+    fillColor: "#0B1220",
+    icon: GitFork,
+    kindTag: "LITELLM",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  AIService: {
+    strokeColor: "#7E57C2",
+    fillColor: "#0B1220",
+    icon: Hexagon,
+    kindTag: "AI SERVICE",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  // v0.3 / v0.4 fingerprinters. Final colors locked in to be visually
+  // distinct from each other AND from the v0.1 palette above. Stroke
+  // colors must match theme/tokens.ts NODE_KIND_COLORS exactly.
+  VLLMInstance: {
+    strokeColor: "#26A69A",
+    fillColor: "#0B1220",
+    icon: Rocket,
+    kindTag: "VLLM",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  QdrantInstance: {
+    strokeColor: "#5C6BC0",
+    fillColor: "#0B1220",
+    icon: Database,
+    kindTag: "QDRANT",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  MLflowServer: {
+    strokeColor: "#42A5F5",
+    fillColor: "#0B1220",
+    icon: FlaskConical,
+    kindTag: "MLFLOW",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  JupyterServer: {
+    strokeColor: "#F57C00",
+    fillColor: "#0B1220",
+    icon: Notebook,
+    kindTag: "JUPYTER",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  LangServeApp: {
+    strokeColor: "#9CCC65",
+    fillColor: "#0B1220",
+    icon: Link2,
+    kindTag: "LANGSERVE",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  OpenWebUIInstance: {
+    strokeColor: "#66BB6A",
+    fillColor: "#0B1220",
+    icon: MessageSquare,
+    kindTag: "OPEN WEBUI",
+    column: 2,
+    groupLabel: "AI Services",
+  },
+  // v0.3 model-artifact node. Sits one column right of OllamaInstance so the
+  // PROVIDES_MODEL edge reads OllamaInstance(col 2) -> AIModel(col 3) — model
+  // artifacts visually live "downstream" of the service that hosts them.
+  // Distinct from MCPResource (col 4) which is a remote-resource pointer, not
+  // a stored artifact.
+  AIModel: {
+    strokeColor: "#6A1B9A",
+    fillColor: "#0B1220",
+    icon: Boxes,
+    kindTag: "AI MODEL",
+    column: 3,
+    groupLabel: "AI Models",
   },
 };
 

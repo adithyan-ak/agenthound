@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/adithyan-ak/agenthound/collector/internal/clientcfg"
+	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +36,18 @@ UI's Scan Manager → Import Scan dialog.`,
 			jsonLog = true
 		}
 		setupLogger(cfg.LogLevel, quiet, jsonLog)
+
+		// v0.3 — wire the rules-bundle override BEFORE any module's
+		// Fingerprint() call. rules.SetBundleOverridePath is a
+		// process-global so subsequent rules.LoadFingerprints() reads
+		// inside fingerprinter modules see the merged set transparently.
+		bundle, _ := cmd.Root().PersistentFlags().GetString("rules-bundle")
+		if bundle == "" {
+			bundle = os.Getenv("AGENTHOUND_RULES_BUNDLE")
+		}
+		if bundle != "" {
+			rules.SetBundleOverridePath(bundle)
+		}
 		return nil
 	},
 }
@@ -53,6 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().Int("concurrency", 0, "Max parallel collector workers (env: AGENTHOUND_CONCURRENCY)")
 	rootCmd.PersistentFlags().Bool("quiet", false, "Suppress non-error log output (env: AGENTHOUND_QUIET=1)")
 	rootCmd.PersistentFlags().Bool("log-json", false, "Emit logs as JSON instead of text (env: AGENTHOUND_LOG_JSON=1)")
+	rootCmd.PersistentFlags().String("rules-bundle", "", "Path to a fingerprint rules bundle (directory or .tar.gz). Same-id rules from the bundle override the embedded set. Verify cosign signature manually before pointing AgentHound at it; see docs/rules-bundle.md. (env: AGENTHOUND_RULES_BUNDLE)")
 }
 
 func setupLogger(level string, quiet, jsonLog bool) {

@@ -1,6 +1,6 @@
 # AgentHound — UI Graph Scenarios
 
-What users see in the AgentHound Graph Explorer. Each scenario shows the full graph view (all nodes dimmed, attack path highlighted) exactly as the Sigma.js frontend would render it.
+What users see in the AgentHound Graph Explorer. Each scenario shows the full graph view (all nodes dimmed, attack path highlighted) exactly as the React Flow + ELK frontend renders it.
 
 Node colors follow the spec:
 - **Blue** `#4A90D9` = AgentInstance

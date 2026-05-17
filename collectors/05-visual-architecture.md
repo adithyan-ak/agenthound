@@ -1,5 +1,8 @@
 # AgentHound Visual Architecture
 
+> **Status: historical design diagrams, kept for reference.**
+> The Mermaid diagrams accurately depict the current node colors (matching `server/ui/src/lib/node-styles.ts`), edge types, and the eight-phase post-processor pipeline. The CLI labels in the COLLECT subgraphs use the pre-split `agenthound collect ...` syntax — today it's `agenthound scan ...` with `--config / --mcp / --a2a` flags. See [`docs/cli-reference.md`](../docs/cli-reference.md) for the current surface.
+
 ## 1. The Three Collectors — What Each One Sees
 
 Each collector sees an isolated slice. None of them alone can find an attack path.

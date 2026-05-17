@@ -17,6 +17,29 @@ export const NODE_KIND_COLORS: Record<string, string> = {
   InstructionFile: "#EAB308", // yellow-500
   ResourceGroup: "#64748B",   // slate-500
   TrustZone: "#22D3EE",       // cyan-400
+  // AI service kinds. Per-kind label is the dispatch key (per
+  // node-styles.ts kinds[0] semantics); the umbrella :AIService stays
+  // on the node as a multi-label companion so unified queries can match
+  // (s:AIService) without enumerating per-kind labels. Every per-service
+  // color is checked against the v0.1 palette above for visual distinctness
+  // — the umbrella :AIService color is the fallback only when the
+  // per-kind dispatch returns nothing.
+  OllamaInstance: "#FF7043",     // orange-red — distinct from MCPTool amber
+  LiteLLMGateway: "#EC407A",     // pink — sibling of Credential pink (the gateway IS the credential exposure)
+  AIService: "#7E57C2",          // muted purple — generic umbrella fallback
+  VLLMInstance: "#26A69A",       // teal — vLLM's "rocket" identity
+  QdrantInstance: "#5C6BC0",     // indigo — vector-search identity, distinct from AgentInstance cyan
+  MLflowServer: "#42A5F5",       // blue — MLflow brand-aligned blue
+  JupyterServer: "#F57C00",      // deep orange — distinct from MCPPrompt #FB923C (orange-400)
+  LangServeApp: "#9CCC65",       // chartreuse — distinct from AIService purple AND OpenWebUI green
+  OpenWebUIInstance: "#66BB6A",  // green — chat-UI identity
+  // v0.3 model-artifact node — emitted by the Ollama Looter (one per /api/tags
+  // entry, properties from /api/show). Deep purple chosen because it sits next
+  // to AIService #7E57C2 and A2AAgent #A855F7 in hue but is materially darker,
+  // so the explorer renders model artifacts as the "weight" beneath their AI
+  // service. Plan suggested #F44336 red but it collides with MCPResource
+  // #EF4444 — readers can't distinguish a sensitive resource from a model.
+  AIModel: "#6A1B9A",            // deep purple — distinct from A2AAgent / AIService / QdrantInstance
 };
 
 // Severity system — solid color, muted bg, text, border, icon

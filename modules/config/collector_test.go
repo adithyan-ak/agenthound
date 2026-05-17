@@ -2,12 +2,14 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"testing"
 
 	"github.com/adithyan-ak/agenthound/sdk/collector"
+	"github.com/adithyan-ak/agenthound/sdk/common"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
@@ -230,6 +232,64 @@ func TestConfigCollector_CredentialValuesIncluded(t *testing.T) {
 	}
 	if credNode.Properties["value"] != "test-raw-value" {
 		t.Errorf("expected raw value with IncludeCredentialValues, got %q", credNode.Properties["value"])
+	}
+	// value_hash is ALWAYS populated (with or without --include-credential-values)
+	// because it's the cross-collector merge primitive.
+	if credNode.Properties["value_hash"] != common.HashCredentialValue("test-raw-value") {
+		t.Errorf("value_hash = %v, want SHA-256 of raw value", credNode.Properties["value_hash"])
+	}
+}
+
+// TestConfigCollector_ValueHashAlwaysPopulated guards the v0.2
+// cross-collector merge primitive: every emitted Credential node
+// MUST carry value_hash, regardless of --include-credential-values.
+// Without it the cross_service_credential_chain post-processor (Phase 5)
+// has nothing to join on, and the LiteLLM credential-chain demo
+// returns zero rows.
+func TestConfigCollector_ValueHashAlwaysPopulated(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.json")
+	writeJSON(t, configPath, `{
+		"mcpServers": {
+			"chaintest": {
+				"command": "node",
+				"args": ["server.js"],
+				"env": {
+					"LITELLM_MASTER_KEY": "sk-merge-key-target"
+				}
+			}
+		}
+	}`)
+
+	c := NewConfigCollector()
+	for _, includeValues := range []bool{false, true} {
+		t.Run(fmt.Sprintf("include=%v", includeValues), func(t *testing.T) {
+			result, err := c.Collect(context.Background(), collector.CollectOptions{
+				ConfigPath:              configPath,
+				ScanID:                  "valuehash-test",
+				IncludeCredentialValues: includeValues,
+			})
+			if err != nil {
+				t.Fatalf("Collect: %v", err)
+			}
+			credNode := findNodeByKindAndProp(result, "Credential", "name", "LITELLM_MASTER_KEY")
+			if credNode == nil {
+				t.Fatal("Credential node not found")
+			}
+			gotHash, _ := credNode.Properties["value_hash"].(string)
+			wantHash := common.HashCredentialValue("sk-merge-key-target")
+			if gotHash != wantHash {
+				t.Errorf("value_hash = %q, want %q", gotHash, wantHash)
+			}
+			// Raw value is gated on the flag.
+			_, hasValue := credNode.Properties["value"]
+			if includeValues && !hasValue {
+				t.Error("expected raw value with --include-credential-values")
+			}
+			if !includeValues && hasValue {
+				t.Errorf("raw value should be omitted by default; got %v", credNode.Properties["value"])
+			}
+		})
 	}
 }
 

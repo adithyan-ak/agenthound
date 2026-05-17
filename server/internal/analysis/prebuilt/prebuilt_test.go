@@ -24,8 +24,36 @@ func TestGet_InvalidID(t *testing.T) {
 
 func TestList_Count(t *testing.T) {
 	queries := List()
-	if len(queries) != 17 {
-		t.Fatalf("expected 17 pre-built queries, got %d", len(queries))
+	// 17 v0.1 + 1 v0.2 (litellm-credential-leak) = 18.
+	if len(queries) != 18 {
+		t.Fatalf("expected 18 pre-built queries, got %d", len(queries))
+	}
+}
+
+// TestLitellmCredentialLeak_Registered guards the v0.2 acceptance
+// criterion: the new prebuilt query is wired through the registry,
+// shows up in List(), is fetchable via Get(), and points at a
+// non-empty Cypher constant.
+func TestLitellmCredentialLeak_Registered(t *testing.T) {
+	q, ok := Get("litellm-credential-leak")
+	if !ok {
+		t.Fatal("litellm-credential-leak missing from Registry")
+	}
+	if q.Category != "Critical Paths" {
+		t.Errorf("Category = %q, want Critical Paths", q.Category)
+	}
+	if q.Severity != "critical" {
+		t.Errorf("Severity = %q, want critical", q.Severity)
+	}
+	if q.Cypher == "" {
+		t.Error("Cypher must not be empty")
+	}
+	wantOWASP := map[string]bool{"MCP03": true, "ASI04": true}
+	for _, m := range q.OWASPMap {
+		delete(wantOWASP, m)
+	}
+	if len(wantOWASP) != 0 {
+		t.Errorf("OWASPMap = %v, want MCP03 + ASI04", q.OWASPMap)
 	}
 }
 
