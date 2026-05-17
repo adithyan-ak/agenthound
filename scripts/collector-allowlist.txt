@@ -101,6 +101,7 @@ github.com/adithyan-ak/agenthound/collector/cmd/agenthound
 github.com/adithyan-ak/agenthound/collector/internal/clientcfg
 github.com/adithyan-ak/agenthound/modules/a2a
 github.com/adithyan-ak/agenthound/modules/config
+github.com/adithyan-ak/agenthound/modules/embeddinginvert
 github.com/adithyan-ak/agenthound/modules/instructionpoison
 github.com/adithyan-ak/agenthound/modules/jupyterfp
 github.com/adithyan-ak/agenthound/modules/jupyterloot
@@ -157,6 +158,7 @@ github.com/yosida95/uritemplate/v3
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
 golang.org/x/sys/cpu
+golang.org/x/sys/unix
 gopkg.in/yaml.v3
 hash
 hash/crc32

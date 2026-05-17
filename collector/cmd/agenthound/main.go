@@ -9,6 +9,7 @@ import (
 	// Blank-import modules so their init() registers them with sdk/module.
 	_ "github.com/adithyan-ak/agenthound/modules/a2a"
 	_ "github.com/adithyan-ak/agenthound/modules/config"
+	_ "github.com/adithyan-ak/agenthound/modules/embeddinginvert"
 	_ "github.com/adithyan-ak/agenthound/modules/instructionpoison"
 	_ "github.com/adithyan-ak/agenthound/modules/jupyterfp"
 	_ "github.com/adithyan-ak/agenthound/modules/jupyterloot"
