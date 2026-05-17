@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
 )
@@ -127,13 +128,10 @@ func (s *FileStatefulModule) StateDir() string {
 // the file already exists, the new receipt is appended to the JSON
 // array.
 //
-// Known limitation (v0.4): the in-process mutex protects goroutine
-// concurrency but NOT cross-process concurrency. Two separate
-// `agenthound poison` processes targeting the same engagement-id can
-// race on the read-modify-write cycle (last rename wins, silently
-// dropping the other's receipt). The DC35 demo arc is sequential so
-// this does not manifest; fix with flock(2) advisory locking is
-// tracked for v0.5 before shipping to external operators.
+// Cross-process safety: an advisory file lock (flock on unix,
+// directory-lock fallback on other platforms) is held around the
+// read-modify-write cycle so concurrent processes targeting the same
+// engagement-id cannot drop each other's receipts.
 //
 // The encoding step is `*action.PoisonReceipt`-aware via type
 // assertion, but we accept any action.Receipt so future receipt types
@@ -156,6 +154,12 @@ func (s *FileStatefulModule) WriteReceipt(engagementID string, r action.Receipt)
 	}
 	path := filepath.Join(dir, engagementID+".json")
 
+	closer, err := lockFile(path)
+	if err != nil {
+		return "", fmt.Errorf("acquire file lock: %w", err)
+	}
+	defer func() { _ = closer.Close() }()
+
 	existing, _ := readReceiptsFile(path)
 	wrapped := receiptEnvelope{
 		ModuleID: s.moduleID,
@@ -168,7 +172,7 @@ func (s *FileStatefulModule) WriteReceipt(engagementID string, r action.Receipt)
 	if err != nil {
 		return "", fmt.Errorf("marshal receipts: %w", err)
 	}
-	tmp := path + ".tmp"
+	tmp := fmt.Sprintf("%s.tmp.%d", path, time.Now().UnixNano())
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return "", fmt.Errorf("write receipts tmp: %w", err)
 	}

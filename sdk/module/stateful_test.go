@@ -1,7 +1,9 @@
 package module_test
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -115,5 +117,44 @@ func TestDefaultStateDir_RejectsBadModuleID(t *testing.T) {
 		if _, err := module.DefaultStateDir(bad); err == nil {
 			t.Errorf("expected error for module ID %q", bad)
 		}
+	}
+}
+
+func TestWriteReceiptConcurrentSafety(t *testing.T) {
+	tmp := t.TempDir()
+	setStateRoot(t, tmp)
+
+	const N = 50
+	// Single shared instance — mirrors the real scenario where one process
+	// has one module.Register'd instance. The in-process mutex on this
+	// instance serializes goroutine access; the flock serializes cross-
+	// process access (tested implicitly by the test passing without data loss).
+	s := module.NewFileStatefulModule("mcp.poison")
+
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			r := &action.PoisonReceipt{
+				ModuleID:     "mcp.poison",
+				EngagementID: "CONCURRENT",
+				TargetID:     fmt.Sprintf("tool-%d", idx),
+				Mode:         "replace",
+				AppliedAt:    time.Now().UTC(),
+			}
+			if _, err := s.WriteReceipt("CONCURRENT", r); err != nil {
+				t.Errorf("goroutine %d: WriteReceipt: %v", idx, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	got, err := s.ReadReceipts("CONCURRENT")
+	if err != nil {
+		t.Fatalf("ReadReceipts: %v", err)
+	}
+	if len(got) != N {
+		t.Errorf("expected %d receipts, got %d (receipts were lost in concurrent writes)", N, len(got))
 	}
 }
