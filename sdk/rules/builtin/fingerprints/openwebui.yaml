@@ -1,0 +1,56 @@
+# Open WebUI fingerprint rule (v0.3).
+#
+# Open WebUI is the most-deployed self-hosted ChatGPT-style frontend. It speaks
+# to a backend Ollama (or any OpenAI-compatible API) and stores chat history,
+# RAG documents, and per-user prompts. Default port 3000, no auth required to
+# hit /api/version — auth gates the chat endpoints, not the version probe.
+#
+# /api/version returns: {"version":"0.3.x"}.
+#
+# This is the FIRST fingerprinter to emit an EXPOSES edge. The rules engine
+# captures /api/config -> $.ollama.base_url, but the EXPOSES edge construction
+# happens in the dispatcher (modules/openwebuifp/fingerprinter.go) — the
+# rules engine emits node kinds, not edges. The captured value lands on the
+# OpenWebUIInstance node as `ollama_backend_url` and the dispatcher fans out
+# the edge.
+id: openwebui
+name: Open WebUI chat frontend
+description: 'Identifies Open WebUI by GET /api/version returning {"version": "X.Y.Z"}'
+version: 2
+service_kind: openwebui
+probes:
+  - method: GET
+    path: /api/version
+    matchers:
+      - type: http_status
+        status_code: 200
+      - type: json_path
+        path: "$.version"
+        regex: '^\d+\.\d+\.\d+'
+    captures:
+      version: "$.version"
+  # Second probe — read /api/config, capture the configured Ollama backend
+  # URL so the dispatcher can emit an EXPOSES edge (OpenWebUIInstance ->
+  # OllamaInstance). The probe's matcher gate is intentionally lenient so a
+  # 401/403 (auth-required config endpoint) does not invalidate the v0.3+
+  # primary fingerprint match. v0.2's RunFingerprint requires ALL probes to
+  # match — an Open WebUI deployment that locks /api/config will look
+  # identical to one that doesn't expose a backend URL. That's the correct
+  # behavior: no capture, no edge.
+  - method: GET
+    path: /api/config
+    matchers:
+      - type: http_status
+        status_code: 200
+    captures:
+      ollama_backend_url: "$.ollama.base_url"
+emit:
+  node_kinds:
+    - OpenWebUIInstance
+    - AIService
+  properties:
+    service_kind: openwebui
+    auth_method: none
+    is_anonymous_loot: "true"
+    version: "{capture:version}"
+    ollama_backend_url: "{capture:ollama_backend_url}"
