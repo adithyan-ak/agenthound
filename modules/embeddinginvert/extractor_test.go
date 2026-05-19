@@ -105,3 +105,35 @@ func TestExtract_RequiresArtifactPath(t *testing.T) {
 		t.Error("expected error when --artifact not provided")
 	}
 }
+
+func TestExtract_Q8_0_DetectsOutliers(t *testing.T) {
+	e := &Extractor{}
+	res, err := e.Extract(context.Background(), action.Target{
+		Kind:    "node",
+		Address: "sha256:q8-model",
+	}, action.ExtractOptions{
+		SourceNodeID: "sha256:q8-model",
+		ArtifactPath: q8FixturePath(),
+		EngagementID: "Q8-TEST",
+		DryRun:       false,
+		Extras:       map[string]any{"confidence-threshold": 1.5},
+	})
+	if err != nil {
+		t.Fatalf("Extract Q8_0: %v", err)
+	}
+	if res.IngestData == nil {
+		t.Fatal("IngestData nil")
+	}
+	if res.Summary.ArtifactsProduced < 2 {
+		t.Errorf("expected at least 2 Q8_0 outliers (rows 8+9), got %d", res.Summary.ArtifactsProduced)
+	}
+	var foundSecret bool
+	for _, n := range res.IngestData.Graph.Nodes {
+		if tok, _ := n.Properties["token_string"].(string); tok == "[secret_finetune_token]" {
+			foundSecret = true
+		}
+	}
+	if !foundSecret {
+		t.Error("Q8_0 outlier token [secret_finetune_token] not detected")
+	}
+}
