@@ -188,12 +188,14 @@ internal/race
 internal/reflectlite
 internal/routebsd
 internal/runtime/atomic
+internal/runtime/cgroup
 internal/runtime/exithook
 internal/runtime/gc
 internal/runtime/maps
 internal/runtime/math
 internal/runtime/strconv
 internal/runtime/sys
+internal/runtime/syscall
 internal/saferio
 internal/singleflight
 internal/stringslite
@@ -239,6 +241,7 @@ reflect
 regexp
 regexp/syntax
 runtime
+runtime/cgo
 slices
 sort
 strconv
@@ -266,6 +269,7 @@ vendor/golang.org/x/net/http/httpguts
 vendor/golang.org/x/net/http/httpproxy
 vendor/golang.org/x/net/http2/hpack
 vendor/golang.org/x/net/idna
+vendor/golang.org/x/sys/cpu
 vendor/golang.org/x/text/secure/bidirule
 vendor/golang.org/x/text/transform
 vendor/golang.org/x/text/unicode/bidi
