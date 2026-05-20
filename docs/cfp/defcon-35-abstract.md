@@ -1,6 +1,6 @@
-# DEF CON 35 — main-stage CFP abstract (draft)
+# DEF CON 35 — main-stage CFP abstract
 
-> **Status:** draft for v0.3 ship. Will be finalized once v0.4 (poison + revert) lands and the lab demo is recorded end-to-end.
+> **Status:** Finalized. v0.5 shipped all required capabilities (scan, discover, loot, poison, revert, extract). Demo validated end-to-end against live Docker lab.
 > **Submission target:** DEF CON 35 main stage CFP (typically opens Feb 2027 for August 2027).
 > **Track fit:** AppSec / Cloud / AI Village crossover. Main stage preferred — the live demo lands strongest at room scale.
 

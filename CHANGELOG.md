@@ -2,7 +2,27 @@
 
 ## Unreleased
 
-v0.4 in flight — see `docs/plans/v0.3-v0.4-implementation.md`. Brings the first destructive primitives (Poisoner with mandatory Reverter, Implanter, Extractor v0).
+Test coverage hardening (post-v0.5.0).
+
+## v0.5.0
+
+The "extract" milestone — ships the last offensive verb and closes the full DC35 demo arc (scan → discover → loot → poison → revert → extract).
+
+### `agenthound extract` — embedding-inversion PoC
+
+- Pure Go GGUF parser (`modules/embeddinginvert/gguf.go`): reads magic, version, metadata KVs (tokenizer vocabulary), tensor info, seeks to data section. Supports F32 + Q8_0 dequantization. Zero external dependencies.
+- Statistical outlier detection: computes per-row L2 norms on the embedding matrix, flags z-score outliers above configurable threshold, maps outlier indices to tokenizer vocabulary strings from GGUF metadata. Emits `ExtractedTrainingSignal` nodes + `EXTRACTED_FROM` edges.
+- CLI verb: `agenthound extract <source-node-id> --type embedding-invert --artifact <path> [--commit] --engagement-id <id>`. Same safety gates as Poisoner (AUTHORIZED prompt + sentinel, --commit=false default).
+- Schema: `ExtractedTrainingSignal` node kind (23 collector kinds), `EXTRACTED_FROM` edge (17 raw, 25 total).
+- All offensive verb stubs now implemented — zero stubs remain.
+
+### Infrastructure
+
+- Size-check baseline rebased from 9.4 MiB (prototype era) to 9.8 MiB (v0.4 post-ship). Gives future work ~985 KiB headroom within the +10% CI gate.
+- Inter-process receipt flock locking (`sdk/module/flock_unix.go`, `flock_other.go`): advisory file lock via `flock(2)` on unix, directory-lock fallback on other platforms. Eliminates the documented race in `WriteReceipt` where concurrent processes on the same engagement-id could silently drop receipts.
+- `golang.org/x/sys/unix` added to collector allowlist (flock dependency).
+
+## v0.4.0
 
 ## v0.3.0
 
