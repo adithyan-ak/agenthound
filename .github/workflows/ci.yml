@@ -1,18 +1,22 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: "1.25.9"
+          go-version: "1.25.10"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa  # v7.0.1
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa
         with:
           version: "v2.11"
       - name: Check licenses
@@ -23,8 +27,57 @@ jobs:
             ./collector/cmd/agenthound/... \
             ./server/cmd/agenthound-server/...
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.25.10"
+      - name: Create UI embed stub
+        run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
+      - name: Run unit tests
+        run: go test ./... -short -race -coverprofile=coverage.out
+      - name: Coverage summary
+        run: |
+          go tool cover -func=coverage.out | grep ^total:
+          TOTAL=$(go tool cover -func=coverage.out | grep ^total: | awk '{print $3}' | tr -d '%')
+          if [ "$(echo "$TOTAL < 55" | bc -l)" -eq 1 ]; then
+            echo "::error::Unit-test coverage ${TOTAL}% is below 55% threshold"
+            exit 1
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: server/ui/package-lock.json
+      - run: cd server/ui && npm ci --ignore-scripts && npm run build
+      - run: mkdir -p server/internal/api/ui && cp -r server/ui/dist server/internal/api/ui/dist
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.25.10"
+      - name: Build collector
+        run: go build -o bin/agenthound ./collector/cmd/agenthound
+      - name: Build server
+        run: go build -o bin/agenthound-server ./server/cmd/agenthound-server
+      - name: Deps-check
+        run: bash scripts/deps-check.sh
+      - name: Size-check
+        run: bash scripts/size-check.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: binaries
+          path: bin/
+
+  test-integration:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [test-unit]
     services:
       neo4j:
         image: neo4j:4.4-community
@@ -50,142 +103,94 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+    env:
+      AGENTHOUND_NEO4J_URI: bolt://localhost:7687
+      AGENTHOUND_NEO4J_USER: neo4j
+      AGENTHOUND_NEO4J_PASSWORD: testpassword
+      AGENTHOUND_PG_URI: postgres://test:test@localhost:5432/agenthound_test?sslmode=disable
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: "1.25.9"
+          go-version: "1.25.10"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - run: go test ./... -v -race -coverprofile=coverage.out
-        env:
-          AGENTHOUND_NEO4J_URI: bolt://localhost:7687
-          AGENTHOUND_NEO4J_USER: neo4j
-          AGENTHOUND_NEO4J_PASSWORD: testpassword
-          AGENTHOUND_PG_URI: postgres://test:test@localhost:5432/agenthound_test?sslmode=disable
-      - run: go tool cover -func=coverage.out
+      - name: Run full test suite with DB
+        run: go test ./... -race -coverprofile=coverage.out
       - name: Check coverage threshold
         run: |
           TOTAL=$(go tool cover -func=coverage.out | grep ^total: | awk '{print $3}' | tr -d '%')
-          echo "Total coverage: ${TOTAL}%"
-          echo "::notice::Total coverage: ${TOTAL}% — raise threshold as tests are added to cli, appdb, graph"
-          # Threshold: 60% floor.
-          # Raised 55% → 60% after Sprint 2 added comprehensive unit tests
-          # for the ingest pipeline + graph writer (the failure-domain core
-          # — bugs there corrupt the graph permanently). Pipeline.Ingest and
-          # writer.WriteNodes/WriteEdges now have 100% coverage via mock
-          # GraphDB and an injectable execFn seam, lifting total from
-          # 58.4% → 60.7%. Ratchet up further as collector/cli,
-          # server/cli, atomic-write, and upload-fallback gain dedicated
-          # tests.
+          echo "::notice::Full-suite coverage: ${TOTAL}%"
           if [ "$(echo "$TOTAL < 60" | bc -l)" -eq 1 ]; then
             echo "::error::Coverage ${TOTAL}% is below 60% threshold"
             exit 1
           fi
-      - name: Run govulncheck
-        run: |
+
+  govulncheck:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.25.10"
+      - name: Create UI embed stub
+        run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
+      - run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: server/ui/package-lock.json
-      - run: cd server/ui && npm ci --ignore-scripts && npm run build
-      - run: mkdir -p server/internal/api/ui && cp -r server/ui/dist server/internal/api/ui/dist
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
-        with:
-          go-version: "1.25.9"
-      - run: go build -o bin/agenthound ./collector/cmd/agenthound
-      - run: go build -o bin/agenthound-server ./server/cmd/agenthound-server
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: binaries
-          path: bin/
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: [lint, test, build]
-    # Validate every Dockerfile on every PR — catching breakage at PR-time
-    # rather than after merge to main.
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
-      - name: Build collector image (validate only)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          file: docker/Dockerfile.agenthound
-          push: false
-          tags: agenthound:collector
-      - name: Build server image (validate only)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          file: docker/Dockerfile.agenthound-server
-          push: false
-          tags: agenthound-server:latest
-      - name: Build standard all-in-one image (validate only)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
-        with:
-          context: .
-          file: docker/Dockerfile.standard
-          push: false
-          tags: agenthound:standard
-
-  deps-check:
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
-        with:
-          go-version: "1.25.9"
-      - name: Create UI embed stub
-        run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - name: Run deps-check (blocking)
-        run: bash scripts/deps-check.sh
-
-  size-check:
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
-        with:
-          go-version: "1.25.9"
-      - name: Run size-check (blocking)
-        run: bash scripts/size-check.sh
-
   xplatform-build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test-unit]
     strategy:
       fail-fast: false
       matrix:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: "1.25.9"
+          go-version: "1.25.10"
       - name: Create UI embed stub
         run: mkdir -p server/internal/api/ui/dist && echo '<!DOCTYPE html><html><body></body></html>' > server/internal/api/ui/dist/index.html
-      - name: Build collector ${{ matrix.os }}/${{ matrix.arch }}
+      - name: Build collector
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: go build -trimpath -ldflags='-s -w' -o /dev/null ./collector/cmd/agenthound
-      - name: Build server ${{ matrix.os }}/${{ matrix.arch }}
+      - name: Build server
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: go build -trimpath -ldflags='-s -w' -o /dev/null ./server/cmd/agenthound-server
+
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Build collector image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/Dockerfile.agenthound
+          push: false
+      - name: Build server image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/Dockerfile.agenthound-server
+          push: false
+      - name: Build standard image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/Dockerfile.standard
+          push: false
