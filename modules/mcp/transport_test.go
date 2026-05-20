@@ -194,7 +194,7 @@ func TestBuildHTTPTransport_TLSStrictDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildTransport (insecure): %v", err)
 	}
-	st = tr.(*mcpsdk.StreamableClientTransport)
+	st, _ = tr.(*mcpsdk.StreamableClientTransport)
 	if _, err := st.HTTPClient.Get(srv.URL); err != nil {
 		t.Errorf("insecure=true against self-signed cert: unexpected error %v", err)
 	}
