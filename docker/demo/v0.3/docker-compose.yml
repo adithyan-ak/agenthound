@@ -28,7 +28,6 @@
 # the documented endpoints; production fingerprinting against real
 # instances is the operator's path.
 
-version: "3.9"
 
 networks:
   demo-lab-v3:
