@@ -14,7 +14,7 @@ Attack-path discovery for AI agent infrastructure. [BloodHound](https://github.c
 
 - **[Network Scanning](operator/scanner.md)** — Sweep CIDRs for AI/ML services + fingerprint
 - **[Protocol Discovery](operator/discover.md)** — Find MCP servers and A2A agents by protocol shape
-- **[Looting](operator/loot/)** — Extract credentials and model artifacts from discovered services
+- **[Looting](operator/loot/index.md)** — Extract credentials and model artifacts from discovered services
   - [LiteLLM](operator/loot/litellm.md) — Master key → upstream provider keys
   - [Ollama](operator/loot/ollama.md) — Model inventory, modelfiles, weight extraction
 - **[Offensive Actions](operator/offensive-actions.md)** — Poison tool descriptions, implant configs, revert
