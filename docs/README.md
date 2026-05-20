@@ -28,8 +28,6 @@ Attack-path discovery for AI agent infrastructure. [BloodHound](https://github.c
 - **[API Reference](reference/api.md)** — REST endpoints, auth, request/response schemas
 - **[Graph Model](reference/graph-model.md)** — 25 node types, 25 edge types, ID strategy, merge semantics
   - [CAN_REACH](reference/edges/can-reach.md) — The marquee composite edge (transitive agent→resource access)
-  - [CAN_EXFILTRATE_VIA](reference/edges/can-exfiltrate-via.md) — Sensitive data + outbound channel
-  - [SHADOWS](reference/edges/shadows.md) — Cross-server tool shadowing
 - **[Detection Rules](reference/detection-rules.md)** — 18 pre-built queries + OWASP mapping
 - **[Rule Syntax](reference/rule-syntax.md)** — YAML schema for detection + fingerprint rules
 - **[Configuration](reference/configuration.md)** — Env vars, state directories, defaults
