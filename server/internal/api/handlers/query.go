@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/adithyan-ak/agenthound/server/internal/graph"
@@ -28,6 +29,10 @@ func (h *QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Cypher == "" {
 		WriteValidationError(w, "cypher query is required")
+		return
+	}
+	if h.reader == nil {
+		WriteInternalError(w, r, fmt.Errorf("graph reader not configured"))
 		return
 	}
 
