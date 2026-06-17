@@ -1,0 +1,137 @@
+site_name: AgentHound
+site_description: Attack-path discovery for AI agent infrastructure — BloodHound for MCP, A2A, and AI services.
+site_url: https://docs.agenthound.io
+copyright: Copyright &copy; AgentHound contributors — Apache-2.0
+
+repo_url: https://github.com/adithyan-ak/agenthound
+repo_name: adithyan-ak/agenthound
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+# Internal-only docs: kept in-repo, excluded from the public site + nav.
+# (Squash/relocate later — see CLAUDE.md.)
+exclude_docs: |
+  cfp/
+  plans/
+
+theme:
+  name: material
+  icon:
+    logo: material/dog
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+# Fail the build on any broken internal link, missing anchor, or orphan page.
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: README.md
+  - Getting Started:
+      - Install: getting-started/install.md
+      - Quickstart: getting-started/quickstart.md
+      - Demo Lab: getting-started/demo-lab.md
+  - Operator Guides:
+      - Network Scanning: operator/scanner.md
+      - Protocol Discovery: operator/discover.md
+      - Looting:
+          - Overview: operator/loot/index.md
+          - LiteLLM: operator/loot/litellm.md
+          - Ollama: operator/loot/ollama.md
+      - Offensive Actions: operator/offensive-actions.md
+      - Attack Paths: operator/attack-paths.md
+      - Deployment: operator/deployment.md
+      - Security and OPSEC: operator/security.md
+  - Reference:
+      - CLI: reference/cli.md
+      - API: reference/api.md
+      - Graph Model: reference/graph-model.md
+      - Edges:
+          - CAN_REACH: reference/edges/can-reach.md
+          - CAN_EXFILTRATE_VIA: reference/edges/can-exfiltrate-via.md
+          - SHADOWS: reference/edges/shadows.md
+      - Detection Rules: reference/detection-rules.md
+      - Rule Syntax: reference/rule-syntax.md
+      - Configuration: reference/configuration.md
+      - Risk Scoring: reference/risk-scoring.md
+  - Architecture:
+      - System Design: architecture/system-design.md
+      - Ingest Pipeline: architecture/ingest-pipeline.md
+      - Post-Processors: architecture/post-processors.md
+  - Contributing:
+      - Development Setup: contributing/dev-setup.md
+      - Writing Modules: contributing/modules.md
+      - Authoring Rules: contributing/authoring-rules.md
+  - Decisions:
+      - ADR-0001 Two-Binary Split: adr/0001-two-binary-split.md

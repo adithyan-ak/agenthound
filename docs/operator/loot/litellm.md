@@ -123,7 +123,6 @@ The result is a one-line agent → MCPServer → env-var-cred → LiteLLM master
 
 ## See also
 
-- [`docs/scanner.md`](scanner.md) — the network scanner that discovers the LiteLLM gateway in the first place.
+- [Network scanner](../scanner.md) — the network scanner that discovers the LiteLLM gateway in the first place.
 - `modules/litellmloot/looter.go` — implementation reference.
 - `server/internal/analysis/processors/cross_service_credential_chain.go` — the post-processor that consumes this output.
-- [`docs/plans/sprint3-offensive-primitives.md`](plans/sprint3-offensive-primitives.md) Sections 4 and 9.5 — design rationale and audit-trail residue analysis.

@@ -121,7 +121,7 @@ MCPServer node IDs so their outputs merge cleanly on ingest.
 
 ## Security Model
 
-Single-user posture. The server has **no application-layer authentication, no RBAC, no audit log**. Protect via the network layer (loopback bind, VPN, SSH tunnel). See [`security.md`](security.md) for the full threat model.
+Single-user posture. The server has **no application-layer authentication, no RBAC, no audit log**. Protect via the network layer (loopback bind, VPN, SSH tunnel). See [`security.md`](../operator/security.md) for the full threat model.
 
 | Layer | Implementation |
 |-------|---------------|

@@ -18,7 +18,7 @@ A second control catches browser drive-by attacks: **mutating endpoints require 
 
 CORS uses `AllowCredentials: false` so a hostile origin cannot exfiltrate the token via a credentialed fetch. CLI tools (`agenthound-server ingest`, `agenthound-server query`) bypass HTTP entirely and don't need the token.
 
-If you need to expose the server beyond loopback, do so at the network layer (VPN / SSH tunnel / Tailscale) — never by binding `0.0.0.0:8080` to a public interface. See [`security.md`](security.md).
+If you need to expose the server beyond loopback, do so at the network layer (VPN / SSH tunnel / Tailscale) — never by binding `0.0.0.0:8080` to a public interface. See [`security.md`](../operator/security.md).
 
 ### Mutating endpoints (token required)
 

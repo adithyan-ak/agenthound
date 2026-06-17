@@ -251,8 +251,8 @@ docker compose -f docker/demo/docker-compose.yml down --volumes
 
 ## Next Steps
 
-- [CLI Reference](cli-reference.md) -- full command documentation
-- [API Reference](api-reference.md) -- REST API endpoints
-- [Graph Model](graph-model.md) -- node types, edge types, risk scoring
-- [Detection Rules](detection-rules.md) -- all detections with OWASP mappings
-- [Security](security.md) -- threat model and operator OPSEC
+- [CLI Reference](../reference/cli.md) -- full command documentation
+- [API Reference](../reference/api.md) -- REST API endpoints
+- [Graph Model](../reference/graph-model.md) -- node types, edge types, risk scoring
+- [Detection Rules](../reference/detection-rules.md) -- all detections with OWASP mappings
+- [Security](../operator/security.md) -- threat model and operator OPSEC

@@ -150,9 +150,8 @@ cat /tmp/scan.json | jq '.meta'
 
 ## See also
 
-- [`docs/loot-litellm.md`](loot-litellm.md) — extracting credentials from a fingerprinted LiteLLM gateway.
-- [`docs/plans/sprint3-offensive-primitives.md`](plans/sprint3-offensive-primitives.md) Section 9 — full risk model and mitigation rationale.
-- [`docs/security.md`](security.md) — overall AgentHound threat model.
+- [LiteLLM looting](loot/litellm.md) — extracting credentials from a fingerprinted LiteLLM gateway.
+- [Security model](security.md) — overall AgentHound threat model.
 # `--rules-bundle` — out-of-band fingerprint rule updates
 
 The fingerprint rules engine ships rules embedded in the AgentHound binary (`sdk/rules/builtin/fingerprints/*.yaml`). v0.3 adds a `--rules-bundle <path>` override so operators can pick up rule fixes without rebuilding the collector.
