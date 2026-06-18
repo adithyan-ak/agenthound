@@ -1,4 +1,6 @@
-import type { AttackPath } from "@/api/types";
+import { Waypoints } from "lucide-react";
+import { WidgetCard } from "@/components/dashboard/kit";
+import type { AttackPath, AttackPathNode } from "@/api/types";
 import { PathHexNode } from "./PathHexNode";
 import { PathEdgeArrow } from "./PathEdgeArrow";
 
@@ -23,54 +25,50 @@ export function AttackPathDiagram({
   targetName,
   targetKind,
 }: AttackPathDiagramProps) {
-  if (!path || path.nodes.length === 0) {
-    const fallbackNodes = [
-      { id: sourceId, kinds: [sourceKind], properties: { name: sourceName } },
-      { id: targetId, kinds: [targetKind], properties: { name: targetName } },
-    ];
+  const hasPath = !!path && path.nodes.length > 0;
 
-    return (
-      <div className="rounded-lg border border-border bg-background/50 p-6">
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-4">
-          Attack Path
-        </div>
-        <div className="flex items-center justify-center gap-2 overflow-x-auto py-2">
-          <PathHexNode node={fallbackNodes[0]!} isFirst severity={severity} isLast={false} />
-          <PathEdgeArrow kind={"\u2014"} />
-          <PathHexNode node={fallbackNodes[1]!} isFirst={false} isLast severity={severity} />
-        </div>
-        <div className="text-center text-xs text-muted-foreground mt-3">
-          Intermediate path details unavailable
-        </div>
-      </div>
-    );
-  }
-
-  const orderedNodes = orderNodesFromEdges(path);
+  const fallbackNodes: AttackPathNode[] = [
+    { id: sourceId, kinds: [sourceKind], properties: { name: sourceName } },
+    { id: targetId, kinds: [targetKind], properties: { name: targetName } },
+  ];
+  const orderedNodes =
+    path && path.nodes.length > 0 ? orderNodesFromEdges(path) : fallbackNodes;
 
   return (
-    <div className="rounded-lg border border-border bg-background/50 p-6">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-4">
-        Attack Path
+    <WidgetCard
+      title="Attack Path"
+      icon={Waypoints}
+      action={
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          {String(Math.max(orderedNodes.length - 1, 0)).padStart(2, "0")} hops
+        </span>
+      }
+    >
+      <div className="hud-grid overflow-x-auto rounded-[3px] border border-border/60 bg-black/20 p-4">
+        <div className="flex min-w-max items-center justify-center gap-0">
+          {orderedNodes.map((node, i) => {
+            const isFirst = i === 0;
+            const isLast = i === orderedNodes.length - 1;
+            const edgeKind = hasPath ? path?.edges[i]?.kind : isLast ? undefined : "\u2014";
+            return (
+              <div key={node.id} className="flex items-center">
+                <PathHexNode node={node} isFirst={isFirst} isLast={isLast} severity={severity} />
+                {!isLast && edgeKind && <PathEdgeArrow kind={edgeKind} />}
+              </div>
+            );
+          })}
+        </div>
+        {!hasPath && (
+          <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            Intermediate path details unavailable
+          </p>
+        )}
       </div>
-      <div className="flex items-center justify-center overflow-x-auto py-2 gap-0">
-        {orderedNodes.map((node, i) => {
-          const edge = path.edges[i];
-          const isFirst = i === 0;
-          const isLast = i === orderedNodes.length - 1;
-          return (
-            <div key={node.id} className="flex items-center">
-              <PathHexNode node={node} isFirst={isFirst} isLast={isLast} severity={severity} />
-              {edge && <PathEdgeArrow kind={edge.kind} />}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    </WidgetCard>
   );
 }
 
-function orderNodesFromEdges(path: AttackPath) {
+function orderNodesFromEdges(path: AttackPath): AttackPathNode[] {
   if (path.edges.length === 0) return path.nodes;
 
   const targetSet = new Set(path.edges.map((e) => e.target));

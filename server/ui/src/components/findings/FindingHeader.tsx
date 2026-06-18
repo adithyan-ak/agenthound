@@ -1,9 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Compass, Copy, Check } from "lucide-react";
-import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { SeverityBadge } from "@/components/ui/severity-badge";
 import { MiniHexIcon } from "./MiniHexIcon";
 import { cn } from "@/lib/utils";
 import { SEVERITY, SEVERITY_BY_KEY } from "@/theme/tokens";
@@ -16,10 +13,27 @@ interface FindingHeaderProps {
   onCopyReport: () => void;
 }
 
+const consoleBtn =
+  "inline-flex h-8 items-center gap-1.5 rounded-[3px] border border-border bg-black/30 px-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-foreground/80 transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary disabled:pointer-events-none disabled:opacity-40";
+
+function Chip({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingHeaderProps) {
   const navigate = useNavigate();
   const f = detail.finding;
   const sev = SEVERITY_BY_KEY[f.severity] ?? SEVERITY.low;
+  const color = sev.solid;
   const [copied, setCopied] = useState(false);
 
   const hops = detail.composite_props?.hops;
@@ -31,100 +45,125 @@ export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingH
   }
 
   return (
-    <div className={cn("rounded-lg p-5 border-l-4", sev.borderLeftClass)}>
-      {/* Breadcrumb + nav */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <button onClick={() => navigate("/findings")} className="hover:text-foreground transition-colors">
-            Findings
-          </button>
-          <span>/</span>
-          <span className="capitalize">{f.severity}</span>
-          <span>/</span>
-          <span className="text-foreground truncate max-w-[300px]">{f.title}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!prevId}
-            onClick={() => prevId && navigate(`/findings/${prevId}`)}
-            className="h-7 px-2"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Prev
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!nextId}
-            onClick={() => nextId && navigate(`/findings/${nextId}`)}
-            className="h-7 px-2"
-          >
-            Next <ArrowRight className="h-3.5 w-3.5 ml-1" />
-          </Button>
-        </div>
-      </div>
+    <section
+      className="card-elevated relative overflow-hidden rounded-md"
+      style={{
+        boxShadow: `inset 2px 0 0 0 ${color}, 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px 0 rgb(0 0 0 / 0.5)`,
+      }}
+    >
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 h-px w-14"
+        style={{ backgroundColor: color, opacity: 0.9 }}
+      />
 
-      {/* Severity + title + actions */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <SeverityBadge severity={f.severity} className="mb-2 text-xs font-bold uppercase" />
-          <h1 className="text-xl font-semibold text-foreground mb-2">{f.title}</h1>
-
-          {/* Source -> Target */}
-          <div className="flex items-center gap-2 mb-3 text-sm">
-            <MiniHexIcon kind={f.source_kind} />
-            <span className="text-foreground font-medium">{f.source_name || f.source_id.slice(0, 12)}</span>
-            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-            <MiniHexIcon kind={f.target_kind} />
-            <span className="text-foreground font-medium">{f.target_name || f.target_id.slice(0, 12)}</span>
+      <div className="px-4 py-3.5">
+        {/* Breadcrumb + nav */}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            <button
+              onClick={() => navigate("/findings")}
+              className="transition-colors hover:text-primary"
+            >
+              Findings
+            </button>
+            <span className="text-primary/50">/</span>
+            <span style={{ color }}>{f.severity}</span>
+            <span className="text-primary/50">/</span>
+            <span className="max-w-[320px] truncate normal-case tracking-normal text-foreground/80">
+              {f.title}
+            </span>
           </div>
-
-          {/* Metadata chips */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className="text-[10px] font-mono">
-              {f.id.slice(0, 8)}
-            </Badge>
-            {typeof hops === "number" && (
-              <Badge variant="outline" className="text-[10px]">
-                {hops} hops
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-[10px]">
-              {Math.round(f.confidence * 100)}% confidence
-            </Badge>
-            {f.owasp_map.map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-[10px] font-mono">
-                {tag}
-              </Badge>
-            ))}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              className={consoleBtn}
+              disabled={!prevId}
+              onClick={() => prevId && navigate(`/findings/${prevId}`)}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Prev
+            </button>
+            <button
+              className={consoleBtn}
+              disabled={!nextId}
+              onClick={() => nextId && navigate(`/findings/${nextId}`)}
+            >
+              Next <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-col gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={() => navigate("/explorer")}
-          >
-            <Compass className="h-3.5 w-3.5 mr-1.5" /> View in Explorer
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <><Check className="h-3.5 w-3.5 mr-1.5 text-green-400" /> Copied</>
-            ) : (
-              <><Copy className="h-3.5 w-3.5 mr-1.5" /> Copy Report</>
-            )}
-          </Button>
+        {/* Severity + title + actions */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-[2px] px-2 py-0.5"
+              style={{ backgroundColor: `${color}1A`, color, boxShadow: `inset 0 0 0 1px ${color}55` }}
+            >
+              <span
+                className="h-2 w-2 rounded-[1px]"
+                style={{ backgroundColor: color, boxShadow: `0 0 6px -1px ${color}` }}
+              />
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
+                {sev.label}
+              </span>
+            </span>
+
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{f.title}</h1>
+
+            {/* Source -> Target */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 font-mono text-sm">
+              <MiniHexIcon kind={f.source_kind} />
+              <span className="font-medium text-foreground">
+                {f.source_name || f.source_id.slice(0, 12)}
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-primary/50" />
+              <MiniHexIcon kind={f.target_kind} />
+              <span className="font-medium text-foreground">
+                {f.target_name || f.target_id.slice(0, 12)}
+              </span>
+            </div>
+
+            {/* Metadata chips */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <Chip>
+                <span className="text-primary/70">ID</span> {f.id.slice(0, 8)}
+              </Chip>
+              {typeof hops === "number" && (
+                <Chip>
+                  <span className="tabular-nums">{hops}</span> hops
+                </Chip>
+              )}
+              <Chip>
+                <span className="tabular-nums">{Math.round(f.confidence * 100)}%</span> conf
+              </Chip>
+              {f.owasp_map.map((tag) => (
+                <Chip key={tag} className="text-primary/80">
+                  {tag}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex shrink-0 flex-col gap-2">
+            <button className={consoleBtn} onClick={() => navigate("/explorer")}>
+              <Compass className="h-3.5 w-3.5" /> View in Explorer
+            </button>
+            <button className={consoleBtn} onClick={handleCopy}>
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-400" /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" /> Copy Report
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

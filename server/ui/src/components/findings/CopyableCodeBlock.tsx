@@ -15,19 +15,15 @@ export function CopyableCodeBlock({ code }: CopyableCodeBlockProps) {
   }
 
   return (
-    <div className="relative rounded border border-border bg-muted/80 p-2.5 mt-1.5">
+    <div className="relative mt-2 rounded-[3px] border border-border bg-black/50 p-2.5">
       <button
         onClick={handleCopy}
-        className="absolute top-1.5 right-1.5 p-1 rounded hover:bg-muted transition-colors"
+        className="absolute right-1.5 top-1.5 rounded-[2px] p-1 text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
         title="Copy to clipboard"
       >
-        {copied ? (
-          <Check className="h-3 w-3 text-green-400" />
-        ) : (
-          <Copy className="h-3 w-3 text-muted-foreground" />
-        )}
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
       </button>
-      <pre className="text-[10px] text-foreground font-mono whitespace-pre-wrap pr-6">
+      <pre className="whitespace-pre-wrap pr-6 font-mono text-[10px] leading-relaxed text-foreground/90">
         {code}
       </pre>
     </div>

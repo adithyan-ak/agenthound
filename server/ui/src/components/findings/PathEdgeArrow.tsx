@@ -1,6 +1,6 @@
 import { memo } from "react";
-import { getEdgeCategory } from "@/lib/edge-styles";
 import { ChevronRight } from "lucide-react";
+import { getEdgeCategory } from "@/lib/edge-styles";
 import { EDGE_COLORS } from "@/theme/tokens";
 
 interface PathEdgeArrowProps {
@@ -12,19 +12,16 @@ function PathEdgeArrowComponent({ kind }: PathEdgeArrowProps) {
   const color = EDGE_COLORS[category as keyof typeof EDGE_COLORS] ?? EDGE_COLORS.structure;
 
   return (
-    <div className="flex flex-col items-center justify-center flex-shrink-0 min-w-[60px] px-1">
+    <div className="flex min-w-[64px] flex-shrink-0 flex-col items-center justify-center px-1">
       <div
-        className="text-[8px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded glass mb-1 whitespace-nowrap"
-        style={{ color }}
+        className="mb-1 whitespace-nowrap rounded-[2px] border bg-black/50 px-1.5 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-[0.08em]"
+        style={{ color, borderColor: `${color}55` }}
       >
         {kind.replace(/_/g, " ")}
       </div>
-      <div className="flex items-center w-full">
-        <div
-          className="flex-1 border-t-2 border-dashed"
-          style={{ borderColor: color }}
-        />
-        <ChevronRight className="h-3 w-3 -ml-0.5 flex-shrink-0" style={{ color }} />
+      <div className="flex w-full items-center">
+        <div className="flex-1 border-t border-dashed" style={{ borderColor: `${color}99` }} />
+        <ChevronRight className="-ml-0.5 h-3 w-3 flex-shrink-0" style={{ color }} />
       </div>
     </div>
   );

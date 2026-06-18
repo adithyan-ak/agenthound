@@ -1,17 +1,11 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, ListTree } from "lucide-react";
+import { WidgetCard } from "@/components/dashboard/kit";
 import { Grid } from "@/components/ui/layout";
 import { getEdgeCategory } from "@/lib/edge-styles";
 import { EDGE_EXPLOIT } from "@/lib/findings/edge-exploits";
-import { cn } from "@/lib/utils";
+import { EDGE_COLORS, SEVERITY } from "@/theme/tokens";
 import type { AttackPath } from "@/api/types";
-
-const CATEGORY_BADGE: Record<string, string> = {
-  attack: `border-red-500/50 bg-red-950/40 text-red-300`,
-  trust: `border-blue-500/50 bg-blue-950/40 text-blue-300`,
-  structure: "border-border bg-muted text-muted-foreground",
-};
 
 interface HopEvidenceTimelineProps {
   path: AttackPath | null;
@@ -41,21 +35,30 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
 
   if (edges.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground">
-        No hop evidence available for this finding.
-      </div>
+      <WidgetCard title="Hop Evidence" icon={ListTree}>
+        <p className="font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
+          No hop evidence available for this finding.
+        </p>
+      </WidgetCard>
     );
   }
 
   return (
-    <div>
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">
-        Hop Evidence
-      </div>
-      <div className="space-y-1">
+    <WidgetCard
+      title="Hop Evidence"
+      icon={ListTree}
+      flush
+      action={
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          {String(edges.length).padStart(2, "0")} hops
+        </span>
+      }
+    >
+      <div className="divide-y divide-border/60">
         {edges.map((edge, i) => {
           const isOpen = expanded.has(i);
           const category = getEdgeCategory(edge.kind);
+          const color = EDGE_COLORS[category as keyof typeof EDGE_COLORS] ?? EDGE_COLORS.structure;
           const exploit = EDGE_EXPLOIT[edge.kind];
           const srcNode = nodeMap.get(edge.source);
           const tgtNode = nodeMap.get(edge.target);
@@ -63,38 +66,43 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
           const tgtName = (tgtNode?.properties?.name as string) || edge.target.slice(0, 16);
 
           return (
-            <div key={i} className="rounded-lg border border-border overflow-hidden">
+            <div key={i}>
               <button
                 onClick={() => toggle(i)}
-                className="flex items-center w-full gap-2 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                style={{ boxShadow: `inset 2px 0 0 0 ${color}` }}
               >
                 {isOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                 )}
-                <span className="text-xs font-bold text-muted-foreground w-5">[{i + 1}]</span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-[9px] font-semibold uppercase", CATEGORY_BADGE[category])}
+                <span className="w-7 shrink-0 font-mono text-[11px] font-bold tabular-nums text-muted-foreground/70">
+                  [{String(i + 1).padStart(2, "0")}]
+                </span>
+                <span
+                  className="shrink-0 rounded-[2px] border px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em]"
+                  style={{ color, borderColor: `${color}55`, backgroundColor: `${color}14` }}
                 >
                   {edge.kind.replace(/_/g, " ")}
-                </Badge>
-                <span className="text-xs text-muted-foreground truncate">
-                  {srcName} &rarr; {tgtName}
+                </span>
+                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  {srcName} <span className="text-primary/50">&rarr;</span> {tgtName}
                 </span>
               </button>
 
               {isOpen && (
-                <div className="px-3 pb-3 pt-1 border-t border-border/50 space-y-2">
+                <div className="space-y-2 border-t border-border/50 bg-black/20 px-3.5 pb-3 pt-2.5">
                   {edge.properties && Object.keys(edge.properties).length > 0 && (
-                    <Grid min="11rem" gap="0.25rem 1rem" className="text-xs">
+                    <Grid min="11rem" gap="0.25rem 1rem">
                       {Object.entries(edge.properties).map(([key, val]) => {
                         if (key === "last_seen" || key === "scan_id") return null;
                         return (
                           <div key={key} className="flex items-baseline gap-1.5">
-                            <span className="text-muted-foreground text-[10px]">{key.replace(/_/g, " ")}:</span>
-                            <span className="text-foreground font-mono text-[10px] truncate">
+                            <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                              {key.replace(/_/g, " ")}
+                            </span>
+                            <span className="truncate font-mono text-[10px] text-foreground">
                               {typeof val === "boolean" ? (val ? "yes" : "no") : String(val ?? "\u2014")}
                             </span>
                           </div>
@@ -104,13 +112,21 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
                   )}
 
                   {exploit && (
-                    <div className="rounded border border-red-900/30 bg-red-950/15 p-2.5 mt-1">
-                      <div className="text-[10px] font-semibold text-red-300 mb-1">
+                    <div
+                      className="rounded-[3px] bg-black/30 p-2.5"
+                      style={{ boxShadow: `inset 2px 0 0 0 ${SEVERITY.critical.solid}` }}
+                    >
+                      <div
+                        className="mb-1 flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]"
+                        style={{ color: SEVERITY.critical.text }}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-[1px]"
+                          style={{ backgroundColor: SEVERITY.critical.solid }}
+                        />
                         {exploit.title}
                       </div>
-                      <p className="text-[10px] text-foreground/75 leading-relaxed">
-                        {exploit.detail}
-                      </p>
+                      <p className="text-[11px] leading-relaxed text-foreground/75">{exploit.detail}</p>
                     </div>
                   )}
                 </div>
@@ -119,6 +135,6 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
           );
         })}
       </div>
-    </div>
+    </WidgetCard>
   );
 }

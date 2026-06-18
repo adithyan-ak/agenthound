@@ -12,7 +12,7 @@ function MiniHexIconComponent({ kind, className }: MiniHexIconProps) {
   const Icon = config.icon;
   return (
     <span
-      className={cn("inline-flex items-center justify-center rounded-sm", className)}
+      className={cn("inline-flex items-center justify-center rounded-[2px]", className)}
       style={{
         width: 20,
         height: 20,

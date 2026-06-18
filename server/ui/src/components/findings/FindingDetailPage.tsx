@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Stack, Sidebar, Center } from "@/components/ui/layout";
+import { Stack, Sidebar } from "@/components/ui/layout";
 import { useFindingDetail } from "@/hooks/useFindingDetail";
 import { useFindingsNavigation } from "@/hooks/useFindingsNavigation";
 import { buildMarkdownReport } from "@/lib/findings/copy-report";
@@ -31,42 +31,45 @@ export function FindingDetailPage() {
 
   if (isLoading) {
     return (
-      <Stack className="p-6">
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-48 w-full" />
-        <Sidebar
-          sidePosition="right"
-          sideWidth="22rem"
-          contentMin="58%"
-          side={
-            <Stack gap="1rem">
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-48 w-full" />
-            </Stack>
-          }
-          main={<Skeleton className="h-64 w-full" />}
-        />
-      </Stack>
+      <div className="dashboard-bg min-h-full p-3 sm:p-4 lg:p-5">
+        <div className="mx-auto max-w-[88rem]">
+          <Stack gap="0.75rem">
+            <Skeleton className="h-36 w-full rounded-md" />
+            <Skeleton className="h-44 w-full rounded-md" />
+            <Sidebar
+              sidePosition="right"
+              sideWidth="22rem"
+              contentMin="58%"
+              side={
+                <Stack gap="0.75rem">
+                  <Skeleton className="h-32 w-full rounded-md" />
+                  <Skeleton className="h-48 w-full rounded-md" />
+                </Stack>
+              }
+              main={<Skeleton className="h-64 w-full rounded-md" />}
+            />
+          </Stack>
+        </div>
+      </div>
     );
   }
 
   if (error || !detail) {
     return (
-      <Center
-        measure="32rem"
-        className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center"
-      >
-        <div className="text-lg font-semibold text-foreground">Finding not found</div>
-        <p className="text-sm text-muted-foreground">
+      <div className="dashboard-bg flex min-h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <div className="font-mono text-sm font-semibold uppercase tracking-[0.12em] text-foreground">
+          Finding not found
+        </div>
+        <p className="max-w-md text-sm text-muted-foreground">
           This finding may have been resolved in a recent scan, or the scan data may have been cleared.
         </p>
         <button
           onClick={() => navigate("/findings")}
-          className="text-sm text-primary hover:underline"
+          className="font-mono text-xs uppercase tracking-[0.08em] text-primary transition-colors hover:text-primary/80"
         >
-          Back to Findings
+          &#9656; Back to Findings
         </button>
-      </Center>
+      </div>
     );
   }
 
@@ -78,40 +81,42 @@ export function FindingDetailPage() {
   }
 
   return (
-    <Center measure="84rem" className="p-6">
-      <Stack gap="1.5rem">
-        <FindingHeader
-          detail={detail}
-          prevId={prevId}
-          nextId={nextId}
-          onCopyReport={handleCopyReport}
-        />
+    <div className="dashboard-bg min-h-full p-3 sm:p-4 lg:p-5">
+      <div className="mx-auto max-w-[88rem]">
+        <Stack gap="0.75rem">
+          <FindingHeader
+            detail={detail}
+            prevId={prevId}
+            nextId={nextId}
+            onCopyReport={handleCopyReport}
+          />
 
-        <AttackPathDiagram
-          path={detail.attack_path}
-          severity={f.severity}
-          sourceId={f.source_id}
-          sourceName={f.source_name}
-          sourceKind={f.source_kind}
-          targetId={f.target_id}
-          targetName={f.target_name}
-          targetKind={f.target_kind}
-        />
+          <AttackPathDiagram
+            path={detail.attack_path}
+            severity={f.severity}
+            sourceId={f.source_id}
+            sourceName={f.source_name}
+            sourceKind={f.source_kind}
+            targetId={f.target_id}
+            targetName={f.target_name}
+            targetKind={f.target_kind}
+          />
 
-        <Sidebar
-          sidePosition="right"
-          sideWidth="22rem"
-          contentMin="58%"
-          side={
-            <Stack gap="1rem">
-              <FindingImpact impact={detail.impact} path={detail.attack_path} />
-              <FindingRemediation steps={detail.remediation} />
-              <FindingReferences finding={f} />
-            </Stack>
-          }
-          main={<HopEvidenceTimeline path={detail.attack_path} />}
-        />
-      </Stack>
-    </Center>
+          <Sidebar
+            sidePosition="right"
+            sideWidth="22rem"
+            contentMin="58%"
+            side={
+              <Stack gap="0.75rem">
+                <FindingImpact impact={detail.impact} path={detail.attack_path} />
+                <FindingRemediation steps={detail.remediation} />
+                <FindingReferences finding={f} />
+              </Stack>
+            }
+            main={<HopEvidenceTimeline path={detail.attack_path} />}
+          />
+        </Stack>
+      </div>
+    </div>
   );
 }
