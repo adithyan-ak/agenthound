@@ -79,11 +79,11 @@ describe("StatCards", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
 
-    expect(screen.getByText("Exposure")).toBeInTheDocument();
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
     expect(screen.getByText("A2A Agents")).toBeInTheDocument();
     expect(screen.getByText("Tools")).toBeInTheDocument();
+    expect(screen.getByText("Credentials")).toBeInTheDocument();
   });
 
   it("renders zero values when node_counts keys are missing", () => {
@@ -102,6 +102,7 @@ describe("StatCards", () => {
 
     render(<StatCards />, { wrapper: createWrapper() });
 
+    // One "0" per KPI tile (Agents, MCP Servers, A2A Agents, Tools, Credentials).
     const zeros = screen.getAllByText("0");
     expect(zeros).toHaveLength(5);
   });

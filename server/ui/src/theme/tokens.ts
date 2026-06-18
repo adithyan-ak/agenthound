@@ -144,6 +144,14 @@ export function riskColor(score: number): string {
   return "#22C55E";
 }
 
+// Canonical severity ordering (worst first) for dashboards and legends.
+export const SEVERITY_ORDER = ["critical", "high", "medium", "low"] as const;
+
+// Severity key -> solid color, falling back to the "low" slate.
+export function severityColor(sev: string): string {
+  return SEVERITY[sev]?.solid ?? SEVERITY.low!.solid;
+}
+
 // Risk score -> Tailwind bg class
 export function riskBgClass(score: number): string {
   if (score >= 75) return "bg-red-500";

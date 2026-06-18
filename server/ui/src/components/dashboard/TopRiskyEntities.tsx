@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchNodes } from "@/api/graph";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { InfoTip } from "./InfoTip";
-import { Badge } from "@/components/ui/badge";
+import { Crosshair } from "lucide-react";
+import { useAllNodes } from "@/hooks/useDashboardData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { riskColor } from "@/theme/tokens";
+import { WidgetCard, MeterBar } from "./kit";
+import { NODE_KIND_COLORS, riskColor } from "@/theme/tokens";
+
+const INFO =
+  "Entities with the highest computed risk scores. Risk reflects auth posture, blast radius, poisoning exposure, and credential handling.";
 
 const KIND_LABEL: Record<string, string> = {
   AgentInstance: "Agent",
@@ -15,15 +16,6 @@ const KIND_LABEL: Record<string, string> = {
   MCPResource: "Resource",
 };
 
-const KIND_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  AgentInstance: "default",
-  MCPServer: "secondary",
-  MCPTool: "outline",
-  A2AAgent: "default",
-  MCPResource: "destructive",
-};
-
-
 interface RiskyEntity {
   id: string;
   name: string;
@@ -32,79 +24,65 @@ interface RiskyEntity {
 }
 
 export function TopRiskyEntities() {
-  const { data: nodes, isLoading } = useQuery({
-    queryKey: ["dashboard", "risky-entities"],
-    queryFn: () => fetchNodes(undefined, 10000),
-    staleTime: 30_000,
-  });
+  const { data: nodes, isLoading } = useAllNodes();
 
-  const topEntities = useMemo(() => {
+  const top = useMemo<RiskyEntity[]>(() => {
     if (!nodes) return [];
-    const scoredKinds = new Set(Object.keys(KIND_LABEL));
-
+    const scored = new Set(Object.keys(KIND_LABEL));
     return nodes
-      .filter((n) => n.kinds.some((k) => scoredKinds.has(k)))
+      .filter((n) => n.kinds.some((k) => scored.has(k)))
       .map((n): RiskyEntity => ({
         id: n.id,
         name: String(n.properties.name ?? n.id.slice(0, 12)),
-        kind: n.kinds.find((k) => scoredKinds.has(k)) ?? n.kinds[0] ?? "Unknown",
+        kind: n.kinds.find((k) => scored.has(k)) ?? n.kinds[0] ?? "Unknown",
         riskScore: Number(n.properties.risk_score ?? 0),
       }))
       .filter((e) => e.riskScore > 0)
       .sort((a, b) => b.riskScore - a.riskScore)
-      .slice(0, 5);
+      .slice(0, 6);
   }, [nodes]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
-          Top Risky Entities
-          <InfoTip text="The 5 agents, servers, or tools with the highest risk scores. Risk is computed from auth posture, blast radius, poisoning exposure, and credential handling." />
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <Skeleton className="h-48 w-full" />
-        ) : topEntities.length === 0 ? (
-          <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-            No risk scores computed yet
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {topEntities.map((entity) => (
-              <div key={entity.id} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Badge
-                      variant={KIND_VARIANT[entity.kind] ?? "secondary"}
-                      className="shrink-0 text-[10px] px-1.5 py-0"
-                    >
-                      {KIND_LABEL[entity.kind] ?? entity.kind}
-                    </Badge>
-                    <span className="truncate text-sm text-foreground">{entity.name}</span>
-                  </div>
+    <WidgetCard title="Top Risky Entities" info={INFO} icon={Crosshair}>
+      {isLoading ? (
+        <Skeleton className="h-56 w-full" />
+      ) : top.length === 0 ? (
+        <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
+          No risk scores computed yet
+        </div>
+      ) : (
+        <ol className="space-y-3">
+          {top.map((entity, i) => {
+            const color = riskColor(entity.riskScore);
+            const kindColor = NODE_KIND_COLORS[entity.kind] ?? "#64748B";
+            return (
+              <li key={entity.id} className="space-y-1.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <span
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ backgroundColor: `${kindColor}1f`, color: kindColor }}
+                  >
+                    {KIND_LABEL[entity.kind] ?? entity.kind}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{entity.name}</span>
                   <span
                     className="shrink-0 font-mono text-sm font-bold tabular-nums"
-                    style={{ color: riskColor(entity.riskScore) }}
+                    style={{ color }}
                   >
                     {entity.riskScore}
                   </span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${entity.riskScore}%`,
-                      backgroundColor: riskColor(entity.riskScore),
-                    }}
-                  />
+                <div className="pl-[26px]">
+                  <MeterBar value={entity.riskScore} color={color} />
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </WidgetCard>
   );
 }

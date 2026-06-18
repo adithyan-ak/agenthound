@@ -86,6 +86,10 @@ const config: Config = {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
+        "fade-up": {
+          "0%": { transform: "translateY(10px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
@@ -94,6 +98,7 @@ const config: Config = {
       animation: {
         "slide-in-from-bottom-4": "slide-in-from-bottom-4 200ms ease-out",
         "fade-in": "fade-in 150ms ease-out",
+        "fade-up": "fade-up 420ms cubic-bezier(0.22,1,0.36,1) both",
         shimmer: "shimmer 2s linear infinite",
       },
       borderRadius: {
