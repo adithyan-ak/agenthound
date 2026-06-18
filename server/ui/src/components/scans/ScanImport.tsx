@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, FileJson, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +7,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { uploadScan, type IngestResult } from "@/api/scans";
 
 interface ScanImportProps {
@@ -51,6 +51,11 @@ type Status =
   | { kind: "success"; result: IngestResult; fileName: string }
   | { kind: "error"; message: string };
 
+const ghostBtn =
+  "inline-flex h-8 items-center rounded-[3px] border border-border bg-black/30 px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-foreground/80 transition-colors hover:border-mauve-7 hover:text-foreground";
+const primaryBtn =
+  "inline-flex h-8 items-center rounded-[3px] bg-primary px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-primary-foreground transition-colors hover:bg-primary/90";
+
 export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [dragActive, setDragActive] = useState(false);
@@ -68,8 +73,6 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
 
   const processFile = useCallback(
     async (file: File) => {
-      // Reject oversize / wrong-type files BEFORE reading them into
-      // memory. A 4 GB binary loaded into a string would hang the tab.
       const validationError = validateScanFile(file);
       if (validationError) {
         setStatus({ kind: "error", message: validationError });
@@ -78,9 +81,6 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
 
       setStatus({ kind: "uploading", fileName: file.name });
 
-      // Read the file as text using FileReader. We use FileReader (rather
-      // than the newer file.text() Promise API) for broader environment
-      // compatibility, including jsdom in tests.
       let text: string;
       try {
         text = await readFileAsText(file);
@@ -92,18 +92,13 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
         return;
       }
 
-      // Validate it parses as JSON in-memory before sending. A file that
-      // doesn't parse won't ingest, so we surface that error locally rather
-      // than waiting on a 400 round-trip.
       try {
         JSON.parse(text);
       } catch (err) {
         setStatus({
           kind: "error",
           message:
-            err instanceof Error
-              ? `not valid JSON: ${err.message}`
-              : "not valid JSON",
+            err instanceof Error ? `not valid JSON: ${err.message}` : "not valid JSON",
         });
         return;
       }
@@ -161,12 +156,12 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 font-mono uppercase tracking-[0.04em]">
             <Upload className="h-4 w-4 text-primary" />
             Import Scan
           </DialogTitle>
           <DialogDescription>
-            Drop a collector JSON file (from <code>agenthound scan</code>) into
+            Drop a collector JSON file (from <code className="font-mono text-foreground/80">agenthound scan</code>) into
             the area below to ingest it into the graph.
           </DialogDescription>
         </DialogHeader>
@@ -179,18 +174,19 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
             onDragEnter={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => inputRef.current?.click()}
-            className={`flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-8 cursor-pointer transition-colors ${
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[3px] border-2 border-dashed p-8 transition-colors",
               dragActive
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50 hover:bg-accent/30"
-            }`}
+                ? "border-primary/70 bg-primary/5"
+                : "border-border bg-black/20 hover:border-primary/40 hover:bg-white/[0.02]",
+            )}
           >
             <FileJson className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-foreground">
+            <p className="font-mono text-xs uppercase tracking-[0.08em] text-foreground">
               Drop scan JSON here or click to browse
             </p>
             <p className="text-xs text-muted-foreground">
-              Files produced by <code>agenthound scan</code>
+              Files produced by <code className="font-mono">agenthound scan</code>
             </p>
             <input
               ref={inputRef}
@@ -204,10 +200,10 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
         )}
 
         {status.kind === "uploading" && (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-md border p-8">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-[3px] border border-border bg-black/20 p-8">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-sm text-foreground">
-              Uploading {status.fileName}...
+            <p className="font-mono text-xs uppercase tracking-[0.08em] text-foreground">
+              Uploading {status.fileName}…
             </p>
             <p className="text-xs text-muted-foreground">
               Validating, normalizing, and writing to the graph
@@ -217,26 +213,28 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
 
         {status.kind === "success" && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5" />
+            <div
+              className="flex items-start gap-2 rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 p-3"
+              style={{ boxShadow: "inset 2px 0 0 0 #3FB950" }}
+            >
+              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
                   Imported {status.fileName}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {status.result.nodes_written} nodes,{" "}
-                  {status.result.edges_written} edges written. Scan ID:{" "}
-                  <code>{status.result.scan_id}</code>
+                  {status.result.nodes_written} nodes, {status.result.edges_written} edges written.
+                  Scan ID: <code className="font-mono text-foreground/80">{status.result.scan_id}</code>
                 </p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={reset}>
+              <button className={ghostBtn} onClick={reset}>
                 Import another
-              </Button>
-              <Button size="sm" onClick={handleClose}>
+              </button>
+              <button className={primaryBtn} onClick={handleClose}>
                 Close
-              </Button>
+              </button>
             </div>
           </div>
         )}
@@ -245,25 +243,22 @@ export function ScanImport({ open, onClose, onSuccess }: ScanImportProps) {
           <div className="flex flex-col gap-3">
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3"
+              className="flex items-start gap-2 rounded-[3px] border border-destructive/30 bg-destructive/10 p-3"
+              style={{ boxShadow: "inset 2px 0 0 0 rgb(var(--tomato-9-raw))" }}
             >
-              <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
+              <AlertCircle className="mt-0.5 h-4 w-4 text-destructive" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
-                  Import failed
-                </p>
-                <p className="text-xs text-muted-foreground break-all">
-                  {status.message}
-                </p>
+                <p className="text-sm font-medium text-foreground">Import failed</p>
+                <p className="break-all text-xs text-muted-foreground">{status.message}</p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={reset}>
+              <button className={ghostBtn} onClick={reset}>
                 Try again
-              </Button>
-              <Button size="sm" onClick={handleClose}>
+              </button>
+              <button className={primaryBtn} onClick={handleClose}>
                 Close
-              </Button>
+              </button>
             </div>
           </div>
         )}

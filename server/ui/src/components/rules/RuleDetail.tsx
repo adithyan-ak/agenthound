@@ -1,20 +1,37 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { fetchRuleDetail } from "@/api/rules";
 import type { MatcherSpec, TestCase } from "@/api/rules";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 interface RuleDetailProps {
   ruleId: string;
+}
+
+const SIGNAL_OK = "#3FB950";
+
+function Label({ children }: { children: ReactNode }) {
+  return (
+    <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function Chips({ items }: { items?: string[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((kw) => (
+        <span
+          key={kw}
+          className="rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80"
+        >
+          {kw}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function MatcherDisplay({ matcher }: { matcher: MatcherSpec }) {
@@ -22,10 +39,8 @@ function MatcherDisplay({ matcher }: { matcher: MatcherSpec }) {
     case "regex":
       return (
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground font-medium">
-            Pattern {matcher.CaseInsensitive && "(case-insensitive)"}
-          </div>
-          <code className="block rounded-md bg-muted px-3 py-2 text-xs font-mono break-all">
+          <Label>Pattern {matcher.CaseInsensitive && "(case-insensitive)"}</Label>
+          <code className="block break-all rounded-[3px] border border-border bg-black/50 px-3 py-2 font-mono text-xs text-foreground/90">
             {matcher.Pattern}
           </code>
         </div>
@@ -34,64 +49,40 @@ function MatcherDisplay({ matcher }: { matcher: MatcherSpec }) {
     case "keyword":
       return (
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground font-medium">
+          <Label>
             Keywords
             {matcher.CaseInsensitive && " (case-insensitive)"}
-            {matcher.MatchMode && ` - match ${matcher.MatchMode}`}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {matcher.Keywords?.map((kw) => (
-              <Badge
-                key={kw}
-                variant="secondary"
-                className="rounded px-1.5 py-0.5 text-[11px] font-mono"
-              >
-                {kw}
-              </Badge>
-            ))}
-          </div>
+            {matcher.MatchMode && ` \u00b7 match ${matcher.MatchMode}`}
+          </Label>
+          <Chips items={matcher.Keywords} />
         </div>
       );
 
     case "prefix":
       return (
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground font-medium">
-            Prefixes {matcher.CaseInsensitive && "(case-insensitive)"}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {matcher.Prefixes?.map((p) => (
-              <Badge
-                key={p}
-                variant="secondary"
-                className="rounded px-1.5 py-0.5 text-[11px] font-mono"
-              >
-                {p}
-              </Badge>
-            ))}
-          </div>
+          <Label>Prefixes {matcher.CaseInsensitive && "(case-insensitive)"}</Label>
+          <Chips items={matcher.Prefixes} />
         </div>
       );
 
     case "entropy":
       return (
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground font-medium">
-            Entropy Check
-          </div>
-          <div className="flex gap-4 text-xs">
+          <Label>Entropy Check</Label>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
             <span>
-              <span className="text-muted-foreground">Charset:</span>{" "}
-              <span className="font-mono">{matcher.Charset}</span>
+              <span className="text-muted-foreground">charset</span>{" "}
+              <span className="text-foreground">{matcher.Charset}</span>
             </span>
             <span>
-              <span className="text-muted-foreground">Threshold:</span>{" "}
-              <span className="font-mono">{matcher.Threshold}</span>
+              <span className="text-muted-foreground">threshold</span>{" "}
+              <span className="text-foreground">{matcher.Threshold}</span>
             </span>
             {matcher.MinLength != null && matcher.MinLength > 0 && (
               <span>
-                <span className="text-muted-foreground">Min length:</span>{" "}
-                <span className="font-mono">{matcher.MinLength}</span>
+                <span className="text-muted-foreground">min length</span>{" "}
+                <span className="text-foreground">{matcher.MinLength}</span>
               </span>
             )}
           </div>
@@ -101,10 +92,8 @@ function MatcherDisplay({ matcher }: { matcher: MatcherSpec }) {
     case "compound":
       return (
         <div className="space-y-3">
-          <div className="text-xs text-muted-foreground font-medium">
-            Compound ({matcher.Operator?.toUpperCase()})
-          </div>
-          <div className="space-y-2 pl-3 border-l-2 border-muted">
+          <Label>Compound ({matcher.Operator?.toUpperCase()})</Label>
+          <div className="space-y-2 border-l border-border pl-3">
             {matcher.Matchers?.map((sub, i) => (
               <MatcherDisplay key={i} matcher={sub} />
             ))}
@@ -114,7 +103,7 @@ function MatcherDisplay({ matcher }: { matcher: MatcherSpec }) {
 
     default:
       return (
-        <div className="text-xs text-muted-foreground">
+        <div className="font-mono text-xs text-muted-foreground">
           Unknown matcher type: {matcher.Type}
         </div>
       );
@@ -126,45 +115,50 @@ function TestCasesTable({ tests }: { tests: TestCase[] }) {
 
   return (
     <div className="space-y-2">
-      <div className="text-xs text-muted-foreground font-medium">
-        Test Cases ({tests.length})
+      <Label>Test Cases ({tests.length})</Label>
+      <div className="overflow-x-auto rounded-[3px] border border-border/70">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-black/30">
+              <th className="px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Input
+              </th>
+              <th className="w-[90px] px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Expected
+              </th>
+              <th className="px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Description
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {tests.map((tc, i) => (
+              <tr key={i} className="border-b border-border/50 last:border-0">
+                <td className="px-3 py-1.5 align-top">
+                  <code className="break-all font-mono text-[11px] text-foreground/90">{tc.Input}</code>
+                </td>
+                <td className="px-3 py-1.5 align-top">
+                  {tc.ShouldMatch ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.06em]"
+                      style={{ color: SIGNAL_OK }}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-[1px]" style={{ backgroundColor: SIGNAL_OK }} />
+                      match
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-[1px] bg-mauve-8" />
+                      no match
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-1.5 align-top text-xs text-muted-foreground">{tc.Description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="h-8 text-xs">Input</TableHead>
-            <TableHead className="h-8 text-xs w-[80px]">Expected</TableHead>
-            <TableHead className="h-8 text-xs">Description</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tests.map((tc, i) => (
-            <TableRow key={i}>
-              <TableCell className="py-1.5">
-                <code className="text-[11px] font-mono break-all">
-                  {tc.Input}
-                </code>
-              </TableCell>
-              <TableCell className="py-1.5">
-                {tc.ShouldMatch ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-green-400">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Match
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <XCircle className="h-3 w-3" />
-                    No match
-                  </span>
-                )}
-              </TableCell>
-              <TableCell className="py-1.5 text-xs text-muted-foreground">
-                {tc.Description}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
     </div>
   );
 }
@@ -178,16 +172,19 @@ export function RuleDetail({ ruleId }: RuleDetailProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading rule details...
+      <div className="flex items-center justify-center gap-2 py-4 font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        Loading rule details…
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+      <div
+        className="rounded-[3px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        style={{ boxShadow: "inset 2px 0 0 0 rgb(var(--tomato-9-raw))" }}
+      >
         {error instanceof Error ? error.message : "Failed to load rule"}
       </div>
     );
@@ -196,13 +193,13 @@ export function RuleDetail({ ruleId }: RuleDetailProps) {
   if (!data) return null;
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{data.description}</p>
-      <Separator />
+    <div className="space-y-3.5">
+      <p className="text-sm leading-relaxed text-muted-foreground">{data.description}</p>
+      <div className="h-px bg-border/60" />
       <MatcherDisplay matcher={data.matcher} />
       {data.tests.length > 0 && (
         <>
-          <Separator />
+          <div className="h-px bg-border/60" />
           <TestCasesTable tests={data.tests} />
         </>
       )}

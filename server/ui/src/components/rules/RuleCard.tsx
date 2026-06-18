@@ -1,21 +1,13 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { RuleInfo } from "@/api/rules";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { SeverityBadge } from "@/components/ui/severity-badge";
-import { Separator } from "@/components/ui/separator";
+import { severityColor } from "@/theme/tokens";
 import { RuleDetail } from "./RuleDetail";
 
-const COLLECTOR_CLASS: Record<string, string> = {
-  mcp: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-  a2a: "bg-purple-500/10 text-purple-400 border-purple-500/30",
-  config: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-  all: "bg-slate-500/10 text-slate-400 border-slate-500/30",
-};
-
-const SOURCE_CLASS: Record<string, string> = {
-  builtin: "bg-blue-500/10 text-blue-400 border-blue-500/30",
-  custom: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
+const COLLECTOR_COLOR: Record<string, string> = {
+  mcp: "#10B981",
+  a2a: "#A855F7",
+  config: "#D97706",
+  all: "#7A828E",
 };
 
 interface RuleCardProps {
@@ -25,61 +17,73 @@ interface RuleCardProps {
 }
 
 export function RuleCard({ rule, isExpanded, onToggle }: RuleCardProps) {
+  const sevColor = severityColor(rule.severity);
+  const collectorColor = COLLECTOR_COLOR[rule.collector] ?? "#7A828E";
+  const isCustom = rule.source === "custom";
+
   return (
-    <Card>
+    <div className="card-elevated relative overflow-hidden rounded-md">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-0.5"
+        style={{ backgroundColor: sevColor, opacity: 0.85 }}
+      />
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/[0.02]"
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-medium text-foreground">
-              {rule.name}
-            </span>
-            <SeverityBadge severity={rule.severity} />
-            <Badge
-              className={`rounded px-1.5 py-0 text-[10px] border ${COLLECTOR_CLASS[rule.collector] ?? COLLECTOR_CLASS.all}`}
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{rule.name}</span>
+            <span
+              className="inline-flex items-center gap-1 rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]"
+              style={{ backgroundColor: `${sevColor}1A`, color: sevColor, boxShadow: `inset 0 0 0 1px ${sevColor}55` }}
             >
+              <span className="h-1.5 w-1.5 rounded-[1px]" style={{ backgroundColor: sevColor }} />
+              {rule.severity}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-[1px]" style={{ backgroundColor: collectorColor }} />
               {rule.collector}
-            </Badge>
-            <Badge
-              className={`rounded px-1.5 py-0 text-[10px] border ${SOURCE_CLASS[rule.source] ?? SOURCE_CLASS.builtin}`}
+            </span>
+            <span
+              className={`rounded-[2px] border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] ${
+                isCustom
+                  ? "border-primary/40 bg-primary/10 text-primary/90"
+                  : "border-border bg-black/40 text-muted-foreground"
+              }`}
             >
               {rule.source}
-            </Badge>
+            </span>
           </div>
-          <p className="text-xs text-muted-foreground truncate">
-            {rule.description}
-          </p>
-          <div className="flex flex-wrap gap-1 mt-1">
+          <p className="truncate text-xs text-muted-foreground">{rule.description}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
             {rule.targets.map((t) => (
-              <Badge
+              <span
                 key={t}
-                variant="outline"
-                className="rounded px-1 py-0 text-[9px] font-mono"
+                className="rounded-[2px] border border-border bg-black/40 px-1 py-0 font-mono text-[9px] uppercase tracking-[0.04em] text-muted-foreground"
               >
                 {t}
-              </Badge>
+              </span>
             ))}
             {rule.owasp?.map((tag) => (
-              <Badge
+              <span
                 key={tag}
-                variant="secondary"
-                className="rounded px-1 py-0 text-[9px] font-mono"
+                className="rounded-[2px] border border-border bg-black/40 px-1 py-0 font-mono text-[9px] uppercase tracking-[0.06em] text-primary/80"
               >
                 {tag}
-              </Badge>
+              </span>
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2.5">
           {rule.test_count > 0 && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
               {rule.test_count} tests
             </span>
           )}
           {isExpanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            <ChevronUp className="h-4 w-4 text-primary" />
           ) : (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           )}
@@ -88,12 +92,12 @@ export function RuleCard({ rule, isExpanded, onToggle }: RuleCardProps) {
 
       {isExpanded && (
         <>
-          <Separator />
-          <CardContent className="px-4 py-3">
+          <div className="h-px bg-border/70" />
+          <div className="bg-black/20 px-3.5 py-3">
             <RuleDetail ruleId={rule.id} />
-          </CardContent>
+          </div>
         </>
       )}
-    </Card>
+    </div>
   );
 }

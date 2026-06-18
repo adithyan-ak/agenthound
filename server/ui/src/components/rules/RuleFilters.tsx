@@ -1,5 +1,4 @@
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -16,6 +15,9 @@ interface RuleFiltersProps {
   onClear: () => void;
 }
 
+const triggerClass =
+  "h-8 w-[140px] rounded-[3px] border-border bg-black/30 font-mono text-[11px] uppercase tracking-[0.06em] text-foreground/80";
+
 export function RuleFilters({
   severity,
   collector,
@@ -26,9 +28,9 @@ export function RuleFilters({
   const hasFilters = severity !== "all" || collector !== "all";
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex shrink-0 items-center gap-2">
       <Select value={severity} onValueChange={onSeverityChange}>
-        <SelectTrigger className="w-[140px] h-8 text-xs">
+        <SelectTrigger className={triggerClass}>
           <SelectValue placeholder="Severity" />
         </SelectTrigger>
         <SelectContent>
@@ -42,7 +44,7 @@ export function RuleFilters({
       </Select>
 
       <Select value={collector} onValueChange={onCollectorChange}>
-        <SelectTrigger className="w-[140px] h-8 text-xs">
+        <SelectTrigger className={triggerClass}>
           <SelectValue placeholder="Collector" />
         </SelectTrigger>
         <SelectContent>
@@ -54,15 +56,13 @@ export function RuleFilters({
       </Select>
 
       {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
           onClick={onClear}
-          className="h-8 px-2 text-xs text-muted-foreground"
+          className="inline-flex h-8 items-center gap-1 rounded-[3px] px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
         >
-          <X className="h-3.5 w-3.5 mr-1" />
+          <X className="h-3.5 w-3.5" />
           Clear
-        </Button>
+        </button>
       )}
     </div>
   );

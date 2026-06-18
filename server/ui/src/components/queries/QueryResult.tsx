@@ -1,12 +1,4 @@
 import type { PreBuiltQuery } from "@/api/types";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
 
 interface QueryResultProps {
   rows: Record<string, unknown>[];
@@ -14,9 +6,9 @@ interface QueryResultProps {
 }
 
 function formatCell(value: unknown): string {
-  if (value == null) return "-";
+  if (value == null) return "\u2014";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.join(", ") || "-";
+  if (Array.isArray(value)) return value.join(", ") || "\u2014";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
@@ -24,7 +16,7 @@ function formatCell(value: unknown): string {
 export function QueryResult({ rows, query }: QueryResultProps) {
   if (rows.length === 0) {
     return (
-      <div className="py-4 text-sm text-muted-foreground text-center">
+      <div className="py-4 text-center font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
         No results for "{query.name}"
       </div>
     );
@@ -34,35 +26,41 @@ export function QueryResult({ rows, query }: QueryResultProps) {
 
   return (
     <div>
-      <div className="text-xs text-muted-foreground mb-2">
+      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
         {rows.length} row{rows.length !== 1 ? "s" : ""}
       </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
+      <div className="overflow-x-auto rounded-[3px] border border-border/70">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-black/30">
               {columns.map((col) => (
-                <TableHead key={col} className="text-xs h-8 px-3">
+                <th
+                  key={col}
+                  className="px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
+                >
                   {col}
-                </TableHead>
+                </th>
               ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+            </tr>
+          </thead>
+          <tbody>
             {rows.map((row, i) => (
-              <TableRow key={i}>
+              <tr
+                key={i}
+                className="border-b border-border/50 transition-colors last:border-0 hover:bg-white/[0.03]"
+              >
                 {columns.map((col) => (
-                  <TableCell
+                  <td
                     key={col}
-                    className="px-3 py-1.5 text-xs max-w-[300px] truncate"
+                    className="max-w-[300px] truncate px-3 py-1.5 font-mono text-[11px] text-foreground/90"
                   >
                     {formatCell(row[col])}
-                  </TableCell>
+                  </td>
                 ))}
-              </TableRow>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
     </div>
   );
