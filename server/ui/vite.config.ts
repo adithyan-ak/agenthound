@@ -23,5 +23,12 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
+    // jsdom >=26 returns an opaque origin (and a SecurityError on
+    // localStorage access) when no URL is set. The persisted zustand
+    // store hits localStorage on construction, so tests crash on
+    // import unless we hand jsdom a real origin.
+    environmentOptions: {
+      jsdom: { url: "http://localhost/" },
+    },
   },
 });
