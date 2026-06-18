@@ -34,7 +34,7 @@ export function RemediationTab({
   }
 
   return (
-    <div className="max-w-3xl space-y-3">
+    <div className="space-y-3">
       {items.map((item, i) => (
         <RemediationCard key={i} item={item} />
       ))}
@@ -72,7 +72,7 @@ function RemediationCard({ item }: { item: RemediationItem }) {
     <div className={cn("rounded-lg border p-4", c.border, c.bg)}>
       <div className="mb-2 flex items-center gap-2">
         <AlertTriangle className={cn("h-4 w-4", c.text)} strokeWidth={2.25} />
-        <div className={cn("text-[10px] uppercase tracking-widest font-bold", c.text)}>
+        <div className={cn("text-[10px] uppercase tracking-widest font-semibold", c.text)}>
           {item.severity}
         </div>
         <div className="text-sm font-semibold text-foreground">{item.title}</div>

@@ -2,7 +2,7 @@ import { memo } from "react";
 import { getHexConfig } from "@/lib/explorer/hex-config";
 import { getPropertyChips } from "@/lib/findings/property-chips";
 import { cn } from "@/lib/utils";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY, SEVERITY_BY_KEY } from "@/theme/tokens";
 import type { AttackPathNode } from "@/api/types";
 
 interface PathHexNodeProps {
@@ -13,9 +13,9 @@ interface PathHexNodeProps {
 }
 
 const SEVERITY_GLOW: Record<string, string> = {
-  critical: `shadow-[0_0_12px_${SEVERITY.critical!.border}]`,
-  high: `shadow-[0_0_10px_${SEVERITY.high!.border}]`,
-  medium: `shadow-[0_0_8px_${SEVERITY.medium!.border}]`,
+  critical: `shadow-[0_0_12px_${SEVERITY.critical.border}]`,
+  high: `shadow-[0_0_10px_${SEVERITY.high.border}]`,
+  medium: `shadow-[0_0_8px_${SEVERITY.medium.border}]`,
 };
 
 const SCALE = 64 / 84;
@@ -40,14 +40,14 @@ function PathHexNodeComponent({ node, isFirst, isLast, severity }: PathHexNodePr
         "flex flex-col items-center rounded-lg border bg-muted/40 px-3 py-3",
         "w-[140px] flex-shrink-0",
         isFirst && "border-l-2",
-        isLast && severity && SEVERITY[severity] ? `border-l-2 ${SEVERITY[severity]!.borderLeftClass.replace("border-l-", "border-")}` : "border-border/50",
+        isLast && severity && SEVERITY_BY_KEY[severity] ? `border-l-2 ${SEVERITY_BY_KEY[severity]!.borderLeftClass.replace("border-l-", "border-")}` : "border-border/50",
         isLast && SEVERITY_GLOW[severity ?? ""],
       )}
       style={isFirst && !isLast ? { borderLeftColor: config.strokeColor } : undefined}
     >
       <div
-        className="text-[9px] uppercase tracking-widest font-bold mb-2 text-center truncate w-full"
-        style={{ color: isLast && severity === "critical" ? SEVERITY.critical!.solid : config.strokeColor }}
+        className="text-[9px] uppercase tracking-widest font-semibold mb-2 text-center truncate w-full"
+        style={{ color: isLast && severity === "critical" ? SEVERITY.critical.solid : config.strokeColor }}
       >
         {categoryLabel}
       </div>
@@ -84,9 +84,9 @@ function PathHexNodeComponent({ node, isFirst, isLast, severity }: PathHexNodePr
               className={cn(
                 "text-[9px] px-1.5 py-0.5 rounded",
                 chip === "critical" || chip === "exposed"
-                  ? SEVERITY.critical!.badgeClass
+                  ? SEVERITY.critical.badgeClass
                   : chip === "high"
-                    ? SEVERITY.high!.badgeClass
+                    ? SEVERITY.high.badgeClass
                     : "bg-muted text-foreground",
               )}
             >

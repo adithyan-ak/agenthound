@@ -10,7 +10,7 @@ export function getNodeColor(kinds: string[]): string {
   for (const kind of kinds) {
     if (kind in NODE_COLORS) return NODE_COLORS[kind]!;
   }
-  return "#999999";
+  return NODE_KIND_COLORS.Identity;
 }
 
 export function getNodeSize(node: APINode): number {

@@ -10,7 +10,7 @@ export function FindingRemediation({ steps }: FindingRemediationProps) {
 
   return (
     <div className="rounded-lg border border-border p-4">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-3">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">
         Remediation
       </div>
       <div className="space-y-4">

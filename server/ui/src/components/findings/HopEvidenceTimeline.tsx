@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Grid } from "@/components/ui/layout";
 import { getEdgeCategory } from "@/lib/edge-styles";
 import { EDGE_EXPLOIT } from "@/lib/findings/edge-exploits";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
 
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-3">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">
         Hop Evidence
       </div>
       <div className="space-y-1">
@@ -87,7 +88,7 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
               {isOpen && (
                 <div className="px-3 pb-3 pt-1 border-t border-border/50 space-y-2">
                   {edge.properties && Object.keys(edge.properties).length > 0 && (
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <Grid min="11rem" gap="0.25rem 1rem" className="text-xs">
                       {Object.entries(edge.properties).map(([key, val]) => {
                         if (key === "last_seen" || key === "scan_id") return null;
                         return (
@@ -99,7 +100,7 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
                           </div>
                         );
                       })}
-                    </div>
+                    </Grid>
                   )}
 
                   {exploit && (

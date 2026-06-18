@@ -4,7 +4,7 @@ import { useGraphStats } from "@/hooks/useGraph";
 import { useAllNodes } from "@/hooks/useDashboardData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatTile } from "./kit";
-import { NODE_KIND_COLORS } from "@/theme/tokens";
+import { NODE_KIND_COLORS_BY_KEY } from "@/theme/tokens";
 import type { APINode } from "@/api/types";
 
 const HIGH_RISK = 70;
@@ -73,7 +73,7 @@ export function StatCards() {
           icon={t.icon}
           label={t.label}
           value={nc[t.kind] ?? 0}
-          color={NODE_KIND_COLORS[t.kind] ?? "#64748B"}
+          color={NODE_KIND_COLORS_BY_KEY[t.kind] ?? "#64748B"}
           sub={t.sub}
         />
       ))}

@@ -38,7 +38,7 @@ export function InfoCard() {
     <div
       className={cn(
         "pointer-events-auto absolute left-6 top-24 z-20 w-[280px] rounded-xl",
-        "glass p-4 shadow-2xl",
+        "glass p-4 elev-1",
       )}
       style={{
         borderTopColor: lens.activeTint,
@@ -73,28 +73,28 @@ export function InfoCard() {
           <MetricRow
             label="Critical"
             value={metrics.criticalCount}
-            color={SEVERITY.critical!.solid}
+            color={SEVERITY.critical.solid}
           />
         )}
         {metrics.highCount > 0 && (
           <MetricRow
             label="High"
             value={metrics.highCount}
-            color={SEVERITY.high!.solid}
+            color={SEVERITY.high.solid}
           />
         )}
         {metrics.mediumCount > 0 && (
           <MetricRow
             label="Medium"
             value={metrics.mediumCount}
-            color={SEVERITY.medium!.solid}
+            color={SEVERITY.medium.solid}
           />
         )}
         {metrics.lowCount > 0 && (
           <MetricRow
             label="Low"
             value={metrics.lowCount}
-            color={SEVERITY.low!.solid}
+            color={SEVERITY.low.solid}
           />
         )}
       </div>

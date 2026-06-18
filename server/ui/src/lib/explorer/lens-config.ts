@@ -10,6 +10,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import type { LensId } from "@/store/explorer";
+import { NODE_KIND_COLORS, LENS_ACCENT } from "@/theme/tokens";
 
 export type SeverityLevel = "critical" | "high" | "medium" | "low" | "info";
 
@@ -56,7 +57,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Topology",
     shortLabel: "Topology",
     icon: Network,
-    activeTint: "#3B82F6",
+    activeTint: LENS_ACCENT.topology,
     accentClass: "bg-blue-500 text-white",
     description:
       "What exists and what trusts what. Raw structural edges only, no severity coloring.",
@@ -129,7 +130,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Attack Surface",
     shortLabel: "Attack",
     icon: Swords,
-    activeTint: "#F97316",
+    activeTint: LENS_ACCENT.attack,
     accentClass: "bg-orange-500 text-white",
     description:
       "What can do what. Composite edges showing inferred reach, execution, and exfiltration.",
@@ -169,7 +170,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Critical",
     shortLabel: "Critical",
     icon: AlertOctagon,
-    activeTint: "#DC2626",
+    activeTint: LENS_ACCENT.critical,
     accentClass: "bg-red-600 text-white",
     description:
       "Only edges that participate in critical-severity findings. Everything else dimmed.",
@@ -184,7 +185,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Cross-Protocol",
     shortLabel: "Cross",
     icon: GitBranchPlus,
-    activeTint: "#A855F7",
+    activeTint: NODE_KIND_COLORS.A2AAgent,
     accentClass: "bg-purple-500 text-white",
     description:
       "Only paths that cross the A2A ↔ MCP protocol boundary. The differentiator view.",
@@ -199,7 +200,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Credentials",
     shortLabel: "Creds",
     icon: KeyRound,
-    activeTint: "#EC4899",
+    activeTint: NODE_KIND_COLORS.Credential,
     accentClass: "bg-pink-500 text-white",
     description:
       "Identity and credential flow. Highlights exposed secrets and high-entropy values.",
@@ -233,7 +234,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Poisoning",
     shortLabel: "Poison",
     icon: Biohazard,
-    activeTint: "#EAB308",
+    activeTint: NODE_KIND_COLORS.InstructionFile,
     accentClass: "bg-yellow-500 text-slate-900",
     description:
       "Prompt-injection patterns in tool descriptions, shadowing, and instruction-file attacks.",
@@ -267,7 +268,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Blast Radius",
     shortLabel: "Blast",
     icon: Radar,
-    activeTint: "#10B981",
+    activeTint: NODE_KIND_COLORS.MCPServer,
     accentClass: "bg-emerald-500 text-white",
     description:
       "Pick a node. See everything reachable from it, grouped by hop distance.",
@@ -282,7 +283,7 @@ export const LENS_LIST: LensDefinition[] = [
     label: "Chokepoints",
     shortLabel: "Choke",
     icon: Waypoints,
-    activeTint: "#06B6D4",
+    activeTint: NODE_KIND_COLORS.AgentInstance,
     accentClass: "bg-cyan-500 text-white",
     description:
       "Nodes ranked by combined in/out degree. Single points of failure sized proportionally.",

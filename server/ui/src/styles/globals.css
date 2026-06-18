@@ -69,57 +69,120 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- Design tokens ---------- */
+/*
+  ---------- Design tokens (Radix 12-step) ----------
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-  }
+  Two scales drive every surface, border, and text decision:
+    - mauve  : warm neutral — replaces the generic shadcn cool-gray defaults
+    - cyan   : brand accent  — kept from prior identity (AgentInstance hue)
+    - tomato : destructive   — replaces red-500 family; reads less generic
 
-  .dark {
-    /* Neutral near-black ("zinc") system — flat surfaces, hairline borders.
-       Categorical data colors live in theme/tokens.ts, not here. */
-    --background: 240 6% 5%;
-    --foreground: 0 0% 98%;
-    --card: 240 5% 9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 6% 10%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 187 75% 45%;
-    --primary-foreground: 240 8% 6%;
-    --secondary: 240 4% 14%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 4% 14%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 4% 15%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5% 16%;
-    --input: 240 5% 16%;
-    --ring: 187 75% 45%;
-    --radius: 0.75rem;
-    --explorer-canvas: 218 60% 5%;
-  }
+  Each step has a fixed semantic role (Radix scale convention):
+    1  app bg                7  border
+    2  subtle bg             8  strong border / focus ring
+    3  component bg          9  solid (brand)
+    4  hover                10  solid hover
+    5  active               11  low-contrast text
+    6  subtle border        12  high-contrast text
+
+  Tokens are stored as space-separated RGB triplets so Tailwind's
+  `rgb(var(--token) / <alpha-value>)` pattern keeps `bg-primary/80` etc.
+  working.
+
+  The app is dark-only today (<html class="dark">) — `:root` exists for
+  parity but only `.dark` is exercised.
+*/
+
+:root {
+  /* mauve-light step ramp (parity only — app currently runs `.dark`) */
+  --mauve-1-raw: 253 253 252;
+  --mauve-2-raw: 249 248 248;
+  --mauve-3-raw: 238 238 240;
+  --mauve-4-raw: 228 227 230;
+  --mauve-6-raw: 209 207 211;
+  --mauve-9-raw: 138 134 144;
+  --mauve-11-raw: 100 96 105;
+  --mauve-12-raw: 27 24 32;
+
+  --cyan-9-raw: 0 162 199;
+  --tomato-9-raw: 229 77 46;
+
+  --background: var(--mauve-1-raw);
+  --foreground: var(--mauve-12-raw);
+  --card: var(--mauve-2-raw);
+  --card-foreground: var(--mauve-12-raw);
+  --popover: var(--mauve-3-raw);
+  --popover-foreground: var(--mauve-12-raw);
+  --primary: var(--cyan-9-raw);
+  --primary-foreground: var(--mauve-1-raw);
+  --secondary: var(--mauve-4-raw);
+  --secondary-foreground: var(--mauve-12-raw);
+  --muted: var(--mauve-3-raw);
+  --muted-foreground: var(--mauve-11-raw);
+  --accent: var(--mauve-4-raw);
+  --accent-foreground: var(--mauve-12-raw);
+  --destructive: var(--tomato-9-raw);
+  --destructive-foreground: var(--mauve-1-raw);
+  --border: var(--mauve-6-raw);
+  --input: var(--mauve-6-raw);
+  --ring: var(--cyan-9-raw);
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* mauve-dark — full 12-step */
+  --mauve-1-raw: 18 17 19;
+  --mauve-2-raw: 26 25 27;
+  --mauve-3-raw: 35 34 37;
+  --mauve-4-raw: 43 41 45;
+  --mauve-5-raw: 50 48 53;
+  --mauve-6-raw: 60 57 63;
+  --mauve-7-raw: 73 71 78;
+  --mauve-8-raw: 98 95 105;
+  --mauve-9-raw: 111 109 120;
+  --mauve-10-raw: 124 122 133;
+  --mauve-11-raw: 181 178 188;
+  --mauve-12-raw: 238 238 240;
+
+  /* cyan-dark — full 12-step (used: 8, 9 for solid brand + focus ring) */
+  --cyan-1-raw: 11 22 26;
+  --cyan-3-raw: 8 44 54;
+  --cyan-8-raw: 17 128 156;
+  --cyan-9-raw: 0 162 199;
+  --cyan-10-raw: 35 175 208;
+  --cyan-11-raw: 76 204 230;
+
+  /* tomato-dark — destructive (replaces red-500) */
+  --tomato-3-raw: 57 23 20;
+  --tomato-9-raw: 229 77 46;
+  --tomato-11-raw: 255 151 125;
+
+  /* semantic tokens — every UI surface resolves through these */
+  --background: var(--mauve-1-raw);
+  --foreground: var(--mauve-12-raw);
+  --card: var(--mauve-2-raw);
+  --card-foreground: var(--mauve-12-raw);
+  --popover: var(--mauve-3-raw);
+  --popover-foreground: var(--mauve-12-raw);
+  --primary: var(--cyan-9-raw);
+  --primary-foreground: var(--mauve-1-raw);
+  --secondary: var(--mauve-4-raw);
+  --secondary-foreground: var(--mauve-12-raw);
+  --muted: var(--mauve-3-raw);
+  --muted-foreground: var(--mauve-11-raw);
+  --accent: var(--mauve-4-raw);
+  --accent-foreground: var(--mauve-12-raw);
+  --destructive: var(--tomato-9-raw);
+  --destructive-foreground: var(--mauve-12-raw);
+  --border: var(--mauve-6-raw);
+  --input: var(--mauve-6-raw);
+  --ring: var(--cyan-8-raw);
+  --radius: 0.75rem;
+
+  /* Explorer canvas: kept as a deliberate brand-distinct deep navy.
+     The graph view is the differentiator — it should NOT collapse into
+     the app's neutral mauve surface. Raw RGB. */
+  --explorer-canvas: 5 11 24;
 }
 
 @layer base {
@@ -138,14 +201,14 @@
 }
 
 :focus-visible {
-  outline: 2px solid hsl(var(--ring));
+  outline: 2px solid rgb(var(--ring));
   outline-offset: 2px;
 }
 
 /* ---------- Selection ---------- */
 
 ::selection {
-  background: rgba(6, 182, 212, 0.30);
+  background: rgb(var(--cyan-9-raw) / 0.30);
   color: inherit;
 }
 
@@ -161,16 +224,16 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgb(var(--mauve-12-raw) / 0.10);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgb(var(--mauve-12-raw) / 0.18);
 }
 
 * {
-  scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
+  scrollbar-color: rgb(var(--mauve-12-raw) / 0.10) transparent;
   scrollbar-width: thin;
 }
 
@@ -180,54 +243,159 @@
   .glass {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    background: rgba(5, 11, 24, 0.90);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgb(var(--mauve-1-raw) / 0.90);
+    border: 1px solid rgb(var(--mauve-12-raw) / 0.08);
   }
 
-  /* Flat neutral backdrop with a single, barely-there top sheen for depth. */
+  /* Dashboard backdrop: flat neutral surface + one barely-there top sheen. */
   .dashboard-bg {
-    background-color: hsl(var(--background));
+    background-color: rgb(var(--background));
     background-image: radial-gradient(
       1200px 460px at 50% -260px,
-      rgba(255, 255, 255, 0.025),
+      rgb(var(--mauve-12-raw) / 0.025),
       transparent 70%
     );
     background-attachment: fixed;
   }
 
-  /* Flat panel: neutral surface + hairline border, no glow. */
+  /* Flat dashboard panel: neutral mauve surface + hairline border, no glow. */
   .card-elevated {
-    background-color: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    background-color: rgb(var(--card));
+    border: 1px solid rgb(var(--border));
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4);
     transition: border-color 160ms ease, background-color 160ms ease;
   }
 
   .card-elevated:hover {
-    border-color: hsl(240 5% 26%);
-    background-color: hsl(240 5% 11%);
+    border-color: rgb(var(--mauve-8-raw));
+    background-color: rgb(var(--mauve-3-raw));
   }
 
   .glow-hover {
-    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.20), 0 0 20px -4px rgba(6, 182, 212, 0.15);
+    box-shadow:
+      0 0 0 1px rgb(var(--cyan-9-raw) / 0.20),
+      0 0 20px -4px rgb(var(--cyan-9-raw) / 0.15);
   }
 
+  /* glow-active intentionally retains its orange identity — it signals
+     "selected/active" distinct from cyan hover. Kept literal to avoid
+     pulling another Radix scale just for one accent. */
   .glow-active {
-    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.40), 0 0 24px -4px rgba(249, 115, 22, 0.25);
+    box-shadow:
+      0 0 0 1px rgb(249 115 22 / 0.40),
+      0 0 24px -4px rgb(249 115 22 / 0.25);
   }
 
   .glow-focus {
-    box-shadow: 0 0 0 2px hsl(var(--card)), 0 0 0 4px rgba(6, 182, 212, 0.60);
+    box-shadow:
+      0 0 0 2px rgb(var(--card)),
+      0 0 0 4px rgb(var(--cyan-9-raw) / 0.60);
   }
 
   .glow-critical {
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.40), 0 0 20px -4px rgba(239, 68, 68, 0.30);
+    box-shadow:
+      0 0 0 1px rgb(var(--tomato-9-raw) / 0.40),
+      0 0 20px -4px rgb(var(--tomato-9-raw) / 0.30);
   }
 
   .shimmer {
-    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(var(--mauve-12-raw) / 0.04) 50%,
+      transparent 100%
+    );
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite linear;
+  }
+
+  /* Elevation tokens — single light source, directly above. y-offset grows
+     with elevation, blur grows ~2x faster, opacity stays constant. Avoids
+     the "puffy uniform glow" look of stacked shadow-2xl. Use these for
+     anything that floats above the canvas (legends, popovers, drawers).
+     Refactoring UI rule: only ONE light direction in the whole product. */
+  .elev-1 {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.20), 0 2px 4px rgb(0 0 0 / 0.16);
+  }
+  .elev-2 {
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.22), 0 6px 12px rgb(0 0 0 / 0.20);
+  }
+  .elev-3 {
+    box-shadow: 0 4px 8px rgb(0 0 0 / 0.26), 0 12px 28px rgb(0 0 0 / 0.28);
+  }
+}
+
+/* ----------------------------------------------------------------------
+   Every Layout primitives (Heydon Pickering / Andy Bell). Container-driven
+   layout — no media queries. Each primitive solves one composition problem:
+   Stack=vertical rhythm, Cluster=wrap+align inline children, Grid=auto-fit
+   responsive grid, Switcher=row→column at threshold via flex-basis trick,
+   Sidebar=ideal sidebar+content with intrinsic min content width, Center=
+   measure + horizontal centering. CSS variables drive the knobs so the
+   React wrappers stay thin.
+   ----------------------------------------------------------------------*/
+
+@layer components {
+  .l-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .l-stack > * + * {
+    margin-block-start: var(--l-stack-gap, 1rem);
+  }
+
+  .l-cluster {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--l-cluster-gap, 0.5rem);
+    justify-content: var(--l-cluster-justify, flex-start);
+    align-items: var(--l-cluster-align, center);
+  }
+
+  .l-grid {
+    display: grid;
+    gap: var(--l-grid-gap, 1rem);
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(var(--l-grid-min, 16rem), 100%), 1fr)
+    );
+  }
+
+  /* Switcher: switches row→column when total width drops below --threshold.
+     Trick: each child's flex-basis evaluates to a positive number above
+     threshold (row) and a clamped-to-zero value below (column). */
+  .l-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--l-switcher-gap, 1.5rem);
+  }
+  .l-switcher > * {
+    flex-grow: 1;
+    flex-basis: calc((var(--l-switcher-threshold, 30rem) - 100%) * 999);
+  }
+
+  /* Sidebar: ideal sidebar (--side-width) plus content that intrinsically
+     fills the remainder, but wraps below content if container too narrow. */
+  .l-sidebar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--l-sidebar-gap, 1.5rem);
+  }
+  .l-sidebar > .l-sidebar__side {
+    flex-basis: var(--l-sidebar-side-width, 18rem);
+    flex-grow: 1;
+  }
+  .l-sidebar > .l-sidebar__main {
+    flex-basis: 0;
+    flex-grow: 999;
+    min-inline-size: var(--l-sidebar-content-min, 60%);
+  }
+
+  .l-center {
+    box-sizing: content-box;
+    margin-inline: auto;
+    max-inline-size: var(--l-center-measure, 60ch);
   }
 }
 

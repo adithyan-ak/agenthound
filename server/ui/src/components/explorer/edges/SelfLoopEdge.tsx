@@ -12,7 +12,7 @@ function SelfLoopEdgeComponent(props: EdgeProps) {
   const cy = sourceY - r - 8;
   const path = `M ${cx + 10} ${sourceY - 4} A ${r} ${r} 0 1 1 ${cx - 10} ${sourceY - 4}`;
 
-  const color = d.severity === "critical" ? SEVERITY.critical!.solid : SEVERITY.medium!.solid;
+  const color = d.severity === "critical" ? SEVERITY.critical.solid : SEVERITY.medium.solid;
   const opacity = d.dim ? 0.1 : 0.85;
 
   return (

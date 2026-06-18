@@ -3,7 +3,7 @@ import { Crosshair } from "lucide-react";
 import { useAllNodes } from "@/hooks/useDashboardData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WidgetCard, MeterBar } from "./kit";
-import { NODE_KIND_COLORS, riskColor } from "@/theme/tokens";
+import { NODE_KIND_COLORS_BY_KEY, riskColor } from "@/theme/tokens";
 
 const INFO =
   "Entities with the highest computed risk scores. Risk reflects auth posture, blast radius, poisoning exposure, and credential handling.";
@@ -54,7 +54,7 @@ export function TopRiskyEntities() {
         <ol className="space-y-3">
           {top.map((entity, i) => {
             const color = riskColor(entity.riskScore);
-            const kindColor = NODE_KIND_COLORS[entity.kind] ?? "#64748B";
+            const kindColor = NODE_KIND_COLORS_BY_KEY[entity.kind] ?? "#64748B";
             return (
               <li key={entity.id} className="space-y-1.5">
                 <div className="flex items-center gap-2.5">

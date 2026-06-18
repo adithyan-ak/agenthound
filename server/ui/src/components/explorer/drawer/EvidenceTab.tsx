@@ -33,7 +33,7 @@ export function EvidenceTab({ node }: { node: APINode }) {
   const objectId = node.id;
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       <div>
         <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
           Identity

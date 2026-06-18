@@ -10,6 +10,7 @@ import {
 } from "@/lib/explorer/hex-config";
 import { useExplorerStore } from "@/store/explorer";
 import { cn } from "@/lib/utils";
+import { EXPLORER_HEX_FILL } from "@/theme/tokens";
 
 const HOVER_CLOSE_DELAY_MS = 160;
 
@@ -101,7 +102,7 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
           </g>
           <polygon
             points={HEX_POLYGON_POINTS}
-            fill="#0B1220"
+            fill={EXPLORER_HEX_FILL}
             stroke={strokeColor}
             strokeWidth={2.5}
             strokeLinejoin="round"
@@ -134,7 +135,7 @@ function OrphanClusterNodeComponent({ data }: NodeProps) {
           />
           <div
             className={cn(
-              "absolute left-1/2 -translate-x-1/2 w-[300px] rounded-lg glass shadow-2xl",
+              "absolute left-1/2 -translate-x-1/2 w-[300px] rounded-lg glass elev-3",
               "z-[60] overflow-hidden",
               "animate-in fade-in zoom-in-95 duration-150",
             )}

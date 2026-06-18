@@ -25,7 +25,7 @@ import {
   MessageSquare,
   Boxes,
 } from "lucide-react";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY, NODE_KIND_COLORS, EXPLORER_HEX_FILL } from "@/theme/tokens";
 import type { SeverityLevel } from "./lens-config";
 
 export interface HexKindConfig {
@@ -45,112 +45,112 @@ export interface HexKindConfig {
 
 export const HEX_CONFIG: Record<string, HexKindConfig> = {
   AgentInstance: {
-    strokeColor: "#06B6D4",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.AgentInstance,
+    fillColor: EXPLORER_HEX_FILL,
     icon: User,
     kindTag: "AGENT",
     column: 0,
     groupLabel: "Agents",
   },
   A2AAgent: {
-    strokeColor: "#A855F7",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.A2AAgent,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Bot,
     kindTag: "A2A AGENT",
     column: 0,
     groupLabel: "Agents",
   },
   MCPServer: {
-    strokeColor: "#10B981",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.MCPServer,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Server,
     kindTag: "MCP SERVER",
     column: 1,
     groupLabel: "Servers",
   },
   MCPTool: {
-    strokeColor: "#F59E0B",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.MCPTool,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Wrench,
     kindTag: "MCP TOOL",
     column: 2,
     groupLabel: "Tools & Skills",
   },
   A2ASkill: {
-    strokeColor: "#C084FC",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.A2ASkill,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Sparkles,
     kindTag: "A2A SKILL",
     column: 2,
     groupLabel: "Tools & Skills",
   },
   MCPPrompt: {
-    strokeColor: "#FB923C",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.MCPPrompt,
+    fillColor: EXPLORER_HEX_FILL,
     icon: MessageSquareQuote,
     kindTag: "MCP PROMPT",
     column: 2,
     groupLabel: "Tools & Skills",
   },
   Host: {
-    strokeColor: "#475569",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.Host,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Monitor,
     kindTag: "HOST",
     column: 3,
     groupLabel: "Infra",
   },
   Identity: {
-    strokeColor: "#94A3B8",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.Identity,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Shield,
     kindTag: "IDENTITY",
     column: 3,
     groupLabel: "Infra",
   },
   Credential: {
-    strokeColor: "#EC4899",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.Credential,
+    fillColor: EXPLORER_HEX_FILL,
     icon: KeyRound,
     kindTag: "CREDENTIAL",
     column: 3,
     groupLabel: "Infra",
   },
   MCPResource: {
-    strokeColor: "#EF4444",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.MCPResource,
+    fillColor: EXPLORER_HEX_FILL,
     icon: FileLock2,
     kindTag: "RESOURCE",
     column: 4,
     groupLabel: "Resources",
   },
   ConfigFile: {
-    strokeColor: "#D97706",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.ConfigFile,
+    fillColor: EXPLORER_HEX_FILL,
     icon: FileCode2,
     kindTag: "CONFIG FILE",
     column: 4,
     groupLabel: "Resources",
   },
   InstructionFile: {
-    strokeColor: "#EAB308",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.InstructionFile,
+    fillColor: EXPLORER_HEX_FILL,
     icon: FileText,
     kindTag: "INSTRUCTION",
     column: 4,
     groupLabel: "Resources",
   },
   ResourceGroup: {
-    strokeColor: "#64748B",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.ResourceGroup,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Layers,
     kindTag: "RESOURCE GROUP",
     column: 4,
     groupLabel: "Resources",
   },
   TrustZone: {
-    strokeColor: "#22D3EE",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.TrustZone,
+    fillColor: EXPLORER_HEX_FILL,
     icon: ShieldCheck,
     kindTag: "TRUST ZONE",
     column: 3,
@@ -166,75 +166,75 @@ export const HEX_CONFIG: Record<string, HexKindConfig> = {
   // a node has NO known per-kind label (defensive fallback for
   // forward-compat with v0.3+ kinds the UI hasn't been taught yet).
   OllamaInstance: {
-    strokeColor: "#FF7043",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.OllamaInstance,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Brain,
     kindTag: "OLLAMA",
     column: 2,
     groupLabel: "AI Services",
   },
   LiteLLMGateway: {
-    strokeColor: "#EC407A",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.LiteLLMGateway,
+    fillColor: EXPLORER_HEX_FILL,
     icon: GitFork,
     kindTag: "LITELLM",
     column: 2,
     groupLabel: "AI Services",
   },
   AIService: {
-    strokeColor: "#7E57C2",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.AIService,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Hexagon,
     kindTag: "AI SERVICE",
     column: 2,
     groupLabel: "AI Services",
   },
-  // v0.3 / v0.4 fingerprinters. Final colors locked in to be visually
-  // distinct from each other AND from the v0.1 palette above. Stroke
-  // colors must match theme/tokens.ts NODE_KIND_COLORS exactly.
+  // v0.3 / v0.4 fingerprinters. Stroke colors source from
+  // NODE_KIND_COLORS — the canonical palette in theme/tokens.ts. Visual
+  // distinctness is the property of that palette, not duplicated here.
   VLLMInstance: {
-    strokeColor: "#26A69A",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.VLLMInstance,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Rocket,
     kindTag: "VLLM",
     column: 2,
     groupLabel: "AI Services",
   },
   QdrantInstance: {
-    strokeColor: "#5C6BC0",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.QdrantInstance,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Database,
     kindTag: "QDRANT",
     column: 2,
     groupLabel: "AI Services",
   },
   MLflowServer: {
-    strokeColor: "#42A5F5",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.MLflowServer,
+    fillColor: EXPLORER_HEX_FILL,
     icon: FlaskConical,
     kindTag: "MLFLOW",
     column: 2,
     groupLabel: "AI Services",
   },
   JupyterServer: {
-    strokeColor: "#F57C00",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.JupyterServer,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Notebook,
     kindTag: "JUPYTER",
     column: 2,
     groupLabel: "AI Services",
   },
   LangServeApp: {
-    strokeColor: "#9CCC65",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.LangServeApp,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Link2,
     kindTag: "LANGSERVE",
     column: 2,
     groupLabel: "AI Services",
   },
   OpenWebUIInstance: {
-    strokeColor: "#66BB6A",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.OpenWebUIInstance,
+    fillColor: EXPLORER_HEX_FILL,
     icon: MessageSquare,
     kindTag: "OPEN WEBUI",
     column: 2,
@@ -246,8 +246,8 @@ export const HEX_CONFIG: Record<string, HexKindConfig> = {
   // Distinct from MCPResource (col 4) which is a remote-resource pointer, not
   // a stored artifact.
   AIModel: {
-    strokeColor: "#6A1B9A",
-    fillColor: "#0B1220",
+    strokeColor: NODE_KIND_COLORS.AIModel,
+    fillColor: EXPLORER_HEX_FILL,
     icon: Boxes,
     kindTag: "AI MODEL",
     column: 3,
@@ -256,8 +256,8 @@ export const HEX_CONFIG: Record<string, HexKindConfig> = {
 };
 
 const FALLBACK: HexKindConfig = {
-  strokeColor: "#94A3B8",
-  fillColor: "#0B1220",
+  strokeColor: NODE_KIND_COLORS.Identity,
+  fillColor: EXPLORER_HEX_FILL,
   icon: Hexagon,
   kindTag: "NODE",
   column: 3,
@@ -276,10 +276,10 @@ export const SEVERITY_HALO: Record<Exclude<SeverityLevel, "info">, string> = {
 };
 
 export const SEVERITY_STROKE_COLOR: Record<Exclude<SeverityLevel, "info">, string> = {
-  critical: SEVERITY.critical!.solid,
-  high: SEVERITY.high!.solid,
-  medium: SEVERITY.medium!.solid,
-  low: SEVERITY.low!.solid,
+  critical: SEVERITY.critical.solid,
+  high: SEVERITY.high.solid,
+  medium: SEVERITY.medium.solid,
+  low: SEVERITY.low.solid,
 };
 
 /**

@@ -1,6 +1,8 @@
 import { useExplorerStore } from "@/store/explorer";
 import { getLens } from "@/lib/explorer/lens-config";
 import { cn } from "@/lib/utils";
+import { NODE_KIND_COLORS, SEVERITY, DIMMED } from "@/theme/tokens";
+import { EDGE_CATEGORY_COLORS } from "@/lib/edge-styles";
 
 interface LegendItem {
   color: string;
@@ -9,49 +11,54 @@ interface LegendItem {
   thick?: boolean;
 }
 
+// Legend palettes derive from the canonical token tables (NODE_KIND_COLORS,
+// SEVERITY, EDGE_CATEGORY_COLORS, DIMMED). Earlier this file duplicated 30+
+// hex literals which silently drifted from tokens.ts; never re-introduce
+// raw hex here — add a token first.
+
 const LEGEND_BY_LENS: Record<string, LegendItem[]> = {
   topology: [
-    { color: "#06B6D4", label: "Agent" },
-    { color: "#10B981", label: "MCP Server" },
-    { color: "#F59E0B", label: "Tool" },
-    { color: "#EF4444", label: "Resource" },
-    { color: "#334155", label: "Trust edge" },
+    { color: NODE_KIND_COLORS.AgentInstance, label: "Agent" },
+    { color: NODE_KIND_COLORS.MCPServer, label: "MCP Server" },
+    { color: NODE_KIND_COLORS.MCPTool, label: "Tool" },
+    { color: NODE_KIND_COLORS.MCPResource, label: "Resource" },
+    { color: EDGE_CATEGORY_COLORS.trust, label: "Trust edge" },
   ],
   "attack-surface": [
-    { color: "#EF4444", label: "Critical reach", thick: true },
-    { color: "#F97316", label: "High reach", thick: true },
-    { color: "#EAB308", label: "Medium" },
-    { color: "#94A3B8", label: "Low" },
+    { color: SEVERITY.critical.solid, label: "Critical reach", thick: true },
+    { color: SEVERITY.high.solid, label: "High reach", thick: true },
+    { color: SEVERITY.medium.solid, label: "Medium" },
+    { color: NODE_KIND_COLORS.Identity, label: "Low" },
   ],
   critical: [
-    { color: "#EF4444", label: "Critical path", thick: true },
-    { color: "#A855F7", label: "Cross-protocol", dashed: true },
-    { color: "#1E293B", label: "Dimmed context" },
+    { color: SEVERITY.critical.solid, label: "Critical path", thick: true },
+    { color: NODE_KIND_COLORS.A2AAgent, label: "Cross-protocol", dashed: true },
+    { color: DIMMED.deep, label: "Dimmed context" },
   ],
   "cross-protocol": [
-    { color: "#A855F7", label: "Cross-protocol edge", dashed: true, thick: true },
-    { color: "#06B6D4", label: "A2A Agent" },
-    { color: "#10B981", label: "MCP Server" },
+    { color: NODE_KIND_COLORS.A2AAgent, label: "Cross-protocol edge", dashed: true, thick: true },
+    { color: NODE_KIND_COLORS.AgentInstance, label: "A2A Agent" },
+    { color: NODE_KIND_COLORS.MCPServer, label: "MCP Server" },
   ],
   credentials: [
-    { color: "#EC4899", label: "Credential" },
-    { color: "#94A3B8", label: "Identity" },
-    { color: "#10B981", label: "MCP Server" },
+    { color: NODE_KIND_COLORS.Credential, label: "Credential" },
+    { color: NODE_KIND_COLORS.Identity, label: "Identity" },
+    { color: NODE_KIND_COLORS.MCPServer, label: "MCP Server" },
   ],
   poisoning: [
-    { color: "#EAB308", label: "Poisoned tool" },
-    { color: "#F97316", label: "Shadowing" },
-    { color: "#EF4444", label: "Poisoned instructions" },
+    { color: NODE_KIND_COLORS.InstructionFile, label: "Poisoned tool" },
+    { color: SEVERITY.high.solid, label: "Shadowing" },
+    { color: SEVERITY.critical.solid, label: "Poisoned instructions" },
   ],
   "blast-radius": [
-    { color: "#10B981", label: "Source node", thick: true },
-    { color: "#94A3B8", label: "Reachable" },
-    { color: "#1E293B", label: "Out of scope" },
+    { color: NODE_KIND_COLORS.MCPServer, label: "Source node", thick: true },
+    { color: NODE_KIND_COLORS.Identity, label: "Reachable" },
+    { color: DIMMED.deep, label: "Out of scope" },
   ],
   chokepoints: [
-    { color: "#06B6D4", label: "High centrality" },
-    { color: "#64748B", label: "Medium centrality" },
-    { color: "#334155", label: "Low centrality" },
+    { color: NODE_KIND_COLORS.AgentInstance, label: "High centrality" },
+    { color: NODE_KIND_COLORS.ResourceGroup, label: "Medium centrality" },
+    { color: DIMMED.mid, label: "Low centrality" },
   ],
 };
 
@@ -66,7 +73,7 @@ export function Legend() {
     <div
       className={cn(
         "pointer-events-auto absolute left-6 bottom-12 z-20 rounded-lg",
-        "glass px-3 py-2.5 shadow-xl",
+        "glass px-3 py-2.5 elev-2",
       )}
     >
       <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">

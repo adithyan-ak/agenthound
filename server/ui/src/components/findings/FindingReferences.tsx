@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { fetchFindings } from "@/api/analysis";
 import { OWASP_TITLES } from "@/lib/findings/owasp-titles";
 import { cn } from "@/lib/utils";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY, SEVERITY_BY_KEY } from "@/theme/tokens";
 import type { Finding } from "@/api/types";
 
 interface FindingReferencesProps {
@@ -30,7 +30,7 @@ export function FindingReferences({ finding }: FindingReferencesProps) {
 
   return (
     <div className="rounded-lg border border-border p-4">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-3">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">
         References
       </div>
 
@@ -53,7 +53,7 @@ export function FindingReferences({ finding }: FindingReferencesProps) {
 
       {related.length > 0 && (
         <>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
             Related Findings ({related.length})
           </div>
           <div className="space-y-1">
@@ -63,7 +63,7 @@ export function FindingReferences({ finding }: FindingReferencesProps) {
                 onClick={() => navigate(`/findings/${rf.id}`)}
                 className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 transition-colors text-xs"
               >
-                <div className={cn("h-2 w-2 rounded-full flex-shrink-0", (SEVERITY[rf.severity] ?? SEVERITY.low!).dotClass)} />
+                <div className={cn("h-2 w-2 rounded-full flex-shrink-0", (SEVERITY_BY_KEY[rf.severity] ?? SEVERITY.low).dotClass)} />
                 <span className="text-[10px] uppercase font-bold text-muted-foreground w-14">
                   {rf.severity}
                 </span>
