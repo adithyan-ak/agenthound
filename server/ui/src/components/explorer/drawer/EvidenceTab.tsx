@@ -35,10 +35,10 @@ export function EvidenceTab({ node }: { node: APINode }) {
   return (
     <div className="space-y-5">
       <div>
-        <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+        <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           Identity
         </div>
-        <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-[11px] text-foreground">
+        <div className="rounded-[3px] border border-border bg-black/40 p-3 font-mono text-[11px] text-foreground/90">
           <div>
             <span className="text-muted-foreground">objectid </span>
             {objectId}
@@ -66,17 +66,17 @@ export function EvidenceTab({ node }: { node: APINode }) {
 
       {rawEvidence.map(({ key, value }) => (
         <div key={key}>
-          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             {key.replace(/_/g, " ")}
           </div>
-          <pre className="rounded-md border border-border bg-muted/40 p-3 font-mono text-[11px] text-foreground whitespace-pre-wrap break-words max-h-[240px] overflow-auto">
+          <pre className="max-h-[240px] overflow-auto whitespace-pre-wrap break-words rounded-[3px] border border-border bg-black/40 p-3 font-mono text-[11px] text-foreground/90">
             {formatEvidence(value)}
           </pre>
         </div>
       ))}
 
       {rawEvidence.length === 0 && (
-        <div className="text-sm text-muted-foreground">
+        <div className="font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
           No collected evidence for this node.
         </div>
       )}

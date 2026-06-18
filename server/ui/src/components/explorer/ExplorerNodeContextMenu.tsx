@@ -286,19 +286,21 @@ export function ExplorerNodeContextMenu() {
       ref={menuRef}
       role="menu"
       className={cn(
-        "fixed z-[70] overflow-hidden rounded-lg glass elev-3",
+        "fixed z-[70] overflow-hidden rounded-md border border-border bg-card/95 backdrop-blur-md elev-3",
         "animate-in fade-in zoom-in-95 duration-100",
       )}
       style={{ left, top, width: MENU_WIDTH }}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Header */}
-      <div
-        className="flex items-center gap-2.5 border-b border-border px-3 py-2.5"
-        style={{ borderTopColor: config.strokeColor, borderTopWidth: 2 }}
-      >
+      <div className="relative flex items-center gap-2.5 border-b border-border px-3 py-2.5">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-px"
+          style={{ background: config.strokeColor, opacity: 0.7 }}
+        />
         <div
-          className="flex h-7 w-7 items-center justify-center rounded-md border"
+          className="flex h-7 w-7 items-center justify-center rounded-[3px] border"
           style={{
             borderColor: config.strokeColor,
             background: `${config.strokeColor}15`,
@@ -312,7 +314,7 @@ export function ExplorerNodeContextMenu() {
         </div>
         <div className="flex min-w-0 flex-col">
           <div
-            className="text-[10px] uppercase tracking-widest"
+            className="font-mono text-[10px] uppercase tracking-[0.14em]"
             style={{ color: config.strokeColor }}
           >
             {config.kindTag}
@@ -352,7 +354,7 @@ export function ExplorerNodeContextMenu() {
             return (
               <div
                 key={`sec-${i}`}
-                className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70"
+                className="px-3 pb-1 pt-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70"
               >
                 {entry.label}
               </div>
@@ -371,9 +373,9 @@ export function ExplorerNodeContextMenu() {
               className={cn(
                 "group/mi flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-xs",
                 "transition-colors",
-                !entry.disabled && !entry.active && "text-foreground hover:bg-muted hover:text-foreground",
-                entry.active && "text-foreground bg-muted",
-                entry.disabled && "text-muted-foreground/70 cursor-not-allowed",
+                !entry.disabled && !entry.active && "text-foreground hover:bg-white/[0.05]",
+                entry.active && "bg-white/[0.05] text-foreground",
+                entry.disabled && "cursor-not-allowed text-muted-foreground/70",
               )}
             >
               <ItemIcon
@@ -390,7 +392,7 @@ export function ExplorerNodeContextMenu() {
       </div>
 
       {/* Footer hint */}
-      <div className="border-t border-border bg-muted/40 px-3 py-1.5 text-[9px] uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
+      <div className="flex items-center gap-2 border-t border-border bg-black/20 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground/70">
         <Focus className="h-2.5 w-2.5" strokeWidth={2.5} />
         <span>Esc to close</span>
       </div>

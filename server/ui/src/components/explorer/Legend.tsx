@@ -72,11 +72,17 @@ export function Legend() {
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute left-6 bottom-12 z-20 rounded-lg",
-        "glass px-3 py-2.5 elev-2",
+        "pointer-events-auto absolute bottom-9 left-4 z-20 overflow-hidden rounded-md",
+        "border border-border bg-card/95 px-3 py-2.5 backdrop-blur-md elev-2",
       )}
     >
-      <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 h-px w-10"
+        style={{ background: lens.activeTint, opacity: 0.9 }}
+      />
+      <div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {lens.shortLabel} legend
       </div>
       <div className="space-y-1.5">
@@ -104,7 +110,7 @@ export function Legend() {
                 />
               )}
             </svg>
-            <div className="text-[10px] text-foreground">{item.label}</div>
+            <div className="font-mono text-[10px] text-foreground/80">{item.label}</div>
           </div>
         ))}
       </div>

@@ -20,12 +20,12 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
   const hasSubPresets = lens.subPresets.length > 0;
 
   const pillClasses = cn(
-    "group relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-    "transition-[background-color,color,border-color] duration-150 ease-out border",
+    "group relative flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.06em]",
+    "transition-[background-color,color,border-color] duration-150 ease-out",
     "whitespace-nowrap select-none",
     active
-      ? cn(lens.accentClass, "border-transparent shadow-lg")
-      : "bg-muted/60 text-foreground border-border hover:bg-muted hover:text-foreground hover:border-border",
+      ? cn(lens.accentClass, "border-transparent")
+      : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
   );
 
   const pillStyle = active
@@ -65,7 +65,7 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
           align="start"
           sideOffset={8}
           className={cn(
-            "min-w-[240px] rounded-lg glass p-1.5 elev-3",
+            "min-w-[240px] rounded-md border border-border bg-card/95 p-1 backdrop-blur-md elev-3",
             "",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -73,7 +73,7 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
             "data-[side=bottom]:slide-in-from-top-2 z-50",
           )}
         >
-          <div className="px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             {lens.label} · sub-presets
           </div>
           {lens.subPresets.map((sp) => {
@@ -86,21 +86,21 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
                   toggleSubPreset(lens.id, sp.id);
                 }}
                 className={cn(
-                  "group/item flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-xs",
-                  "outline-none focus:bg-muted data-[highlighted]:bg-muted",
+                  "group/item flex cursor-pointer items-start gap-2 rounded-[3px] px-2 py-2 text-xs",
+                  "outline-none focus:bg-white/[0.05] data-[highlighted]:bg-white/[0.05]",
                   "transition-colors",
                 )}
               >
                 <div
                   className={cn(
-                    "mt-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-sm border",
+                    "mt-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border",
                     enabled
-                      ? "bg-blue-500 border-blue-400"
+                      ? "border-primary bg-primary"
                       : "border-border bg-transparent",
                   )}
                 >
                   {enabled && (
-                    <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                    <Check className="h-2.5 w-2.5 text-primary-foreground" strokeWidth={3} />
                   )}
                 </div>
                 <div className="flex flex-col">
@@ -126,11 +126,12 @@ export function LensBar() {
     <div className="pointer-events-auto absolute left-1/2 top-4 z-30 -translate-x-1/2">
       <div
         className={cn(
-          "flex items-center gap-1.5 rounded-full glass px-2 py-1.5",
+          "relative flex items-center gap-1.5 overflow-hidden rounded-md border border-border bg-card/95 px-2 py-1.5 backdrop-blur-md",
           "elev-2",
         )}
       >
-        <div className="px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
+        <div className="px-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Lens
         </div>
         {LENS_LIST.map((lens) => (

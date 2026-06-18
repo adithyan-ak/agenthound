@@ -37,34 +37,38 @@ export function InfoCard() {
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute left-6 top-24 z-20 w-[280px] rounded-xl",
-        "glass p-4 elev-1",
+        "pointer-events-auto absolute left-4 top-20 z-20 w-[280px] overflow-hidden rounded-md",
+        "border border-border bg-card/95 p-3.5 backdrop-blur-md elev-2",
       )}
-      style={{
-        borderTopColor: lens.activeTint,
-        borderTopWidth: 3,
-      }}
     >
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 h-px w-12"
+        style={{ background: lens.activeTint, opacity: 0.9 }}
+      />
       <div className="flex items-center justify-between">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {lens.label} lens
         </div>
-        <div className="flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-[9px] text-muted-foreground">
-          <div
-            className="h-1.5 w-1.5 rounded-full animate-pulse"
+        <div className="flex items-center gap-1 rounded-[2px] border border-border bg-black/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+          <span
+            className="h-1.5 w-1.5 animate-led-pulse rounded-[1px]"
             style={{ background: lens.activeTint }}
           />
           active
         </div>
       </div>
 
-      <div className="mt-2 flex items-baseline gap-1.5">
-        <div className="text-2xl font-bold text-foreground tabular-nums">
+      <div className="mt-2.5 flex items-baseline gap-1.5">
+        <div className="font-mono text-[28px] font-bold leading-none tabular-nums text-foreground">
           {metrics.visibleEdgeCount}
         </div>
-        <div className="text-xs text-muted-foreground">visible edges</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          visible edges
+        </div>
       </div>
-      <div className="mt-0.5 text-[10px] text-muted-foreground">
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
         across {metrics.visibleNodeCount} nodes
       </div>
 
@@ -103,10 +107,10 @@ export function InfoCard() {
         <button
           onClick={toggleShowOrphans}
           className={cn(
-            "mt-3 flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-[10px] transition-colors",
+            "mt-3 flex w-full items-center justify-between rounded-[3px] border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors",
             showOrphans
-              ? "border-blue-700/60 bg-blue-950/40 text-blue-300 hover:bg-blue-900/50"
-              : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+              : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
           )}
           aria-label={
             showOrphans
@@ -129,7 +133,7 @@ export function InfoCard() {
         </button>
       )}
 
-      <div className="mt-3 border-t border-border pt-2 text-[10px] leading-relaxed text-muted-foreground">
+      <div className="mt-3 border-t border-border/70 pt-2 text-[10px] leading-relaxed text-muted-foreground">
         {lens.description}
       </div>
     </div>
@@ -147,12 +151,11 @@ function MetricRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <div
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ background: color }}
-      />
-      <div className="flex-1 text-[11px] text-foreground">{label}</div>
-      <div className="text-[11px] font-semibold tabular-nums text-foreground">
+      <span className="h-1.5 w-1.5 rounded-[1px]" style={{ background: color }} />
+      <div className="flex-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="font-mono text-[11px] font-semibold tabular-nums" style={{ color }}>
         {value}
       </div>
     </div>

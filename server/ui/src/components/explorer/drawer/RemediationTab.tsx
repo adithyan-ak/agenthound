@@ -1,6 +1,6 @@
 import type { APIEdge, APINode } from "@/api/types";
 import { AlertTriangle, Shield } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { SEVERITY } from "@/theme/tokens";
 
 interface RemediationItem {
   severity: "critical" | "high" | "medium" | "low";
@@ -20,14 +20,19 @@ export function RemediationTab({
 
   if (items.length === 0) {
     return (
-      <div className="flex max-w-md flex-col items-start gap-2 rounded-lg border border-emerald-900/50 bg-emerald-950/30 p-4">
-        <div className="flex items-center gap-2 text-emerald-300">
+      <div
+        className="flex max-w-md flex-col items-start gap-2 rounded-[3px] border border-border bg-black/30 p-4"
+        style={{ boxShadow: "inset 2px 0 0 0 #3FB950" }}
+      >
+        <div className="flex items-center gap-2" style={{ color: "#3FB950" }}>
           <Shield className="h-4 w-4" strokeWidth={2.25} />
-          <span className="text-sm font-semibold">No action required</span>
+          <span className="font-mono text-sm font-semibold uppercase tracking-[0.06em]">
+            No action required
+          </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          No active remediation items detected for this node. It does not
-          currently participate in any composite attack path.
+          No active remediation items detected for this node. It does not currently participate in
+          any composite attack path.
         </p>
       </div>
     );
@@ -43,41 +48,24 @@ export function RemediationTab({
 }
 
 function RemediationCard({ item }: { item: RemediationItem }) {
-  const colors = {
-    critical: {
-      border: "border-red-900/60",
-      bg: "bg-red-950/20",
-      text: "text-red-400",
-    },
-    high: {
-      border: "border-orange-900/60",
-      bg: "bg-orange-950/20",
-      text: "text-orange-400",
-    },
-    medium: {
-      border: "border-yellow-900/60",
-      bg: "bg-yellow-950/20",
-      text: "text-yellow-400",
-    },
-    low: {
-      border: "border-border",
-      bg: "bg-muted/40",
-      text: "text-muted-foreground",
-    },
-  } as const;
-
-  const c = colors[item.severity];
+  const sev = SEVERITY[item.severity];
 
   return (
-    <div className={cn("rounded-lg border p-4", c.border, c.bg)}>
+    <div
+      className="rounded-[3px] border border-border bg-black/30 p-4"
+      style={{ boxShadow: `inset 2px 0 0 0 ${sev.solid}` }}
+    >
       <div className="mb-2 flex items-center gap-2">
-        <AlertTriangle className={cn("h-4 w-4", c.text)} strokeWidth={2.25} />
-        <div className={cn("text-[10px] uppercase tracking-widest font-semibold", c.text)}>
+        <AlertTriangle className="h-4 w-4" style={{ color: sev.solid }} strokeWidth={2.25} />
+        <div
+          className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em]"
+          style={{ color: sev.text }}
+        >
           {item.severity}
         </div>
         <div className="text-sm font-semibold text-foreground">{item.title}</div>
       </div>
-      <p className="ml-6 text-xs text-foreground leading-relaxed">{item.body}</p>
+      <p className="ml-6 text-xs leading-relaxed text-foreground/90">{item.body}</p>
     </div>
   );
 }

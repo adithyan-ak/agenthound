@@ -249,7 +249,7 @@ export function ExplorerCanvas() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center bg-explorer-canvas">
-        <p className="text-sm text-red-400">
+        <p className="font-mono text-sm uppercase tracking-[0.06em] text-destructive">
           Failed to load Explorer: {error.message}
         </p>
       </div>
@@ -260,8 +260,8 @@ export function ExplorerCanvas() {
     return (
       <div className="flex h-full items-center justify-center bg-explorer-canvas">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="text-4xl text-muted-foreground/70">&#x2B22;</div>
-          <p className="text-sm font-medium text-foreground">
+          <div className="text-4xl text-primary/60">&#x2B22;</div>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
             No graph data yet
           </p>
           <p className="max-w-xs text-xs text-muted-foreground">
@@ -275,8 +275,8 @@ export function ExplorerCanvas() {
   if (isLoading || !built || !layoutReady) {
     return (
       <div className="flex h-full items-center justify-center bg-explorer-canvas">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+        <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="h-1.5 w-1.5 animate-led-pulse rounded-[1px] bg-primary" />
           <span>{isLoading ? "Fetching graph…" : "Computing layout…"}</span>
         </div>
       </div>
@@ -313,7 +313,7 @@ export function ExplorerCanvas() {
       <Controls
         position="bottom-right"
         showInteractive={false}
-        className="!bg-card !border-border !shadow-lg"
+        className="!overflow-hidden !rounded-md !border !border-border !bg-card !shadow-lg [&_.react-flow__controls-button]:!border-border [&_.react-flow__controls-button]:!bg-card [&_.react-flow__controls-button]:!fill-mauve-11 [&_.react-flow__controls-button:hover]:!bg-white/[0.06] [&_.react-flow__controls-button:hover]:!fill-foreground"
       />
     </ReactFlow>
   );

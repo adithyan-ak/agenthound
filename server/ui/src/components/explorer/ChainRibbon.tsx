@@ -27,11 +27,15 @@ export function ChainRibbon() {
     return (
       <div
         className={cn(
-          "pointer-events-auto absolute bottom-7 left-1/2 z-20 -translate-x-1/2",
-          "rounded-xl border border-emerald-900/50 bg-emerald-950/60 px-5 py-3 elev-2 backdrop-blur",
+          "pointer-events-auto absolute bottom-9 left-1/2 z-20 -translate-x-1/2",
+          "overflow-hidden rounded-md border border-border bg-card/95 px-5 py-3 backdrop-blur-md elev-2",
         )}
+        style={{ boxShadow: "inset 2px 0 0 0 #3FB950" }}
       >
-        <div className="flex items-center gap-2 text-xs text-emerald-300">
+        <div
+          className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.06em]"
+          style={{ color: "#3FB950" }}
+        >
           <Shield className="h-4 w-4" strokeWidth={2.25} />
           <span>No critical attack paths detected in this scan.</span>
         </div>
@@ -42,18 +46,22 @@ export function ChainRibbon() {
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute bottom-7 left-1/2 z-20 -translate-x-1/2",
-        "max-w-[calc(100vw-48px)] rounded-xl glass border-red-900/40 p-3 elev-2",
+        "pointer-events-auto absolute bottom-9 left-1/2 z-20 -translate-x-1/2",
+        "max-w-[calc(100vw-48px)] overflow-hidden rounded-md border border-border bg-card/95 p-3 backdrop-blur-md elev-2",
       )}
-      style={{ borderTopColor: SEVERITY.critical.solid, borderTopWidth: 3 }}
+      style={{ boxShadow: `inset 2px 0 0 0 ${SEVERITY.critical.solid}` }}
     >
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
       <div className="mb-2 flex items-center gap-2 px-1">
-        <AlertOctagon className="h-3.5 w-3.5 text-red-400" strokeWidth={2.5} />
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-red-400">
+        <AlertOctagon className="h-3.5 w-3.5" style={{ color: SEVERITY.critical.solid }} strokeWidth={2.5} />
+        <div
+          className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em]"
+          style={{ color: SEVERITY.critical.text }}
+        >
           {chains.length} critical attack path{chains.length === 1 ? "" : "s"}
         </div>
-        <div className="text-[10px] text-muted-foreground">
-          · click a card to focus the path on the graph
+        <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+          · click a card to focus
         </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -86,34 +94,37 @@ function ChainCard({
     <button
       onClick={onSelect}
       className={cn(
-        "flex-shrink-0 w-[280px] rounded-lg border p-3 text-left",
-        "transition-[border-color,background-color,box-shadow] duration-150 ease-out",
+        "relative w-[280px] flex-shrink-0 overflow-hidden rounded-[3px] border p-3 text-left",
+        "transition-[border-color,background-color] duration-150 ease-out",
         selected
-          ? "border-red-500 bg-red-950/50 shadow-[0_0_20px_-4px_rgba(239,68,68,0.6)]"
-          : "border-border bg-muted/60 hover:border-red-800 hover:bg-muted",
+          ? "border-destructive/60 bg-destructive/10"
+          : "border-border bg-black/30 hover:border-mauve-7 hover:bg-white/[0.03]",
       )}
+      style={{ boxShadow: `inset 2px 0 0 0 ${SEVERITY.critical.solid}` }}
     >
       <div className="mb-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-[9px] uppercase tracking-widest text-red-400 font-semibold">
+          <span
+            className="h-1.5 w-1.5 animate-led-pulse rounded-[1px]"
+            style={{ background: SEVERITY.critical.solid }}
+          />
+          <span
+            className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: SEVERITY.critical.text }}
+          >
             Critical
           </span>
         </div>
-        <span className="text-[9px] text-muted-foreground tabular-nums">
+        <span className="font-mono text-[9px] tabular-nums text-muted-foreground">
           {(chain.confidence * 100).toFixed(0)}% conf
         </span>
       </div>
-      <div className="mb-1.5 text-xs font-semibold text-foreground line-clamp-2">
-        {chain.title}
-      </div>
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+      <div className="mb-1.5 line-clamp-2 text-xs font-semibold text-foreground">{chain.title}</div>
+      <div className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
         <span className="max-w-[80px] truncate">{chain.sourceName}</span>
-        <ArrowRight className="h-2.5 w-2.5 text-red-400 flex-shrink-0" />
+        <ArrowRight className="h-2.5 w-2.5 flex-shrink-0" style={{ color: SEVERITY.critical.solid }} />
         <span className="max-w-[80px] truncate">{chain.targetName}</span>
-        <span className="ml-auto text-[9px] uppercase text-muted-foreground">
-          {chain.edgeKind.replace(/_/g, " ")}
-        </span>
+        <span className="ml-auto text-[9px] uppercase">{chain.edgeKind.replace(/_/g, " ")}</span>
       </div>
     </button>
   );

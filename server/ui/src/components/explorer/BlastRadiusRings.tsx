@@ -104,14 +104,13 @@ export function BlastRadiusRings() {
 
 function NoSourceHint() {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-xl glass border-emerald-900/50 px-6 py-5 text-center elev-2">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
+    <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border border-border bg-card/95 px-6 py-5 text-center backdrop-blur-md elev-2">
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
+      <div className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
         Blast Radius
       </div>
-      <div className="text-sm text-foreground">
-        Click any node to see what it can reach
-      </div>
-      <div className="mt-1 text-[10px] text-muted-foreground">
+      <div className="text-sm text-foreground">Click any node to see what it can reach</div>
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
         Concentric rings show hop distance from the source
       </div>
     </div>

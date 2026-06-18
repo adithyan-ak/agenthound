@@ -18,7 +18,9 @@ export function ConnectionsTab({
 
   if (edges.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground">No connected edges found.</div>
+      <div className="font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
+        No connected edges found.
+      </div>
     );
   }
 
@@ -26,8 +28,8 @@ export function ConnectionsTab({
     <Switcher threshold="32rem" gap="1.5rem">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <ArrowDown className="h-3 w-3 text-cyan-400" />
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <ArrowDown className="h-3 w-3 text-muted-foreground" />
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             Incoming · {incoming.length}
           </div>
         </div>
@@ -38,7 +40,6 @@ export function ConnectionsTab({
               edge={e}
               otherId={e.source}
               otherKind={e.source_kind}
-              direction="in"
               onClick={() => selectNode(e.source)}
             />
           ))}
@@ -47,8 +48,8 @@ export function ConnectionsTab({
 
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <ArrowUp className="h-3 w-3 text-orange-400" />
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <ArrowUp className="h-3 w-3 text-primary/70" />
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             Outgoing · {outgoing.length}
           </div>
         </div>
@@ -59,7 +60,6 @@ export function ConnectionsTab({
               edge={e}
               otherId={e.target}
               otherKind={e.target_kind}
-              direction="out"
               onClick={() => selectNode(e.target)}
             />
           ))}
@@ -73,13 +73,11 @@ function EdgeRow({
   edge,
   otherId,
   otherKind,
-  direction,
   onClick,
 }: {
   edge: APIEdge;
   otherId: string;
   otherKind?: string;
-  direction: "in" | "out";
   onClick: () => void;
 }) {
   const isComposite = edge.properties?.is_composite === true;
@@ -88,31 +86,24 @@ function EdgeRow({
   return (
     <button
       onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-left",
-        "transition-colors hover:border-border hover:bg-muted",
-      )}
+      className="flex w-full items-center gap-2 rounded-[3px] border border-border bg-black/30 px-2.5 py-2 text-left transition-colors hover:border-mauve-7 hover:bg-white/[0.03]"
     >
-      <div
+      <span
         className={cn(
-          "h-1.5 w-1.5 flex-shrink-0 rounded-full",
-          isComposite
-            ? direction === "in"
-              ? "bg-cyan-400"
-              : "bg-orange-400"
-            : "bg-muted-foreground/70",
+          "h-1.5 w-1.5 flex-shrink-0 rounded-[1px]",
+          isComposite ? "bg-primary" : "bg-mauve-8",
         )}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="text-[11px] font-medium text-foreground truncate">
+        <div className="truncate font-mono text-[11px] font-medium text-foreground">
           {edge.kind.replace(/_/g, " ")}
         </div>
-        <div className="text-[10px] text-muted-foreground truncate">
+        <div className="truncate font-mono text-[10px] text-muted-foreground">
           {otherKind ?? "Node"} · {otherId.slice(0, 16)}
         </div>
       </div>
       {confidence > 0 && (
-        <div className="text-[9px] text-muted-foreground tabular-nums flex-shrink-0">
+        <div className="flex-shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">
           {(confidence * 100).toFixed(0)}%
         </div>
       )}

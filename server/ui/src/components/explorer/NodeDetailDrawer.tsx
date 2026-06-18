@@ -59,7 +59,7 @@ export function NodeDetailDrawer() {
     <div
       className={cn(
         "pointer-events-auto absolute bottom-0 left-0 right-0 z-30",
-        "glass border-t shadow-[0_-8px_40px_-8px_rgba(0,0,0,0.8)]",
+        "border-t border-border bg-card/95 shadow-[0_-8px_40px_-8px_rgba(0,0,0,0.8)] backdrop-blur-md",
         "animate-in slide-in-from-bottom-4 fade-in duration-200",
       )}
       style={{ height: "40vh", minHeight: 320 }}
@@ -67,10 +67,11 @@ export function NodeDetailDrawer() {
       aria-label={`Details for ${name}`}
     >
       <div className="flex h-full flex-col">
-        <div className="flex items-center border-b border-border bg-muted/60 px-4 py-3">
+        <div className="relative flex items-center border-b border-border bg-black/20 px-4 py-3">
+          <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.05]" />
           <div className="flex items-center gap-3">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-md border"
+              className="flex h-9 w-9 items-center justify-center rounded-[3px] border"
               style={{
                 borderColor: config.strokeColor,
                 background: `${config.strokeColor}15`,
@@ -83,7 +84,10 @@ export function NodeDetailDrawer() {
               />
             </div>
             <div className="flex flex-col">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              <div
+                className="font-mono text-[10px] uppercase tracking-[0.14em]"
+                style={{ color: config.strokeColor }}
+              >
                 {config.kindTag}
               </div>
               <div className="font-semibold text-foreground">{name}</div>
@@ -95,14 +99,14 @@ export function NodeDetailDrawer() {
             onValueChange={(v) => setDrawerTab(v as DrawerTab)}
             className="ml-8"
           >
-            <TabsPrimitive.List className="flex gap-1 rounded-full bg-muted p-1">
+            <TabsPrimitive.List className="flex gap-0.5 rounded-[3px] border border-border bg-black/30 p-0.5">
               {TABS.map((t) => (
                 <TabsPrimitive.Trigger
                   key={t.id}
                   value={t.id}
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    "data-[state=active]:bg-primary data-[state=active]:text-white",
+                    "rounded-[2px] px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.06em] transition-colors",
+                    "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground",
                     "data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground",
                   )}
                 >
@@ -114,7 +118,7 @@ export function NodeDetailDrawer() {
 
           <button
             onClick={closeDrawer}
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
             aria-label="Close details drawer"
           >
             <X className="h-4 w-4" />
@@ -123,11 +127,11 @@ export function NodeDetailDrawer() {
 
         <div className="flex-1 overflow-auto px-6 py-5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-10 font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
               Loading node details…
             </div>
           ) : !node ? (
-            <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-10 font-mono text-xs uppercase tracking-[0.1em] text-muted-foreground">
               Node not found.
             </div>
           ) : (
