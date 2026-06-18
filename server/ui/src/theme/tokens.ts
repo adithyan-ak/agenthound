@@ -127,12 +127,12 @@ export const FEEDBACK = {
 // Recharts theme constants
 export const CHART_THEME = {
   tooltip: {
-    bg: "#111B2E",
-    border: "#1A2540",
-    text: "#EDF0F3",
+    bg: "#18181B",
+    border: "#27272A",
+    text: "#FAFAFA",
   },
   grid: "rgba(255,255,255,0.05)",
-  axis: "#64788F",
+  axis: "#71717A",
   series: ["#06B6D4", "#A855F7", "#10B981", "#F59E0B", "#EC4899", "#3B82F6", "#EF4444", "#22D3EE"],
 } as const;
 

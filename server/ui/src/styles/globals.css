@@ -96,25 +96,27 @@
   }
 
   .dark {
-    --background: 218 53% 3%;
-    --foreground: 210 15% 93%;
-    --card: 218 50% 10%;
-    --card-foreground: 210 15% 93%;
-    --popover: 218 47% 12%;
-    --popover-foreground: 210 15% 93%;
-    --primary: 187 72% 42%;
-    --primary-foreground: 218 53% 8%;
-    --secondary: 218 42% 15%;
-    --secondary-foreground: 210 15% 93%;
-    --muted: 218 42% 15%;
-    --muted-foreground: 213 14% 48%;
-    --accent: 218 42% 15%;
-    --accent-foreground: 210 15% 93%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 15% 93%;
-    --border: 218 42% 15%;
-    --input: 218 50% 10%;
-    --ring: 187 72% 42%;
+    /* Neutral near-black ("zinc") system — flat surfaces, hairline borders.
+       Categorical data colors live in theme/tokens.ts, not here. */
+    --background: 240 6% 5%;
+    --foreground: 0 0% 98%;
+    --card: 240 5% 9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 187 75% 45%;
+    --primary-foreground: 240 8% 6%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 4% 15%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 16%;
+    --input: 240 5% 16%;
+    --ring: 187 75% 45%;
     --radius: 0.75rem;
     --explorer-canvas: 218 60% 5%;
   }
@@ -182,39 +184,28 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  /* Depth-layered page backdrop: dual radial accent glows + a faint grid. */
+  /* Flat neutral backdrop with a single, barely-there top sheen for depth. */
   .dashboard-bg {
     background-color: hsl(var(--background));
-    background-image:
-      radial-gradient(900px 520px at 10% -10%, rgba(6, 182, 212, 0.10), transparent 60%),
-      radial-gradient(820px 520px at 100% -4%, rgba(168, 85, 247, 0.06), transparent 55%),
-      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-    background-size: auto, auto, 42px 42px, 42px 42px;
-    background-attachment: fixed, fixed, scroll, scroll;
+    background-image: radial-gradient(
+      1200px 460px at 50% -260px,
+      rgba(255, 255, 255, 0.025),
+      transparent 70%
+    );
+    background-attachment: fixed;
   }
 
-  /* Elevated dashboard surface with a subtle top-light sheen + hover glow. */
+  /* Flat panel: neutral surface + hairline border, no glow. */
   .card-elevated {
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 42%),
-      hsl(218 48% 9%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.03),
-      0 10px 30px -18px rgba(0, 0, 0, 0.85);
-    transition:
-      border-color 200ms ease,
-      box-shadow 200ms ease,
-      transform 200ms ease;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    transition: border-color 160ms ease, background-color 160ms ease;
   }
 
   .card-elevated:hover {
-    border-color: rgba(6, 182, 212, 0.22);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
-      0 0 0 1px rgba(6, 182, 212, 0.10),
-      0 18px 44px -22px rgba(0, 0, 0, 0.9);
+    border-color: hsl(240 5% 26%);
+    background-color: hsl(240 5% 11%);
   }
 
   .glow-hover {
