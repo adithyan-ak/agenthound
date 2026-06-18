@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stack, Sidebar, Center } from "@/components/ui/layout";
 import { useFindingDetail } from "@/hooks/useFindingDetail";
 import { useFindingsNavigation } from "@/hooks/useFindingsNavigation";
 import { buildMarkdownReport } from "@/lib/findings/copy-report";
@@ -30,25 +31,33 @@ export function FindingDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-4">
+      <Stack className="p-6">
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-48 w-full" />
-        <div className="grid grid-cols-5 gap-6">
-          <div className="col-span-3"><Skeleton className="h-64 w-full" /></div>
-          <div className="col-span-2 space-y-4">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-48 w-full" />
-          </div>
-        </div>
-      </div>
+        <Sidebar
+          sidePosition="right"
+          sideWidth="22rem"
+          contentMin="58%"
+          side={
+            <Stack gap="1rem">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </Stack>
+          }
+          main={<Skeleton className="h-64 w-full" />}
+        />
+      </Stack>
     );
   }
 
   if (error || !detail) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
+      <Center
+        measure="32rem"
+        className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center"
+      >
         <div className="text-lg font-semibold text-foreground">Finding not found</div>
-        <p className="text-sm text-muted-foreground text-center max-w-md">
+        <p className="text-sm text-muted-foreground">
           This finding may have been resolved in a recent scan, or the scan data may have been cleared.
         </p>
         <button
@@ -57,7 +66,7 @@ export function FindingDetailPage() {
         >
           Back to Findings
         </button>
-      </div>
+      </Center>
     );
   }
 
@@ -69,36 +78,40 @@ export function FindingDetailPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
-      <FindingHeader
-        detail={detail}
-        prevId={prevId}
-        nextId={nextId}
-        onCopyReport={handleCopyReport}
-      />
+    <Center measure="84rem" className="p-6">
+      <Stack gap="1.5rem">
+        <FindingHeader
+          detail={detail}
+          prevId={prevId}
+          nextId={nextId}
+          onCopyReport={handleCopyReport}
+        />
 
-      <AttackPathDiagram
-        path={detail.attack_path}
-        severity={f.severity}
-        sourceId={f.source_id}
-        sourceName={f.source_name}
-        sourceKind={f.source_kind}
-        targetId={f.target_id}
-        targetName={f.target_name}
-        targetKind={f.target_kind}
-      />
+        <AttackPathDiagram
+          path={detail.attack_path}
+          severity={f.severity}
+          sourceId={f.source_id}
+          sourceName={f.source_name}
+          sourceKind={f.source_kind}
+          targetId={f.target_id}
+          targetName={f.target_name}
+          targetKind={f.target_kind}
+        />
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3">
-          <HopEvidenceTimeline path={detail.attack_path} />
-        </div>
-
-        <div className="lg:col-span-2 space-y-4">
-          <FindingImpact impact={detail.impact} path={detail.attack_path} />
-          <FindingRemediation steps={detail.remediation} />
-          <FindingReferences finding={f} />
-        </div>
-      </div>
-    </div>
+        <Sidebar
+          sidePosition="right"
+          sideWidth="22rem"
+          contentMin="58%"
+          side={
+            <Stack gap="1rem">
+              <FindingImpact impact={detail.impact} path={detail.attack_path} />
+              <FindingRemediation steps={detail.remediation} />
+              <FindingReferences finding={f} />
+            </Stack>
+          }
+          main={<HopEvidenceTimeline path={detail.attack_path} />}
+        />
+      </Stack>
+    </Center>
   );
 }

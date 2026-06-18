@@ -23,13 +23,13 @@ function severityGradient(solid: string): string {
 }
 
 const SEVERITY_FILL: Record<string, string> = {
-  critical: severityGradient(SEVERITY.critical!.solid),
-  high: severityGradient(SEVERITY.high!.solid),
-  medium: severityGradient(SEVERITY.medium!.solid),
-  low: severityGradient(SEVERITY.low!.solid),
+  critical: severityGradient(SEVERITY.critical.solid),
+  high: severityGradient(SEVERITY.high.solid),
+  medium: severityGradient(SEVERITY.medium.solid),
+  low: severityGradient(SEVERITY.low.solid),
 };
 
-const DEFAULT_FILL = severityGradient(SEVERITY.low!.solid);
+const DEFAULT_FILL = severityGradient(SEVERITY.low.solid);
 
 function getFill(sev: string): string {
   return SEVERITY_FILL[sev] ?? DEFAULT_FILL;

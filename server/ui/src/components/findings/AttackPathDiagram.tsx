@@ -31,7 +31,7 @@ export function AttackPathDiagram({
 
     return (
       <div className="rounded-lg border border-border bg-background/50 p-6">
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-4">
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-4">
           Attack Path
         </div>
         <div className="flex items-center justify-center gap-2 overflow-x-auto py-2">
@@ -50,7 +50,7 @@ export function AttackPathDiagram({
 
   return (
     <div className="rounded-lg border border-border bg-background/50 p-6">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-4">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-4">
         Attack Path
       </div>
       <div className="flex items-center justify-center overflow-x-auto py-2 gap-0">

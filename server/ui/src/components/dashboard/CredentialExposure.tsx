@@ -62,19 +62,19 @@ export function CredentialExposure() {
 
   const rows: MetricRow[] = [
     {
-      icon: <AlertTriangle className="h-4 w-4" style={{ color: SEVERITY.critical!.text }} />,
+      icon: <AlertTriangle className="h-4 w-4" style={{ color: SEVERITY.critical.text }} />,
       label: "Hardcoded / Exposed",
       count: hardcoded,
       severity: "critical",
     },
     {
-      icon: <Lock className="h-4 w-4" style={{ color: SEVERITY.high!.text }} />,
+      icon: <Lock className="h-4 w-4" style={{ color: SEVERITY.high.text }} />,
       label: "High-Entropy Secrets",
       count: highEntropy,
       severity: "high",
     },
     {
-      icon: <Package className="h-4 w-4" style={{ color: SEVERITY.medium!.text }} />,
+      icon: <Package className="h-4 w-4" style={{ color: SEVERITY.medium.text }} />,
       label: "Unpinned Packages",
       count: unpinned,
       severity: "medium",
@@ -82,9 +82,9 @@ export function CredentialExposure() {
   ];
 
   const SEVERITY_STYLE: Record<string, string> = {
-    critical: SEVERITY.critical!.badgeClass,
-    high: SEVERITY.high!.badgeClass,
-    medium: SEVERITY.medium!.badgeClass,
+    critical: SEVERITY.critical.badgeClass,
+    high: SEVERITY.high.badgeClass,
+    medium: SEVERITY.medium.badgeClass,
   };
 
   return (

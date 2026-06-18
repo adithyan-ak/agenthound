@@ -21,7 +21,7 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
 
   const pillClasses = cn(
     "group relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-    "transition-all duration-150 ease-out border",
+    "transition-[background-color,color,border-color] duration-150 ease-out border",
     "whitespace-nowrap select-none",
     active
       ? cn(lens.accentClass, "border-transparent shadow-lg")
@@ -65,7 +65,7 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
           align="start"
           sideOffset={8}
           className={cn(
-            "min-w-[240px] rounded-lg glass p-1.5 shadow-2xl",
+            "min-w-[240px] rounded-lg glass p-1.5 elev-3",
             "",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -127,7 +127,7 @@ export function LensBar() {
       <div
         className={cn(
           "flex items-center gap-1.5 rounded-full glass px-2 py-1.5",
-          "shadow-2xl",
+          "elev-2",
         )}
       >
         <div className="px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">

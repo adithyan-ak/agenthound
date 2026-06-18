@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SeverityBadge } from "@/components/ui/severity-badge";
 import { MiniHexIcon } from "./MiniHexIcon";
 import { cn } from "@/lib/utils";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY, SEVERITY_BY_KEY } from "@/theme/tokens";
 import type { FindingDetail } from "@/api/types";
 
 interface FindingHeaderProps {
@@ -19,7 +19,7 @@ interface FindingHeaderProps {
 export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingHeaderProps) {
   const navigate = useNavigate();
   const f = detail.finding;
-  const sev = SEVERITY[f.severity] ?? SEVERITY.low!;
+  const sev = SEVERITY_BY_KEY[f.severity] ?? SEVERITY.low;
   const [copied, setCopied] = useState(false);
 
   const hops = detail.composite_props?.hops;

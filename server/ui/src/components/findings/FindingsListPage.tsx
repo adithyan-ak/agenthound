@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MiniHexIcon } from "@/components/findings/MiniHexIcon";
 import { cn } from "@/lib/utils";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY, SEVERITY_BY_KEY } from "@/theme/tokens";
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -91,7 +91,7 @@ export function FindingsListPage() {
             className={cn(
               "rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors",
               activeSeverities.has(level)
-                ? (SEVERITY[level]?.badgeClass ?? SEVERITY.info!.badgeClass)
+                ? (SEVERITY_BY_KEY[level]?.badgeClass ?? SEVERITY.info.badgeClass)
                 : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/30",
             )}
           >
@@ -166,7 +166,7 @@ function FindingRow({ finding: f, onClick }: { finding: Finding; onClick: () => 
           variant="outline"
           className={cn(
             "text-[10px] font-semibold uppercase",
-            (SEVERITY[f.severity] ?? SEVERITY.low!).badgeClass,
+            (SEVERITY_BY_KEY[f.severity] ?? SEVERITY.low).badgeClass,
           )}
         >
           {f.severity}

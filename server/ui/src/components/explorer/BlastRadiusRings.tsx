@@ -104,7 +104,7 @@ export function BlastRadiusRings() {
 
 function NoSourceHint() {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-xl glass border-emerald-900/50 px-6 py-5 text-center shadow-2xl">
+    <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-xl glass border-emerald-900/50 px-6 py-5 text-center elev-2">
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
         Blast Radius
       </div>

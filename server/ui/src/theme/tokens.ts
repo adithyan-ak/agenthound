@@ -1,8 +1,11 @@
 import { AlertOctagon, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-// Canonical node kind colors — matches hex-config palette
-export const NODE_KIND_COLORS: Record<string, string> = {
+// Canonical node kind colors — matches hex-config palette.
+// Typed as a const-asserted object so consumers get string (not
+// string | undefined) on indexed access without a fallback hex.
+// Supplemental indexable type at the bottom of the file.
+export const NODE_KIND_COLORS = {
   AgentInstance: "#06B6D4",    // cyan-500
   A2AAgent: "#A855F7",        // purple-500
   MCPServer: "#10B981",       // emerald-500
@@ -40,7 +43,15 @@ export const NODE_KIND_COLORS: Record<string, string> = {
   // service. Plan suggested #F44336 red but it collides with MCPResource
   // #EF4444 — readers can't distinguish a sensitive resource from a model.
   AIModel: "#6A1B9A",            // deep purple — distinct from A2AAgent / AIService / QdrantInstance
-};
+} as const satisfies Record<string, string>;
+
+export type NodeKind = keyof typeof NODE_KIND_COLORS;
+
+// Dynamic-key lookup alias: when callers receive a runtime kind string
+// (e.g. from API responses), index through this view. Returns `string |
+// undefined` — fall back to NODE_KIND_COLORS.Identity for unknown kinds.
+export const NODE_KIND_COLORS_BY_KEY: Record<string, string | undefined> =
+  NODE_KIND_COLORS;
 
 // Severity system — solid color, muted bg, text, border, icon
 export interface SeverityStyle {
@@ -58,7 +69,7 @@ export interface SeverityStyle {
   dotClass: string;
 }
 
-export const SEVERITY: Record<string, SeverityStyle> = {
+export const SEVERITY = {
   critical: {
     solid: "#EF4444",
     bg: "rgba(239,68,68,0.12)",
@@ -114,7 +125,15 @@ export const SEVERITY: Record<string, SeverityStyle> = {
     borderLeftClass: "border-l-blue-500",
     dotClass: "bg-blue-500",
   },
-};
+} as const satisfies Record<string, SeverityStyle>;
+
+export type SeverityKey = keyof typeof SEVERITY;
+
+// Dynamic-key lookup alias: when callers index by a runtime severity
+// string, route through this view. Returns SeverityStyle | undefined —
+// fall back to SEVERITY.low for unknown levels.
+export const SEVERITY_BY_KEY: Record<string, SeverityStyle | undefined> =
+  SEVERITY;
 
 // Feedback colors for form validation / system messages
 export const FEEDBACK = {
@@ -170,3 +189,22 @@ export const EDGE_COLORS = {
 // Explorer canvas background
 export const EXPLORER_CANVAS_BG = "#050B18";
 export const EXPLORER_HEX_FILL = "#0B1220";
+
+// Lens accent tints — three accent tints for lenses whose semantics don't
+// map onto NODE_KIND_COLORS. Defined here so the literal lives in one place
+// and any color audit (Step 1 / linter) is single-source-of-truth.
+export const LENS_ACCENT = {
+  topology: "#3B82F6",   // blue-500 — neutral structural lens
+  attack: "#F97316",     // orange-500 — generic attack-surface accent
+  critical: "#DC2626",   // red-600 — distinct from MCPResource red-500 to
+                         // separate "critical lens" chrome from "resource node" fill
+} as const;
+
+// Dimmed state palette — used by lenses that fade out-of-scope nodes/edges
+// against the explorer canvas. These sit BETWEEN the canvas (#050B18) and
+// Host/ResourceGroup (#475569 / #64748B), so dimmed elements visibly recede
+// without disappearing into the background.
+export const DIMMED = {
+  deep: "#1E293B",   // slate-800 — "out of scope" / deepest dim
+  mid: "#334155",    // slate-700 — "low centrality" / mid dim
+} as const;

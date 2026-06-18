@@ -8,6 +8,7 @@ import { fetchNodes } from "@/api/graph";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Grid } from "@/components/ui/layout";
 import { NODE_KIND_COLORS, riskTextClass, riskBgClass } from "@/theme/tokens";
 
 interface StatCardProps {
@@ -83,28 +84,28 @@ export function StatCards() {
   const nc = data?.node_counts ?? {};
 
   const cards: StatCardProps[] = [
-    { icon: Bot, label: "Agents", value: nc.AgentInstance ?? 0, bgColor: NODE_KIND_COLORS.AgentInstance ?? "#06B6D4" },
-    { icon: Server, label: "MCP Servers", value: nc.MCPServer ?? 0, bgColor: NODE_KIND_COLORS.MCPServer ?? "#10B981" },
-    { icon: Users, label: "A2A Agents", value: nc.A2AAgent ?? 0, bgColor: NODE_KIND_COLORS.A2AAgent ?? "#A855F7" },
-    { icon: Wrench, label: "Tools", value: nc.MCPTool ?? 0, bgColor: NODE_KIND_COLORS.MCPTool ?? "#F59E0B" },
+    { icon: Bot, label: "Agents", value: nc.AgentInstance ?? 0, bgColor: NODE_KIND_COLORS.AgentInstance },
+    { icon: Server, label: "MCP Servers", value: nc.MCPServer ?? 0, bgColor: NODE_KIND_COLORS.MCPServer },
+    { icon: Users, label: "A2A Agents", value: nc.A2AAgent ?? 0, bgColor: NODE_KIND_COLORS.A2AAgent },
+    { icon: Wrench, label: "Tools", value: nc.MCPTool ?? 0, bgColor: NODE_KIND_COLORS.MCPTool },
   ];
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <Grid min="9rem" gap="1rem">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[76px] w-full" />
         ))}
-      </div>
+      </Grid>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+    <Grid min="9rem" gap="1rem">
       <ExposureCard />
       {cards.map((card) => (
         <StatCard key={card.label} {...card} />
       ))}
-    </div>
+    </Grid>
   );
 }

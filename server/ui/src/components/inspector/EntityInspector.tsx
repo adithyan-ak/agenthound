@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Crown, Target } from "lucide-react";
 import { fetchNode } from "@/api/graph";
 import { useGraphStore } from "@/store/graph";
-import { NODE_KIND_COLORS, riskBgClass } from "@/theme/tokens";
+import { NODE_KIND_COLORS, NODE_KIND_COLORS_BY_KEY, riskBgClass } from "@/theme/tokens";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,7 @@ export function EntityInspector() {
         <div className="flex items-center gap-2 mb-1">
           <span
             className="h-3 w-3 rounded-full flex-shrink-0"
-            style={{ backgroundColor: NODE_KIND_COLORS[kind] ?? "#999" }}
+            style={{ backgroundColor: NODE_KIND_COLORS_BY_KEY[kind] ?? NODE_KIND_COLORS.Identity }}
           />
           <Badge variant="secondary" className="text-[10px]">
             {kind}

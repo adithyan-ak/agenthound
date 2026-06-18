@@ -1,3 +1,4 @@
+import { Stack, Switcher } from "@/components/ui/layout";
 import { StatCards } from "./StatCards";
 import { RiskChart } from "./RiskChart";
 import { AuthCoverage } from "./AuthCoverage";
@@ -9,22 +10,22 @@ import { RecentScans } from "./RecentScans";
 
 export function Dashboard() {
   return (
-    <div className="space-y-6 p-6">
+    <Stack className="p-6" gap="1.5rem">
       <h2 className="text-lg font-semibold text-foreground">Dashboard</h2>
       <StatCards />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <Switcher threshold="48rem">
         <RiskChart />
         <TopRiskyEntities />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      </Switcher>
+      <Switcher threshold="48rem">
         <AuthCoverage />
         <CredentialExposure />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      </Switcher>
+      <Switcher threshold="48rem">
         <CrossProtocol />
         <TopFindings />
-      </div>
+      </Switcher>
       <RecentScans />
-    </div>
+    </Stack>
   );
 }

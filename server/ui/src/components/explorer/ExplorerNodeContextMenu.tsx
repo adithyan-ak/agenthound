@@ -286,7 +286,7 @@ export function ExplorerNodeContextMenu() {
       ref={menuRef}
       role="menu"
       className={cn(
-        "fixed z-[70] overflow-hidden rounded-lg glass shadow-2xl",
+        "fixed z-[70] overflow-hidden rounded-lg glass elev-3",
         "animate-in fade-in zoom-in-95 duration-100",
       )}
       style={{ left, top, width: MENU_WIDTH }}

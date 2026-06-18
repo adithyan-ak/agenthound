@@ -72,7 +72,7 @@ export function RiskBreakdown({ properties, kind }: RiskBreakdownProps) {
         </div>
         <div className="h-3 rounded-full bg-muted overflow-hidden">
           <div
-            className={cn("h-full rounded-full transition-all", riskBgClass(totalScore))}
+            className={cn("h-full rounded-full transition-[width] duration-150 ease-out", riskBgClass(totalScore))}
             style={{ width: `${Math.min(totalScore, 100)}%` }}
           />
         </div>

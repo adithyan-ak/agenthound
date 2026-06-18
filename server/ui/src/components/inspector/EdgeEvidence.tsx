@@ -10,6 +10,7 @@ import {
 import { fetchEdges } from "@/api/graph";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switcher } from "@/components/ui/layout";
 import { getEdgeCategory } from "@/lib/edge-styles";
 import { cn } from "@/lib/utils";
 
@@ -189,7 +190,7 @@ export function EdgeEvidence({ edgeId }: EdgeEvidenceProps) {
 
       {/* Risk + Confidence */}
       {(riskWeight > 0 || confidence > 0) && (
-        <div className="grid grid-cols-2 gap-2">
+        <Switcher threshold="14rem" gap="0.5rem">
           {riskWeight > 0 && (
             <div className="rounded border border-border bg-background/40 p-2">
               <div className="flex items-center gap-1 text-muted-foreground mb-1">
@@ -212,7 +213,7 @@ export function EdgeEvidence({ edgeId }: EdgeEvidenceProps) {
               </div>
             </div>
           )}
-        </div>
+        </Switcher>
       )}
 
       {/* Exploit explanation */}

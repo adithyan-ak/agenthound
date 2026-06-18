@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { fetchFindings } from "@/api/analysis";
 import { useGraphStore } from "@/store/graph";
-import { SEVERITY } from "@/theme/tokens";
+import { SEVERITY_BY_KEY } from "@/theme/tokens";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -23,7 +23,7 @@ const SEVERITY_BADGE_VARIANT: Record<
 };
 
 function severityCardInlineStyle(level: string): CSSProperties {
-  const s = SEVERITY[level];
+  const s = SEVERITY_BY_KEY[level];
   if (!s) return {};
   return { borderColor: s.border, backgroundColor: s.bg };
 }

@@ -18,39 +18,74 @@ const config: Config = {
         overline: ["0.625rem", { lineHeight: "1.3", fontWeight: "600", letterSpacing: "0.12em" }],
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        // Semantic tokens — resolve to Radix-mauve / cyan / tomato steps
+        // via globals.css. Stored as space-separated RGB triplets so the
+        // Tailwind opacity modifier (`bg-primary/80`) keeps working.
+        border: "rgb(var(--border) / <alpha-value>)",
+        input: "rgb(var(--input) / <alpha-value>)",
+        ring: "rgb(var(--ring) / <alpha-value>)",
+        background: "rgb(var(--background) / <alpha-value>)",
+        foreground: "rgb(var(--foreground) / <alpha-value>)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "rgb(var(--primary) / <alpha-value>)",
+          foreground: "rgb(var(--primary-foreground) / <alpha-value>)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "rgb(var(--secondary) / <alpha-value>)",
+          foreground: "rgb(var(--secondary-foreground) / <alpha-value>)",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "rgb(var(--destructive) / <alpha-value>)",
+          foreground: "rgb(var(--destructive-foreground) / <alpha-value>)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "rgb(var(--muted) / <alpha-value>)",
+          foreground: "rgb(var(--muted-foreground) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+          foreground: "rgb(var(--accent-foreground) / <alpha-value>)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "rgb(var(--popover) / <alpha-value>)",
+          foreground: "rgb(var(--popover-foreground) / <alpha-value>)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "rgb(var(--card) / <alpha-value>)",
+          foreground: "rgb(var(--card-foreground) / <alpha-value>)",
         },
+        // Direct Radix step access — use sparingly, prefer semantic tokens.
+        // Useful when a component genuinely needs "step 8 border" rather
+        // than the abstracted `border` token.
+        mauve: {
+          1: "rgb(var(--mauve-1-raw) / <alpha-value>)",
+          2: "rgb(var(--mauve-2-raw) / <alpha-value>)",
+          3: "rgb(var(--mauve-3-raw) / <alpha-value>)",
+          4: "rgb(var(--mauve-4-raw) / <alpha-value>)",
+          5: "rgb(var(--mauve-5-raw) / <alpha-value>)",
+          6: "rgb(var(--mauve-6-raw) / <alpha-value>)",
+          7: "rgb(var(--mauve-7-raw) / <alpha-value>)",
+          8: "rgb(var(--mauve-8-raw) / <alpha-value>)",
+          9: "rgb(var(--mauve-9-raw) / <alpha-value>)",
+          10: "rgb(var(--mauve-10-raw) / <alpha-value>)",
+          11: "rgb(var(--mauve-11-raw) / <alpha-value>)",
+          12: "rgb(var(--mauve-12-raw) / <alpha-value>)",
+        },
+        cyan: {
+          8: "rgb(var(--cyan-8-raw) / <alpha-value>)",
+          9: "rgb(var(--cyan-9-raw) / <alpha-value>)",
+          10: "rgb(var(--cyan-10-raw) / <alpha-value>)",
+          11: "rgb(var(--cyan-11-raw) / <alpha-value>)",
+        },
+        tomato: {
+          3: "rgb(var(--tomato-3-raw) / <alpha-value>)",
+          9: "rgb(var(--tomato-9-raw) / <alpha-value>)",
+          11: "rgb(var(--tomato-11-raw) / <alpha-value>)",
+        },
+        // Domain palettes — node-kind hues (graph identity) and severity
+        // (information signal). These remain literal hex because they
+        // have to be perceptually distinct ACROSS hues, not within one
+        // ramp; a Radix scale per kind would defeat the purpose.
         node: {
           agent: "#06B6D4",
           server: "#10B981",
@@ -70,12 +105,16 @@ const config: Config = {
           low: "#94A3B8",
           info: "#64748B",
         },
-        explorer: { canvas: "hsl(var(--explorer-canvas))" },
+        explorer: { canvas: "rgb(var(--explorer-canvas) / <alpha-value>)" },
       },
       boxShadow: {
-        "glow-cyan": "0 0 0 1px rgba(6,182,212,0.20), 0 0 20px -4px rgba(6,182,212,0.15)",
-        "glow-orange": "0 0 0 1px rgba(249,115,22,0.40), 0 0 24px -4px rgba(249,115,22,0.25)",
-        "glow-critical": "0 0 0 1px rgba(239,68,68,0.40), 0 0 20px -4px rgba(239,68,68,0.30)",
+        "glow-cyan":
+          "0 0 0 1px rgb(var(--cyan-9-raw) / 0.20), 0 0 20px -4px rgb(var(--cyan-9-raw) / 0.15)",
+        // glow-orange retains its literal RGB — orange is a deliberate
+        // "active/selected" identity distinct from cyan hover.
+        "glow-orange": "0 0 0 1px rgb(249 115 22 / 0.40), 0 0 24px -4px rgb(249 115 22 / 0.25)",
+        "glow-critical":
+          "0 0 0 1px rgb(var(--tomato-9-raw) / 0.40), 0 0 20px -4px rgb(var(--tomato-9-raw) / 0.30)",
       },
       keyframes: {
         "slide-in-from-bottom-4": {

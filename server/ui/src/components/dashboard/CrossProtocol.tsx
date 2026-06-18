@@ -8,6 +8,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { InfoTip } from "./InfoTip";
 import { NODE_KIND_COLORS, SEVERITY } from "@/theme/tokens";
 
+// Sankey link/text colors — derived from kin nodes so the diagram reads as
+// a single perceptual family. `LINK` is a low-saturation neutral tied to
+// Host (the structural pivot itself); the per-column text colors are step-11
+// equivalents of each column's node color, used for legibility on the
+// translucent rect fill.
+const SANKEY_LINK = NODE_KIND_COLORS.ResourceGroup; // #64748B — neutral structural link
+const AGENT_TEXT = NODE_KIND_COLORS.A2ASkill;       // #C084FC — purple-400, ≈step 11 of A2A
+const HOST_TEXT = NODE_KIND_COLORS.Identity;        // #94A3B8 — slate-400, ≈step 11 of Host
+const HOST_STROKE = NODE_KIND_COLORS.Host;          // #475569 — slate-600
+const RESOURCE_TEXT = SEVERITY.critical.text;       // matches the red-tinted rect family
+
+
 interface PivotPath {
   agent: string;
   host: string;
@@ -78,13 +90,13 @@ function MiniSankey({ pivots }: { pivots: PivotPath[] }) {
             <path
               d={`M${x1},${ay} C${x1 + gap / 2},${ay} ${x2 - gap / 2},${hy} ${x2},${hy}`}
               fill="none"
-              stroke="#6b7280"
+              stroke={SANKEY_LINK}
               strokeWidth={1.5}
             />
             <path
               d={`M${x3},${hy} C${x3 + gap / 2},${hy} ${x4 - gap / 2},${ry} ${x4},${ry}`}
               fill="none"
-              stroke="#6b7280"
+              stroke={SANKEY_LINK}
               strokeWidth={1.5}
             />
           </g>
@@ -94,7 +106,7 @@ function MiniSankey({ pivots }: { pivots: PivotPath[] }) {
       {agents.map((name, i) => (
         <g key={`a-${name}`}>
           <rect x={col1X} y={agentYs[i]} width={colW} height={nodeH} rx={4} fill={NODE_KIND_COLORS.A2AAgent} fillOpacity={0.25} stroke={NODE_KIND_COLORS.A2AAgent} strokeWidth={1} />
-          <text x={col1X + 6} y={(agentYs[i] ?? 0) + 15} fill="#c4b5fd" fontSize={10} className="select-none">
+          <text x={col1X + 6} y={(agentYs[i] ?? 0) + 15} fill={AGENT_TEXT} fontSize={10} className="select-none">
             {name.length > 14 ? name.slice(0, 13) + "\u2026" : name}
           </text>
         </g>
@@ -102,8 +114,8 @@ function MiniSankey({ pivots }: { pivots: PivotPath[] }) {
 
       {hosts.map((name, i) => (
         <g key={`h-${name}`}>
-          <rect x={col2X} y={hostYs[i]} width={colW} height={nodeH} rx={4} fill={NODE_KIND_COLORS.Host} fillOpacity={0.5} stroke="#4a5568" strokeWidth={1} />
-          <text x={col2X + 6} y={(hostYs[i] ?? 0) + 15} fill="#a1a1aa" fontSize={10} className="select-none">
+          <rect x={col2X} y={hostYs[i]} width={colW} height={nodeH} rx={4} fill={NODE_KIND_COLORS.Host} fillOpacity={0.5} stroke={HOST_STROKE} strokeWidth={1} />
+          <text x={col2X + 6} y={(hostYs[i] ?? 0) + 15} fill={HOST_TEXT} fontSize={10} className="select-none">
             {name.length > 14 ? name.slice(0, 13) + "\u2026" : name}
           </text>
         </g>
@@ -112,7 +124,7 @@ function MiniSankey({ pivots }: { pivots: PivotPath[] }) {
       {resources.map((name, i) => (
         <g key={`r-${name}`}>
           <rect x={col3X} y={resourceYs[i]} width={colW} height={nodeH} rx={4} fill={NODE_KIND_COLORS.MCPResource} fillOpacity={0.2} stroke={NODE_KIND_COLORS.MCPResource} strokeWidth={1} />
-          <text x={col3X + 6} y={(resourceYs[i] ?? 0) + 15} fill="#fca5a5" fontSize={10} className="select-none">
+          <text x={col3X + 6} y={(resourceYs[i] ?? 0) + 15} fill={RESOURCE_TEXT} fontSize={10} className="select-none">
             {name.length > 14 ? name.slice(0, 13) + "\u2026" : name}
           </text>
         </g>
@@ -140,7 +152,7 @@ export function CrossProtocol() {
           {!isLoading && pivots.length > 0 && (
             <Badge
               variant="outline"
-              className={cn(SEVERITY.critical!.badgeClass, "text-[10px] font-semibold")}
+              className={cn(SEVERITY.critical.badgeClass, "text-[10px] font-semibold")}
             >
               {pivots.length}
             </Badge>

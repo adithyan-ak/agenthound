@@ -9,10 +9,10 @@ import { InfoTip } from "./InfoTip";
 import { SEVERITY } from "@/theme/tokens";
 
 const SEVERITY_STYLE: Record<string, string> = {
-  critical: SEVERITY.critical!.badgeClass,
-  high: SEVERITY.high!.badgeClass,
-  medium: SEVERITY.medium!.badgeClass,
-  low: SEVERITY.low!.badgeClass,
+  critical: SEVERITY.critical.badgeClass,
+  high: SEVERITY.high.badgeClass,
+  medium: SEVERITY.medium.badgeClass,
+  low: SEVERITY.low.badgeClass,
 };
 
 const SEVERITY_RANK: Record<string, number> = {

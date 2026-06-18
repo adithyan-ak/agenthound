@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { APIEdge } from "@/api/types";
 import { useExplorerStore } from "@/store/explorer";
+import { Switcher } from "@/components/ui/layout";
 import { cn } from "@/lib/utils";
 
 export function ConnectionsTab({
@@ -22,7 +23,7 @@ export function ConnectionsTab({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6 max-w-5xl">
+    <Switcher threshold="32rem" gap="1.5rem">
       <div>
         <div className="mb-2 flex items-center gap-2">
           <ArrowDown className="h-3 w-3 text-cyan-400" />
@@ -64,7 +65,7 @@ export function ConnectionsTab({
           ))}
         </div>
       </div>
-    </div>
+    </Switcher>
   );
 }
 

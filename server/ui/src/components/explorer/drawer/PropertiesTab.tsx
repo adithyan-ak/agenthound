@@ -1,4 +1,5 @@
 import type { APINode } from "@/api/types";
+import { Grid } from "@/components/ui/layout";
 
 const HIDDEN_KEYS = new Set([
   "objectid",
@@ -21,7 +22,7 @@ export function PropertiesTab({ node }: { node: APINode }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-3 max-w-4xl">
+    <Grid min="14rem" gap="0.75rem 2rem">
       {entries.map(([k, v]) => (
         <div key={k} className="flex flex-col gap-0.5 min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
@@ -32,7 +33,7 @@ export function PropertiesTab({ node }: { node: APINode }) {
           </div>
         </div>
       ))}
-    </div>
+    </Grid>
   );
 }
 

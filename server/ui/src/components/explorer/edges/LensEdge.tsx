@@ -5,15 +5,15 @@ import type { SeverityLevel } from "@/lib/explorer/lens-config";
 import { SEVERITY, EDGE_COLORS, NODE_KIND_COLORS } from "@/theme/tokens";
 
 const SEVERITY_COLORS: Record<SeverityLevel, string> = {
-  critical: SEVERITY.critical!.solid,
-  high: SEVERITY.high!.solid,
-  medium: SEVERITY.medium!.solid,
-  low: SEVERITY.low!.solid,
-  info: SEVERITY.info!.solid,
+  critical: SEVERITY.critical.solid,
+  high: SEVERITY.high.solid,
+  medium: SEVERITY.medium.solid,
+  low: SEVERITY.low.solid,
+  info: SEVERITY.info.solid,
 };
 
 const NEUTRAL_COLOR: string = EDGE_COLORS.structure;
-const CROSS_PROTOCOL_COLOR: string = NODE_KIND_COLORS.A2AAgent ?? "#A855F7";
+const CROSS_PROTOCOL_COLOR: string = NODE_KIND_COLORS.A2AAgent;
 
 function edgeColor(data: LensEdgeData): string {
   if (data.isCrossProtocol) return CROSS_PROTOCOL_COLOR;

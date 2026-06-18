@@ -28,7 +28,7 @@ export function ChainRibbon() {
       <div
         className={cn(
           "pointer-events-auto absolute bottom-7 left-1/2 z-20 -translate-x-1/2",
-          "rounded-xl border border-emerald-900/50 bg-emerald-950/60 px-5 py-3 shadow-2xl backdrop-blur",
+          "rounded-xl border border-emerald-900/50 bg-emerald-950/60 px-5 py-3 elev-2 backdrop-blur",
         )}
       >
         <div className="flex items-center gap-2 text-xs text-emerald-300">
@@ -43,9 +43,9 @@ export function ChainRibbon() {
     <div
       className={cn(
         "pointer-events-auto absolute bottom-7 left-1/2 z-20 -translate-x-1/2",
-        "max-w-[calc(100vw-48px)] rounded-xl glass border-red-900/40 p-3 shadow-2xl",
+        "max-w-[calc(100vw-48px)] rounded-xl glass border-red-900/40 p-3 elev-2",
       )}
-      style={{ borderTopColor: SEVERITY.critical!.solid, borderTopWidth: 3 }}
+      style={{ borderTopColor: SEVERITY.critical.solid, borderTopWidth: 3 }}
     >
       <div className="mb-2 flex items-center gap-2 px-1">
         <AlertOctagon className="h-3.5 w-3.5 text-red-400" strokeWidth={2.5} />
@@ -87,7 +87,7 @@ function ChainCard({
       onClick={onSelect}
       className={cn(
         "flex-shrink-0 w-[280px] rounded-lg border p-3 text-left",
-        "transition-all duration-150 ease-out",
+        "transition-[border-color,background-color,box-shadow] duration-150 ease-out",
         selected
           ? "border-red-500 bg-red-950/50 shadow-[0_0_20px_-4px_rgba(239,68,68,0.6)]"
           : "border-border bg-muted/60 hover:border-red-800 hover:bg-muted",
