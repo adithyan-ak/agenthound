@@ -138,7 +138,6 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 						},
 					},
 				})
-			res.Summary.CredentialsFound++
 		}
 	}
 

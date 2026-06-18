@@ -11,6 +11,17 @@ export type NodeKind =
   | "Host"
   | "ConfigFile"
   | "InstructionFile"
+  | "OllamaInstance"
+  | "VLLMInstance"
+  | "QdrantInstance"
+  | "MLflowServer"
+  | "LiteLLMGateway"
+  | "JupyterServer"
+  | "LangServeApp"
+  | "OpenWebUIInstance"
+  | "AIService"
+  | "AIModel"
+  | "ExtractedTrainingSignal"
   | "ResourceGroup"
   | "TrustZone";
 
@@ -28,6 +39,10 @@ export type EdgeKind =
   | "HAS_ENV_VAR"
   | "LOADS_INSTRUCTIONS"
   | "SAME_AUTH_DOMAIN"
+  | "EXPOSES"
+  | "EXPOSES_CREDENTIAL"
+  | "PROVIDES_MODEL"
+  | "EXTRACTED_FROM"
   | "HAS_ACCESS_TO"
   | "CAN_EXECUTE"
   | "SHADOWS"
@@ -76,10 +91,19 @@ export interface Finding {
   owasp_map: string[];
 }
 
+export type ScanStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  // Collection succeeded (real node/edge counts) but analysis
+  // post-processing failed; the `error` field carries the detail.
+  | "completed_with_errors"
+  | "failed";
+
 export interface Scan {
   id: string;
   collector: string;
-  status: string;
+  status: ScanStatus;
   started_at: string;
   completed_at?: string;
   node_count: number;

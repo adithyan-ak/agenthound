@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -17,8 +17,15 @@ import (
 )
 
 type ScanHandler struct {
-	scanStore *appdb.ScanStore
+	scanStore scanStore
 	graphDB   graph.GraphDB
+}
+
+type scanStore interface {
+	ListScans(ctx context.Context, limit, offset int) ([]model.Scan, error)
+	GetScan(ctx context.Context, id string) (*model.Scan, error)
+	CreateScan(ctx context.Context, scan *model.Scan) error
+	DeleteScan(ctx context.Context, id string) error
 }
 
 func NewScanHandler(store *appdb.ScanStore, graphDB graph.GraphDB) *ScanHandler {
@@ -113,20 +120,9 @@ func (h *ScanHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete edges owned by this scan from Neo4j.
-	if _, err := h.graphDB.ExecuteWrite(r.Context(),
-		`MATCH ()-[r]->() WHERE r.scan_id = $scan_id DELETE r RETURN count(r) AS deleted`,
-		map[string]any{"scan_id": id}); err != nil {
-		slog.Error("neo4j edge cleanup failed", "scan_id", id, "error", err)
-	}
-
-	// Delete orphaned nodes: nodes from this scan with no remaining edges.
-	if _, err := h.graphDB.ExecuteWrite(r.Context(),
-		`MATCH (n) WHERE n.scan_id = $scan_id
-		 AND NOT EXISTS { MATCH (n)-[]-() }
-		 DELETE n RETURN count(n) AS deleted`,
-		map[string]any{"scan_id": id}); err != nil {
-		slog.Error("neo4j node cleanup failed", "scan_id", id, "error", err)
+	if err := h.deleteScanGraphData(r.Context(), id); err != nil {
+		WriteInternalError(w, r, err)
+		return
 	}
 
 	// Delete PG scan record.
@@ -136,4 +132,23 @@ func (h *ScanHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *ScanHandler) deleteScanGraphData(ctx context.Context, id string) error {
+	if h.graphDB == nil {
+		return fmt.Errorf("delete scan graph data: graph database unavailable")
+	}
+	if _, err := h.graphDB.ExecuteWrite(ctx,
+		`MATCH ()-[r]->() WHERE r.scan_id = $scan_id DELETE r RETURN count(r) AS deleted`,
+		map[string]any{"scan_id": id}); err != nil {
+		return fmt.Errorf("delete scan graph edges: %w", err)
+	}
+	if _, err := h.graphDB.ExecuteWrite(ctx,
+		`MATCH (n) WHERE n.scan_id = $scan_id
+		 AND NOT EXISTS { MATCH (n)-[]-() }
+		 DELETE n RETURN count(n) AS deleted`,
+		map[string]any{"scan_id": id}); err != nil {
+		return fmt.Errorf("delete scan graph nodes: %w", err)
+	}
+	return nil
 }

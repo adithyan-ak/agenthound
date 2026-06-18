@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { scanStatusLabel } from "@/lib/format";
 
 interface ScanHistoryProps {
   scans: Scan[];
@@ -18,6 +19,7 @@ interface ScanHistoryProps {
 
 const STATUS_COLOR: Record<string, string> = {
   completed: "#3FB950",
+  completed_with_errors: "#F59E0B",
   running: "#F5A623",
   pending: "#7A828E",
   failed: "#EF4444",
@@ -114,7 +116,10 @@ export function ScanHistory({ scans, onDeleted }: ScanHistoryProps) {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 align-middle">
-                    <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className={cn("inline-flex items-center gap-1.5", scan.error && "cursor-help")}
+                      title={scan.error || undefined}
+                    >
                       <span
                         className={cn("h-2 w-2 rounded-[1px]", running && "animate-led-pulse")}
                         style={{ backgroundColor: statusColor, boxShadow: `0 0 6px -1px ${statusColor}` }}
@@ -123,7 +128,7 @@ export function ScanHistory({ scans, onDeleted }: ScanHistoryProps) {
                         className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em]"
                         style={{ color: statusColor }}
                       >
-                        {scan.status}
+                        {scanStatusLabel(scan.status)}
                       </span>
                     </span>
                   </td>

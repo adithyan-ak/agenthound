@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/adithyan-ak/agenthound/sdk/action"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 	"github.com/adithyan-ak/agenthound/sdk/module"
@@ -88,6 +90,96 @@ func (m *mockExtractor) Extract(ctx context.Context, t action.Target, opts actio
 	}, nil
 }
 
+// --- Mock Poisoner/Reverter ---
+
+type mockPoisoner struct {
+	id         string
+	targetKind string
+	state      *module.FileStatefulModule
+
+	called    bool
+	target    action.Target
+	payload   action.PoisonPayload
+	err       error
+	revertErr error
+
+	revertCalls int
+	authToken   string
+}
+
+func newMockPoisoner(id, targetKind string) *mockPoisoner {
+	return &mockPoisoner{
+		id:         id,
+		targetKind: targetKind,
+		state:      module.NewFileStatefulModule(id),
+	}
+}
+
+func (m *mockPoisoner) ID() string            { return m.id }
+func (m *mockPoisoner) Action() action.Action { return action.Poison }
+func (m *mockPoisoner) Target() string        { return m.targetKind }
+func (m *mockPoisoner) Description() string   { return "mock poisoner" }
+func (m *mockPoisoner) Version() string       { return "0.0.0" }
+func (m *mockPoisoner) IsDestructive() bool   { return true }
+func (m *mockPoisoner) Stateful() module.StatefulModule {
+	return m.state
+}
+func (m *mockPoisoner) Poison(ctx context.Context, t action.Target, payload action.PoisonPayload) (*action.PoisonReceipt, error) {
+	m.called = true
+	m.target = t
+	m.payload = payload
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &action.PoisonReceipt{
+		ModuleID:        m.id,
+		EngagementID:    payload.EngagementID,
+		Target:          t,
+		TargetID:        payload.TargetID,
+		OriginalContent: "original",
+		InjectedContent: payload.InjectionContent,
+		Mode:            payload.Mode,
+		DryRun:          payload.DryRun,
+	}, nil
+}
+func (m *mockPoisoner) Revert(ctx context.Context, receipt action.Receipt) error {
+	m.revertCalls++
+	if token, ok := ctx.Value(action.RevertAuthTokenKey{}).(string); ok {
+		m.authToken = token
+	}
+	return m.revertErr
+}
+
+func newPoisonTestCmd(input string, out *bytes.Buffer) *cobra.Command {
+	cmd := &cobra.Command{Use: "poison"}
+	cmd.Flags().String("type", "", "")
+	cmd.Flags().String("target-id", "", "")
+	cmd.Flags().String("inject", "", "")
+	cmd.Flags().String("inject-file", "", "")
+	cmd.Flags().String("mode", "replace", "")
+	cmd.Flags().Bool("commit", false, "")
+	cmd.Flags().String("engagement-id", "", "")
+	cmd.SetIn(strings.NewReader(input))
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	return cmd
+}
+
+func newRevertTestCmd(out *bytes.Buffer) *cobra.Command {
+	cmd := &cobra.Command{Use: "revert"}
+	cmd.Flags().String("auth-token", "", "")
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	return cmd
+}
+
+func mustSetFlag(t *testing.T, cmd *cobra.Command, name, value string) {
+	t.Helper()
+	if err := cmd.Flags().Set(name, value); err != nil {
+		t.Fatalf("set flag %s: %v", name, err)
+	}
+}
+
 // --- Loot tests ---
 
 func TestRunLoot_HappyPath(t *testing.T) {
@@ -126,6 +218,125 @@ func TestRunLoot_NoModule(t *testing.T) {
 	err := runLoot(lootCmd, []string{"10.0.0.1:4000"})
 	if err == nil || !strings.Contains(err.Error(), "no looter registered") {
 		t.Errorf("expected 'no looter registered' error, got: %v", err)
+	}
+}
+
+// --- Poison/Revert tests ---
+
+func TestRunPoison_DryRunPromptsAndPersistsReceipt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AGENTHOUND_STATE_DIR", filepath.Join(t.TempDir(), "state"))
+
+	mock := newMockPoisoner("mock.poison.dryrun", "mock-poison-dryrun")
+	module.Register(mock)
+	defer deregisterModule(t, mock.ID())
+
+	out := &bytes.Buffer{}
+	cmd := newPoisonTestCmd("AUTHORIZED\n", out)
+	mustSetFlag(t, cmd, "type", mock.Target())
+	mustSetFlag(t, cmd, "target-id", "tool-1")
+	mustSetFlag(t, cmd, "inject", "replace me")
+	mustSetFlag(t, cmd, "mode", "append")
+	mustSetFlag(t, cmd, "engagement-id", "ENG-CLI-POISON")
+
+	if err := runPoison(cmd, []string{"127.0.0.1:8080"}); err != nil {
+		t.Fatalf("runPoison: %v", err)
+	}
+	if !mock.called {
+		t.Fatal("mock Poisoner was not called")
+	}
+	if mock.target.Address != "127.0.0.1:8080" {
+		t.Errorf("target address = %q, want 127.0.0.1:8080", mock.target.Address)
+	}
+	if !mock.payload.DryRun {
+		t.Error("expected dry-run payload when --commit is unset")
+	}
+	if mock.payload.TargetID != "tool-1" || mock.payload.InjectionContent != "replace me" || mock.payload.Mode != "append" {
+		t.Errorf("payload not wired correctly: %+v", mock.payload)
+	}
+	if !strings.Contains(out.String(), "authorization confirmed") || !strings.Contains(out.String(), "DRY-RUN") {
+		t.Errorf("expected authorization and DRY-RUN output, got: %s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".agenthound", "poison-acknowledged")); err != nil {
+		t.Fatalf("poison sentinel was not written: %v", err)
+	}
+
+	receipts, err := mock.state.ReadReceipts("ENG-CLI-POISON")
+	if err != nil {
+		t.Fatalf("ReadReceipts: %v", err)
+	}
+	if len(receipts) != 1 {
+		t.Fatalf("expected 1 dry-run receipt, got %d", len(receipts))
+	}
+	receipt, ok := receipts[0].(*action.PoisonReceipt)
+	if !ok {
+		t.Fatalf("receipt type = %T, want *action.PoisonReceipt", receipts[0])
+	}
+	if !receipt.DryRun || receipt.TargetID != "tool-1" {
+		t.Errorf("unexpected persisted receipt: %+v", receipt)
+	}
+}
+
+func TestRunPoison_AuthorizationRejected(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AGENTHOUND_STATE_DIR", filepath.Join(t.TempDir(), "state"))
+
+	out := &bytes.Buffer{}
+	cmd := newPoisonTestCmd("not authorized\n", out)
+	mustSetFlag(t, cmd, "type", "unused")
+	mustSetFlag(t, cmd, "inject", "payload")
+	mustSetFlag(t, cmd, "engagement-id", "ENG-CLI-REJECT")
+
+	err := runPoison(cmd, []string{"127.0.0.1:8080"})
+	if err == nil || !strings.Contains(err.Error(), "authorization not confirmed") {
+		t.Fatalf("expected authorization rejection, got: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".agenthound", "poison-acknowledged")); !os.IsNotExist(statErr) {
+		t.Fatalf("sentinel should not be written on rejection, stat err: %v", statErr)
+	}
+}
+
+func TestRunRevert_DispatchesNonDryRunAndSkipsDryRun(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AGENTHOUND_STATE_DIR", filepath.Join(t.TempDir(), "state"))
+
+	mock := newMockPoisoner("mock.poison.revert", "mock-poison-revert")
+	module.Register(mock)
+	defer deregisterModule(t, mock.ID())
+
+	if _, err := mock.state.WriteReceipt("ENG-CLI-REVERT", &action.PoisonReceipt{
+		ModuleID:     mock.ID(),
+		EngagementID: "ENG-CLI-REVERT",
+		DryRun:       true,
+	}); err != nil {
+		t.Fatalf("write dry-run receipt: %v", err)
+	}
+	if _, err := mock.state.WriteReceipt("ENG-CLI-REVERT", &action.PoisonReceipt{
+		ModuleID:     mock.ID(),
+		EngagementID: "ENG-CLI-REVERT",
+		TargetID:     "tool-1",
+		DryRun:       false,
+	}); err != nil {
+		t.Fatalf("write applied receipt: %v", err)
+	}
+
+	out := &bytes.Buffer{}
+	cmd := newRevertTestCmd(out)
+	mustSetFlag(t, cmd, "auth-token", "test-token")
+
+	if err := runRevert(cmd, []string{"ENG-CLI-REVERT"}); err != nil {
+		t.Fatalf("runRevert: %v", err)
+	}
+	if mock.revertCalls != 1 {
+		t.Fatalf("revert calls = %d, want 1", mock.revertCalls)
+	}
+	if mock.authToken != "test-token" {
+		t.Errorf("auth token = %q, want test-token", mock.authToken)
+	}
+	if !strings.Contains(out.String(), "dry-run receipt") || !strings.Contains(out.String(), "1 reverted") {
+		t.Errorf("unexpected revert output: %s", out.String())
 	}
 }
 

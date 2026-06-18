@@ -83,6 +83,34 @@ describe("ScanManager", () => {
     expect(screen.getByText("87")).toBeInTheDocument();
   });
 
+  it("renders completed_with_errors with a friendly label, real counts, and the error", async () => {
+    mockedFetchScans.mockResolvedValue([
+      {
+        id: "scan-err00000-zzz",
+        collector: "mcp",
+        status: "completed_with_errors",
+        started_at: "2026-04-09T10:00:00Z",
+        completed_at: "2026-04-09T10:05:00Z",
+        node_count: 12,
+        edge_count: 7,
+        error: "post-processing: cypher syntax error",
+      },
+    ]);
+
+    render(<ScanManager />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText("Completed with errors")).toBeInTheDocument();
+    });
+    // Collection succeeded, so the real non-zero counts still render.
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+    // The post-processing error is surfaced (as a tooltip on the status).
+    expect(
+      screen.getByTitle("post-processing: cypher syntax error"),
+    ).toBeInTheDocument();
+  });
+
   it("renders loading state", () => {
     mockedFetchScans.mockReturnValue(new Promise(() => {}));
 

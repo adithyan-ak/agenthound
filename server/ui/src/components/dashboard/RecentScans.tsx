@@ -12,13 +12,14 @@ import {
 } from "@/components/ui/table";
 import { WidgetCard, StatusPill } from "./kit";
 import type { PillTone } from "./kit";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, scanStatusLabel } from "@/lib/format";
 
 const INFO =
   "The most recent scan runs: collector, status, and how many nodes and edges each discovered. Run 'agenthound scan' to trigger a new scan.";
 
 const STATUS_TONE: Record<string, PillTone> = {
   completed: "success",
+  completed_with_errors: "warning",
   running: "warning",
   failed: "error",
   pending: "neutral",
@@ -61,7 +62,9 @@ export function RecentScans() {
   const sparkValues = useMemo(
     () =>
       (scans ?? [])
-        .filter((s) => s.status === "completed")
+        // completed_with_errors still populated the graph, so its node
+        // count is real and belongs in the inventory trend.
+        .filter((s) => s.status === "completed" || s.status === "completed_with_errors")
         .slice(0, 12)
         .reverse()
         .map((s) => s.node_count),
@@ -105,7 +108,7 @@ export function RecentScans() {
                       tone={STATUS_TONE[scan.status] ?? "neutral"}
                       pulse={scan.status === "running"}
                     >
-                      {scan.status}
+                      {scanStatusLabel(scan.status)}
                     </StatusPill>
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right font-mono text-[12px] tabular-nums text-foreground/80">

@@ -83,7 +83,11 @@ export function DashboardHeader() {
 
   const neo4jOk = (health?.neo4j ?? "").toLowerCase() === "ok";
   const postgresOk = (health?.postgres ?? "").toLowerCase() === "ok";
-  const lastCompleted = (scans ?? []).find((s) => s.status === "completed");
+  // completed_with_errors still populated the graph, so it counts as the
+  // latest run for "last scan" timing purposes.
+  const lastCompleted = (scans ?? []).find(
+    (s) => s.status === "completed" || s.status === "completed_with_errors",
+  );
   const running = (scans ?? []).some((s) => s.status === "running");
 
   const critical = (findings ?? []).filter((f) => f.severity === "critical").length;

@@ -41,14 +41,10 @@ func (w *Writer) detectAPOC(ctx context.Context) {
 		session := w.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 		defer session.Close(ctx)
 		_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			res, err := tx.Run(ctx, "CALL dbms.procedures() YIELD name WHERE name = 'apoc.merge.relationship' RETURN name", nil)
-			if err != nil {
-				return nil, err
+			if name, err := detectAPOCWithQuery(ctx, tx, "SHOW PROCEDURES YIELD name WHERE name = 'apoc.merge.relationship' RETURN name"); err == nil {
+				return name, nil
 			}
-			if res.Next(ctx) {
-				return res.Record().Values[0], nil
-			}
-			return nil, fmt.Errorf("apoc.merge.relationship not found")
+			return detectAPOCWithQuery(ctx, tx, "CALL dbms.procedures() YIELD name WHERE name = 'apoc.merge.relationship' RETURN name")
 		})
 		w.hasAPOC = err == nil
 		if w.hasAPOC {
@@ -57,6 +53,17 @@ func (w *Writer) detectAPOC(ctx context.Context) {
 			slog.Info("APOC not available, using fallback writer")
 		}
 	})
+}
+
+func detectAPOCWithQuery(ctx context.Context, tx neo4j.ManagedTransaction, cypher string) (any, error) {
+	res, err := tx.Run(ctx, cypher, nil)
+	if err != nil {
+		return nil, err
+	}
+	if res.Next(ctx) {
+		return res.Record().Values[0], nil
+	}
+	return nil, fmt.Errorf("apoc.merge.relationship not found")
 }
 
 func (w *Writer) WriteNodes(ctx context.Context, nodes []ingest.Node, scanID string) (int, error) {

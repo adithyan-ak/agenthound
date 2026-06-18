@@ -19,7 +19,11 @@ export function InventoryTrend() {
   const { data: scans, isLoading } = useDashboardScans();
 
   const data = useMemo(() => {
-    const usable = (scans ?? []).filter((s) => s.status === "completed");
+    // Include completed_with_errors: the graph was populated, so the
+    // node/edge counts are real and part of the surface growth trend.
+    const usable = (scans ?? []).filter(
+      (s) => s.status === "completed" || s.status === "completed_with_errors",
+    );
     return usable
       .slice()
       .reverse()

@@ -48,6 +48,20 @@ score = 0.30 * credential + 0.25 * blast_radius + 0.20 * auth_posture
 | `tool_surface` | `min(trusted_tool_count * 5, 100)` |
 | `poisoning` | 100 if any loaded instruction file is suspicious; 0 otherwise |
 
+### A2AAgent
+
+```
+score = 0.30 * auth_strength + 0.30 * blast_radius + 0.25 * delegation_surface
+      + 0.15 * impersonation
+```
+
+| Component | Computation |
+|-----------|-------------|
+| `auth_strength` | none=100, apiKey=70, bearer=50, oauth=25, mtls=10 |
+| `blast_radius` | `min(reachable_mcp_resource_count * 10, 100)` |
+| `delegation_surface` | `min(delegated_a2a_agent_count * 20, 100)` |
+| `impersonation` | `min(can_impersonate_peer_count * 25, 100)` |
+
 ### MCPServer
 
 ```

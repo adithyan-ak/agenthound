@@ -60,7 +60,6 @@ MATCH (gw:LiteLLMGateway)-[:EXPOSES_CREDENTIAL]->(c1master:Credential)
 WHERE c1master.value_hash = c1.value_hash AND c1master.objectid <> c1.objectid
 MATCH (gw)-[:EXPOSES_CREDENTIAL]->(c2:Credential)
 WHERE c2.type IN ['apiKey', 'virtual_key'] AND c2.objectid <> c1master.objectid
-      AND NOT EXISTS((a)-[:CAN_REACH]->(c2))
 MERGE (a)-[e:CAN_REACH]->(c2)
 SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
     e.source_collector = 'cross_service_credential_chain',

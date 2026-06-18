@@ -39,6 +39,7 @@ func (p *RiskScore) Process(ctx context.Context, db graph.GraphDB, scanID string
 
 	scorers := []scorer{
 		{"AgentInstance", riskscore.AgentRiskScore},
+		{"A2AAgent", riskscore.A2AAgentRiskScore},
 		{"MCPServer", riskscore.ServerRiskScore},
 		{"MCPTool", riskscore.ToolRiskScore},
 	}

@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import { Dashboard } from "@/components/dashboard/Dashboard";
 import { StatCards } from "@/components/dashboard/StatCards";
 
 vi.mock("@/hooks/useGraph", () => ({
@@ -29,7 +31,9 @@ function createWrapper() {
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </MemoryRouter>
     );
   };
 }
@@ -105,5 +109,26 @@ describe("StatCards", () => {
     // One "0" per KPI tile (Agents, MCP Servers, A2A Agents, Tools, Credentials).
     const zeros = screen.getAllByText("0");
     expect(zeros).toHaveLength(5);
+  });
+});
+
+describe("Dashboard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders an error state when graph stats fail", () => {
+    mockedUseGraphStats.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error("stats unavailable"),
+      isError: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useGraphStats>);
+
+    render(<Dashboard />, { wrapper: createWrapper() });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Dashboard unavailable");
+    expect(screen.queryByText("No attack surface mapped")).not.toBeInTheDocument();
   });
 });

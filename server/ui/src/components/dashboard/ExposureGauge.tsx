@@ -67,7 +67,11 @@ export function ExposureGauge() {
   const pointer = riskColor(score);
   const { label, color } = band(score);
 
-  const completed = (scans ?? []).filter((s) => s.status === "completed");
+  // completed_with_errors populated the graph too, so its node count is a
+  // valid data point for the entity delta.
+  const completed = (scans ?? []).filter(
+    (s) => s.status === "completed" || s.status === "completed_with_errors",
+  );
   const delta =
     completed.length >= 2
       ? (completed[0]?.node_count ?? 0) - (completed[1]?.node_count ?? 0)

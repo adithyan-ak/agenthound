@@ -104,4 +104,7 @@ func TestCrossServiceCredentialChain_CypherJoinsOnValueHash(t *testing.T) {
 	if !strings.Contains(captured, "source_collector") {
 		t.Errorf("Cypher missing source_collector tag (required for stale-edge cleanup); query:\n%s", captured)
 	}
+	if strings.Contains(captured, "NOT EXISTS((a)-[:CAN_REACH]->(c2))") {
+		t.Errorf("Cypher must refresh existing CAN_REACH scan_id instead of skipping matches; query:\n%s", captured)
+	}
 }

@@ -179,7 +179,7 @@ Requires the external A2A agent has no authentication. The pivot point is host c
 
 ## 11. risk_score
 
-**Computes:** `risk_score` property on AgentInstance, MCPServer, MCPTool nodes (0-100)
+**Computes:** `risk_score` property on AgentInstance, A2AAgent, MCPServer, MCPTool nodes (0-100)
 
 Depends on ALL prior processors (uses their edges for scoring). Iterates all nodes of each scored kind and invokes per-kind scoring functions from `analysis/riskscore/`.
 
@@ -189,6 +189,12 @@ Depends on ALL prior processors (uses their edges for scoring). Iterates all nod
 - 0.20 x auth posture
 - 0.15 x tool surface
 - 0.10 x poisoning exposure
+
+**A2A agent score (0-100):**
+- 0.30 x auth strength
+- 0.30 x cross-protocol blast radius
+- 0.25 x delegation surface
+- 0.15 x impersonation exposure
 
 **Server score (0-100):**
 - 0.35 x auth strength
@@ -206,7 +212,7 @@ Depends on ALL prior processors (uses their edges for scoring). Iterates all nod
 
 ## Stale-Edge Cleanup
 
-Before processors run, `cleanStaleCompositeEdges()` deletes composite edges from previous scans scoped by the current scan's collector(s):
+Before processors run, `cleanStaleCompositeEdges()` deletes composite edges from previous scans scoped by the current scan's collector(s). Collector names are expanded to include processor-owned derived sources when needed, such as `cross_service_credential_chain` for config or network-scan inputs:
 
 ```cypher
 MATCH ()-[r]->()
@@ -216,4 +222,4 @@ WHERE r.is_composite = true
 DELETE r
 ```
 
-This prevents stale findings from accumulating while preserving composite edges from other collectors. An MCP-only re-scan deletes old MCP composite edges but leaves A2A edges untouched.
+This prevents stale findings from accumulating while preserving composite edges from other collectors. An MCP-only re-scan deletes old MCP composite edges but leaves A2A and credential-chain edges untouched; a config or network re-scan also cleans credential-chain edges because those findings depend on the refreshed credential inputs.

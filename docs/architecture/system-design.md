@@ -58,14 +58,14 @@ scan --config         scan --mcp --url <url>           scan --a2a --target <url>
                         v
               Query / Pathfinding
               (Cypher, APOC Dijkstra,
-               17 pre-built queries)
+               18 pre-built queries)
 ```
 
 ## Graph Data Model
 
 **Core direction:** `Agent -> Server -> Tool -> Resource`. Edges represent exploitable relationships.
 
-### Node Types (14 total)
+### Node Types (25 total)
 
 | Label | Source | Description |
 |-------|--------|-------------|
@@ -81,17 +81,29 @@ scan --config         scan --mcp --url <url>           scan --a2a --target <url>
 | Host | Config + A2A | Hostname or IP with network classification |
 | ConfigFile | Config | Parsed configuration file |
 | InstructionFile | Config | Agent instruction file with poisoning signals |
+| OllamaInstance | Network scan + Ollama fingerprinter | Ollama service endpoint and anonymous loot posture |
+| VLLMInstance | Network scan + vLLM fingerprinter | vLLM service endpoint and auth posture |
+| QdrantInstance | Network scan + Qdrant fingerprinter | Qdrant endpoint and collection metadata |
+| MLflowServer | Network scan + MLflow fingerprinter | MLflow endpoint, experiments, and run metadata |
+| LiteLLMGateway | Network scan + LiteLLM fingerprinter | LiteLLM gateway endpoint and credential exposure |
+| JupyterServer | Network scan + Jupyter fingerprinter | Jupyter endpoint and token posture |
+| LangServeApp | Network scan + LangServe fingerprinter | LangServe endpoint and chain metadata |
+| OpenWebUIInstance | Network scan + Open WebUI fingerprinter | Open WebUI endpoint and auth posture |
+| AIService | Multi-label umbrella | Companion label shared by AI service nodes |
+| AIModel | Looter | Model artifact served by an AI service |
+| ExtractedTrainingSignal | Extractor | Signal recovered from a model artifact |
 | ResourceGroup | Post-processor | Synthetic: groups resources by sensitivity |
 | TrustZone | Post-processor | Synthetic: groups nodes by trust level |
 
 Node IDs are deterministic SHA-256 hashes of `Kind:` + identifying properties. MCPServer IDs
 match across Config and MCP collectors -- this is the merge point connecting trust to capabilities.
 
-### Edge Types (21 total)
+### Edge Types (25 total)
 
-**13 raw edges** (from collectors): TRUSTS_SERVER, PROVIDES_TOOL, PROVIDES_RESOURCE,
+**17 raw edges** (from collectors): TRUSTS_SERVER, PROVIDES_TOOL, PROVIDES_RESOURCE,
 PROVIDES_PROMPT, ADVERTISES_SKILL, DELEGATES_TO, AUTHENTICATES_WITH, USES_CREDENTIAL,
-RUNS_ON, CONFIGURED_IN, HAS_ENV_VAR, LOADS_INSTRUCTIONS, SAME_AUTH_DOMAIN.
+RUNS_ON, CONFIGURED_IN, HAS_ENV_VAR, LOADS_INSTRUCTIONS, SAME_AUTH_DOMAIN, EXPOSES,
+EXPOSES_CREDENTIAL, PROVIDES_MODEL, EXTRACTED_FROM.
 
 **8 composite edges** (computed by post-processors in dependency order):
 

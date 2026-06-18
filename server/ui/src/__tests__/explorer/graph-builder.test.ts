@@ -31,9 +31,14 @@ const FIXTURE_NODES: APINode[] = [
   n("tool-1", "MCPTool", { has_injection_patterns: true }),
   n("resource-1", "MCPResource", { sensitivity: "critical" }),
   n("a2a-1", "A2AAgent"),
+  n("a2a-2", "A2AAgent"),
   n("host-1", "Host"),
   n("cred-1", "Credential", { is_exposed: true }),
   n("identity-1", "Identity"),
+  n("litellm-1", "LiteLLMGateway"),
+  n("ollama-1", "OllamaInstance"),
+  n("model-1", "AIModel"),
+  n("signal-1", "ExtractedTrainingSignal"),
 ];
 
 const FIXTURE_EDGES: APIEdge[] = [
@@ -55,6 +60,14 @@ const FIXTURE_EDGES: APIEdge[] = [
   e("a2a-1", "host-1", "RUNS_ON"),
   e("server-1", "identity-1", "AUTHENTICATES_WITH"),
   e("identity-1", "cred-1", "USES_CREDENTIAL"),
+  e("server-1", "cred-1", "HAS_ENV_VAR"),
+  e("litellm-1", "cred-1", "EXPOSES_CREDENTIAL"),
+  e("a2a-1", "a2a-2", "DELEGATES_TO"),
+  e("a2a-1", "a2a-2", "SAME_AUTH_DOMAIN"),
+  e("a2a-1", "a2a-2", "CAN_IMPERSONATE"),
+  e("litellm-1", "ollama-1", "EXPOSES"),
+  e("ollama-1", "model-1", "PROVIDES_MODEL"),
+  e("model-1", "signal-1", "EXTRACTED_FROM"),
 ];
 
 const FIXTURE_FINDINGS: Finding[] = [
@@ -170,10 +183,20 @@ describe("buildExplorerGraph", () => {
         findings: FIXTURE_FINDINGS,
       },
     );
-    const kinds = new Set(result.edges.map((e) => (e.data as { kind: string }).kind));
+    const kinds = new Set(
+      result.edges.flatMap((e) => {
+        const data = e.data as { kind: string; bundledKinds?: string[] };
+        return data.bundledKinds ?? [data.kind];
+      }),
+    );
     expect(kinds.has("TRUSTS_SERVER")).toBe(true);
     expect(kinds.has("PROVIDES_TOOL")).toBe(true);
     expect(kinds.has("RUNS_ON")).toBe(true);
+    expect(kinds.has("DELEGATES_TO")).toBe(true);
+    expect(kinds.has("SAME_AUTH_DOMAIN")).toBe(true);
+    expect(kinds.has("EXPOSES")).toBe(true);
+    expect(kinds.has("PROVIDES_MODEL")).toBe(true);
+    expect(kinds.has("EXTRACTED_FROM")).toBe(true);
     expect(kinds.has("CAN_REACH")).toBe(false);
     expect(kinds.has("HAS_ACCESS_TO")).toBe(false);
   });
@@ -193,6 +216,7 @@ describe("buildExplorerGraph", () => {
     expect(kinds.has("HAS_ACCESS_TO")).toBe(true);
     expect(kinds.has("CAN_REACH")).toBe(true);
     expect(kinds.has("CAN_EXFILTRATE_VIA")).toBe(true);
+    expect(kinds.has("CAN_IMPERSONATE")).toBe(true);
     expect(kinds.has("TRUSTS_SERVER")).toBe(false);
   });
 
@@ -216,7 +240,7 @@ describe("buildExplorerGraph", () => {
     expect(kinds.has("TRUSTS_SERVER")).toBe(false);
   });
 
-  it("Credentials lens renders AUTHENTICATES_WITH and USES_CREDENTIAL", () => {
+  it("Credentials lens renders credential flow and exposure edges", () => {
     const lens = getLens("credentials");
     const result = buildExplorerGraph(
       { nodes: FIXTURE_NODES, edges: FIXTURE_EDGES },
@@ -230,6 +254,8 @@ describe("buildExplorerGraph", () => {
     const kinds = new Set(result.edges.map((e) => (e.data as { kind: string }).kind));
     expect(kinds.has("AUTHENTICATES_WITH")).toBe(true);
     expect(kinds.has("USES_CREDENTIAL")).toBe(true);
+    expect(kinds.has("HAS_ENV_VAR")).toBe(true);
+    expect(kinds.has("EXPOSES_CREDENTIAL")).toBe(true);
     expect(kinds.has("CAN_REACH")).toBe(false);
   });
 

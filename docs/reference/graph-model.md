@@ -14,7 +14,7 @@ An attacker (or a compromised agent) moves along edge direction to escalate acce
 
 ## 1. Node Types
 
-### Collector-Produced (22 kinds)
+### Collector-Produced (23 kinds)
 
 These are the node kinds accepted in ingest input (`sdk/ingest.AllowedNodeKinds`).
 
@@ -42,6 +42,7 @@ These are the node kinds accepted in ingest input (`sdk/ingest.AllowedNodeKinds`
 | `OpenWebUIInstance` | Network scan + Open WebUI fingerprinter | `endpoint`, `version`, `webui_auth_enabled` |
 | `AIService` | Multi-label umbrella (see below) | _(no unique properties — carried as companion label)_ |
 | `AIModel` | Ollama Looter | `name`, `size`, `digest`, `family`, `parameter_size`, `quantization` |
+| `ExtractedTrainingSignal` | Extractors | `kind`, `source_model`, `sample_count`, `confidence` |
 
 ### Synthetic (2 kinds, post-processor created)
 
@@ -66,7 +67,7 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 
 ## 3. Edge Types
 
-### Raw Edges (16 collector-produced)
+### Raw Edges (17 collector-produced)
 
 | Edge | Source | Target | Collector | Meaning |
 |------|--------|--------|-----------|---------|
@@ -86,6 +87,7 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 | `EXPOSES` | AIService | AIService | Fingerprinters | Service exposes another service (e.g., Open WebUI → Ollama backend) |
 | `EXPOSES_CREDENTIAL` | AIService | Credential | LiteLLM Looter | Service exposes credential material (master keys, upstream provider keys, virtual keys) |
 | `PROVIDES_MODEL` | OllamaInstance | AIModel | Ollama Looter | Instance serves this model |
+| `EXTRACTED_FROM` | AIModel | ExtractedTrainingSignal | Extractors | Extracted signal was derived from this model |
 
 ### Composite Edges (8 post-processor computed)
 
@@ -124,7 +126,7 @@ type Edge struct {
 | `is_composite` | bool | True for post-processed edges |
 | `evidence` | string | Human-readable explanation |
 
-Composite edges additionally carry `source_collector` (`mcp` or `a2a`) for scoped stale-edge cleanup.
+Composite edges additionally carry `source_collector` (`mcp`, `a2a`, `config`, or a processor-owned source such as `cross_service_credential_chain`) for scoped stale-edge cleanup.
 
 ---
 
@@ -165,7 +167,7 @@ The `value_hash` property on `Credential` nodes is the cross-collector merge pri
 
 This is what enables attack paths like: `AgentInstance → MCPServer → Credential ← LiteLLMGateway → upstream provider` — proving that a local agent's environment variable is the same key that a LiteLLM gateway uses to reach an upstream LLM provider.
 
-**Requirement:** Every v0.3+ Looter MUST populate `value_hash` on every emitted Credential node.
+**Requirement:** Every collector or looter MUST populate `value_hash` on every emitted Credential node.
 
 ---
 
@@ -242,7 +244,7 @@ Nodes merge by `objectid` using Cypher `MERGE`. When the same entity appears fro
 
 ### Stale Edge Cleanup
 
-On partial scans (e.g., only the MCP collector ran), only composite edges whose `source_collector` matches the current scan's collector are deleted and recomputed. This prevents ping-pong deletion when collectors run independently on different schedules.
+On partial scans (e.g., only the MCP collector ran), only composite edges whose `source_collector` matches the current scan's collector or derived processor-owned source are deleted and recomputed. This prevents ping-pong deletion when collectors run independently on different schedules while still cleaning cross-collector findings when one of their source collectors changes.
 
 ### Neo4j Version Compatibility
 
@@ -278,7 +280,7 @@ New modules emit nodes and edges via the `sdk/ingest` wire format:
 
 1. Only emit node kinds in `AllowedNodeKinds` and edge kinds in `RawEdgeKinds`
 2. Compute deterministic `id` values per the Node ID Strategy above
-3. Populate `value_hash` on all `Credential` nodes (mandatory since v0.3)
+3. Populate `value_hash` on all `Credential` nodes
 4. Set `source_kind` / `target_kind` on edges when the endpoint map has multiple valid sources/targets
 5. Use snake_case for all property keys (the normalizer converts camelCase, but emit clean data)
 6. Valid collectors: `mcp`, `a2a`, `config`, `scan`

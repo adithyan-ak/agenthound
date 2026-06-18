@@ -62,6 +62,15 @@ func (v *Validator) Validate(data *ingest.IngestData) error {
 				})
 			}
 		}
+		if hasKind(node.Kinds, "Credential") {
+			valueHash, _ := node.Properties["value_hash"].(string)
+			if valueHash == "" {
+				errs = append(errs, FieldError{
+					Path:    fmt.Sprintf("graph.nodes[%d].properties.value_hash", i),
+					Message: "Credential nodes must include non-empty value_hash",
+				})
+			}
+		}
 	}
 
 	for i, edge := range data.Graph.Edges {
@@ -89,4 +98,13 @@ func (v *Validator) Validate(data *ingest.IngestData) error {
 		return &ValidationError{Errors: errs}
 	}
 	return nil
+}
+
+func hasKind(kinds []string, want string) bool {
+	for _, kind := range kinds {
+		if kind == want {
+			return true
+		}
+	}
+	return false
 }

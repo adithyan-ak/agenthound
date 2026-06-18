@@ -123,23 +123,29 @@ slop-check:
 # checks across all job types (push + PR). Fails fast on first error.
 # Usage: make prerelease
 prerelease:
-	@echo "=== [1/9] gofmt ==="
+	@echo "=== [1/12] gofmt ==="
 	@test -z "$$(gofmt -l .)" || (echo "FAIL: gofmt found unformatted files:" && gofmt -l . && exit 1)
-	@echo "=== [2/9] go vet ==="
+	@echo "=== [2/12] golangci-lint ==="
+	golangci-lint run ./...
+	@echo "=== [3/12] go vet ==="
 	go vet ./...
-	@echo "=== [3/9] go build ==="
+	@echo "=== [4/12] govulncheck ==="
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@echo "=== [5/12] go-licenses ==="
+	go run github.com/google/go-licenses@latest check --allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0,Unlicense,Zlib ./collector/cmd/agenthound/... ./server/cmd/agenthound-server/...
+	@echo "=== [6/12] go build ==="
 	go build ./...
-	@echo "=== [4/9] go test -race -short ==="
+	@echo "=== [7/12] go test -race -short ==="
 	go test ./... -race -short -count=1
-	@echo "=== [5/9] deps-check ==="
+	@echo "=== [8/12] deps-check ==="
 	@bash scripts/deps-check.sh
-	@echo "=== [6/9] size-check ==="
+	@echo "=== [9/12] size-check ==="
 	@bash scripts/size-check.sh
-	@echo "=== [7/9] slop-check ==="
+	@echo "=== [10/12] slop-check ==="
 	@bash scripts/slop-check.sh
-	@echo "=== [8/9] UI build ==="
+	@echo "=== [11/12] UI build ==="
 	cd server/ui && npm run build
-	@echo "=== [9/9] cross-compile (linux/amd64 + darwin/arm64) ==="
+	@echo "=== [12/12] cross-compile (linux/amd64 + darwin/arm64) ==="
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /dev/null ./collector/cmd/agenthound
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o /dev/null ./collector/cmd/agenthound
 	@echo ""

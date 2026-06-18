@@ -30,6 +30,12 @@ jobs:
       - name: Build frontend
         run: cd server/ui && npm ci --ignore-scripts && npm run build
 
+      - name: Install release gate tools
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0
+
+      - name: Run prerelease gate
+        run: make prerelease
+
       - name: Copy frontend dist for embedding
         run: mkdir -p server/internal/api/ui/dist && cp -r server/ui/dist/* server/internal/api/ui/dist/
 

@@ -65,7 +65,25 @@ func TestCleanStaleCompositeEdges_CallsExecuteWrite(t *testing.T) {
 		t.Fatalf("expected current_scan_id=scan-42, got %v", params["current_scan_id"])
 	}
 	collectors, _ := params["collectors"].([]string)
-	if len(collectors) != 2 || collectors[0] != "mcp" || collectors[1] != "config" {
+	if len(collectors) != 3 || collectors[0] != "mcp" || collectors[1] != "config" || collectors[2] != "cross_service_credential_chain" {
+		t.Fatalf("unexpected collectors param: %v", params["collectors"])
+	}
+}
+
+func TestCleanStaleCompositeEdges_IncludesDerivedCredentialChain(t *testing.T) {
+	db := &graph.MockGraphDB{ExecuteWriteResult: 1}
+	_, err := cleanStaleCompositeEdges(context.Background(), db, "scan-42", []string{"config"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	calls := db.CallsTo("ExecuteWrite")
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 ExecuteWrite call, got %d", len(calls))
+	}
+	params, _ := calls[0].Args[1].(map[string]any)
+	collectors, _ := params["collectors"].([]string)
+	if len(collectors) != 2 || collectors[0] != "config" || collectors[1] != "cross_service_credential_chain" {
 		t.Fatalf("unexpected collectors param: %v", params["collectors"])
 	}
 }

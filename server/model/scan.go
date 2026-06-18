@@ -18,5 +18,10 @@ const (
 	ScanStatusPending   = "pending"
 	ScanStatusRunning   = "running"
 	ScanStatusCompleted = "completed"
-	ScanStatusFailed    = "failed"
+	// ScanStatusCompletedWithErrors means node/edge collection succeeded
+	// (real counts persisted) but analysis post-processing returned an
+	// error. Distinct from ScanStatusFailed, which is reserved for the
+	// collection/write failure path (counts 0,0).
+	ScanStatusCompletedWithErrors = "completed_with_errors"
+	ScanStatusFailed              = "failed"
 )

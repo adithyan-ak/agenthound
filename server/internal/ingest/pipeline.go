@@ -128,8 +128,10 @@ func (p *Pipeline) Ingest(ctx context.Context, data *sdkingest.IngestData) (*sdk
 	slog.Info("edges written", "count", edgesWritten)
 
 	// Stage 6: Post-processing (non-fatal)
+	var ppErr error
 	if p.graphDB != nil && p.runPP != nil {
-		ppStats, ppErr := p.runPP(ctx, p.graphDB, data.Meta.ScanID, []string{data.Meta.Collector})
+		var ppStats []graph.ProcessingStats
+		ppStats, ppErr = p.runPP(ctx, p.graphDB, data.Meta.ScanID, []string{data.Meta.Collector})
 		if ppErr != nil {
 			slog.Error("post-processing failed", "error", ppErr)
 		}
@@ -146,7 +148,17 @@ func (p *Pipeline) Ingest(ctx context.Context, data *sdkingest.IngestData) (*sdk
 
 	// Stage 7: Record completion
 	if p.scanStore != nil {
-		if err := p.scanStore.UpdateScan(ctx, data.Meta.ScanID, model.ScanStatusCompleted, nodesWritten, edgesWritten, ""); err != nil {
+		status := model.ScanStatusCompleted
+		scanErr := ""
+		if ppErr != nil {
+			// Collection (node/edge writes) succeeded; only analysis
+			// failed. Record the real counts plus the error under a
+			// dedicated status so this is distinguishable from a hard
+			// collection failure (failScan -> ScanStatusFailed, 0/0).
+			status = model.ScanStatusCompletedWithErrors
+			scanErr = fmt.Sprintf("post-processing: %v", ppErr)
+		}
+		if err := p.scanStore.UpdateScan(ctx, data.Meta.ScanID, status, nodesWritten, edgesWritten, scanErr); err != nil {
 			slog.Warn("failed to update scan record", "error", err)
 		}
 	}

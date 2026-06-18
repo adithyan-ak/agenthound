@@ -90,7 +90,6 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		totalRuns += len(runs)
 	}
 	res.IngestData.Graph.Nodes[0].Properties["total_runs"] = totalRuns
-	res.Summary.CredentialsFound = len(experiments)
 
 	slog.Info("mlflow loot complete",
 		"endpoint", baseURL,

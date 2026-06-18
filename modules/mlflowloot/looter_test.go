@@ -56,6 +56,9 @@ func TestLoot_MLflowHappy(t *testing.T) {
 	if tr, _ := node.Properties["total_runs"].(int); tr != 4 {
 		t.Errorf("total_runs = %v, want 4", node.Properties["total_runs"])
 	}
+	if res.Summary.CredentialsFound != 0 {
+		t.Errorf("CredentialsFound = %d, want 0 for metadata-only discoveries", res.Summary.CredentialsFound)
+	}
 }
 
 func TestLoot_MLflow_FetchRunsUsesPOST(t *testing.T) {

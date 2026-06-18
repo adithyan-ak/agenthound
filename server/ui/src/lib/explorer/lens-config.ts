@@ -67,9 +67,14 @@ export const LENS_LIST: LensDefinition[] = [
       "PROVIDES_RESOURCE",
       "PROVIDES_PROMPT",
       "ADVERTISES_SKILL",
+      "DELEGATES_TO",
       "RUNS_ON",
       "CONFIGURED_IN",
       "LOADS_INSTRUCTIONS",
+      "SAME_AUTH_DOMAIN",
+      "EXPOSES",
+      "PROVIDES_MODEL",
+      "EXTRACTED_FROM",
     ],
     dimOthers: false,
     subPresets: [
@@ -104,6 +109,12 @@ export const LENS_LIST: LensDefinition[] = [
         defaultEnabled: true,
       },
       {
+        id: "DELEGATES_TO",
+        label: "Delegates to",
+        description: "A2A agent → A2A agent delegation",
+        defaultEnabled: true,
+      },
+      {
         id: "RUNS_ON",
         label: "Runs on",
         description: "Server/agent → host",
@@ -121,6 +132,30 @@ export const LENS_LIST: LensDefinition[] = [
         description: "Client → instruction file",
         defaultEnabled: true,
       },
+      {
+        id: "SAME_AUTH_DOMAIN",
+        label: "Same auth domain",
+        description: "A2A agents share auth domain",
+        defaultEnabled: true,
+      },
+      {
+        id: "EXPOSES",
+        label: "Exposes",
+        description: "AI service → AI service dependency",
+        defaultEnabled: true,
+      },
+      {
+        id: "PROVIDES_MODEL",
+        label: "Provides model",
+        description: "AI service → model artifact",
+        defaultEnabled: true,
+      },
+      {
+        id: "EXTRACTED_FROM",
+        label: "Extracted from",
+        description: "Model → extracted training signal",
+        defaultEnabled: true,
+      },
     ],
     showSeverityHalos: false,
     colorEdgesBySeverity: false,
@@ -134,7 +169,13 @@ export const LENS_LIST: LensDefinition[] = [
     accentClass: "bg-orange-500 text-white",
     description:
       "What can do what. Composite edges showing inferred reach, execution, and exfiltration.",
-    edgeKinds: ["HAS_ACCESS_TO", "CAN_EXECUTE", "CAN_REACH", "CAN_EXFILTRATE_VIA"],
+    edgeKinds: [
+      "HAS_ACCESS_TO",
+      "CAN_EXECUTE",
+      "CAN_REACH",
+      "CAN_EXFILTRATE_VIA",
+      "CAN_IMPERSONATE",
+    ],
     dimOthers: false,
     subPresets: [
       {
@@ -159,6 +200,12 @@ export const LENS_LIST: LensDefinition[] = [
         id: "CAN_EXFILTRATE_VIA",
         label: "Can Exfiltrate",
         description: "Agent → outbound channel composite",
+        defaultEnabled: true,
+      },
+      {
+        id: "CAN_IMPERSONATE",
+        label: "Can Impersonate",
+        description: "A2A agent → similar A2A agent",
         defaultEnabled: true,
       },
     ],
@@ -204,7 +251,7 @@ export const LENS_LIST: LensDefinition[] = [
     accentClass: "bg-pink-500 text-white",
     description:
       "Identity and credential flow. Highlights exposed secrets and high-entropy values.",
-    edgeKinds: ["AUTHENTICATES_WITH", "USES_CREDENTIAL", "HAS_ENV_VAR"],
+    edgeKinds: ["AUTHENTICATES_WITH", "USES_CREDENTIAL", "HAS_ENV_VAR", "EXPOSES_CREDENTIAL"],
     dimOthers: false,
     subPresets: [
       {
@@ -223,6 +270,12 @@ export const LENS_LIST: LensDefinition[] = [
         id: "HAS_ENV_VAR",
         label: "Has env var",
         description: "Server → credential env",
+        defaultEnabled: true,
+      },
+      {
+        id: "EXPOSES_CREDENTIAL",
+        label: "Exposes credential",
+        description: "AI service → credential material",
         defaultEnabled: true,
       },
     ],

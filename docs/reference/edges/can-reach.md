@@ -74,7 +74,7 @@ This models an unauthenticated A2A agent delegating through a chain that lands o
 | `scan_id` | string | Scan that created this edge |
 | `last_seen` | datetime | Timestamp of last computation |
 | `is_composite` | bool | Always `true` |
-| `source_collector` | string | `mcp` or `a2a` (scopes stale-edge cleanup) |
+| `source_collector` | string | `mcp`, `a2a`, or processor-owned source such as `cross_service_credential_chain` (scopes stale-edge cleanup) |
 | `hops` | int | Path length: 3 (direct) or 6 (credential chain) |
 | `via_server` | string | MCP server name in the path |
 | `via_tool` | string | Tool name in the path |

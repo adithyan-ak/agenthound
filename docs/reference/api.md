@@ -87,8 +87,10 @@ Returns node and edge counts by kind.
 
 ```json
 {
-  "nodes": { "MCPServer": 12, "MCPTool": 47, "MCPResource": 23, "AgentInstance": 3 },
-  "edges": { "TRUSTS_SERVER": 15, "PROVIDES_TOOL": 47, "CAN_REACH": 8 }
+  "node_counts": { "MCPServer": 12, "MCPTool": 47, "MCPResource": 23, "AgentInstance": 3 },
+  "edge_counts": { "TRUSTS_SERVER": 15, "PROVIDES_TOOL": 47, "CAN_REACH": 8 },
+  "total_nodes": 85,
+  "total_edges": 70
 }
 ```
 
@@ -227,7 +229,7 @@ Return evidence detail for a specific finding.
 
 ### `GET /api/v1/analysis/prebuilt`
 
-List all 17 pre-built queries with metadata.
+List all 18 pre-built queries with metadata.
 
 ### `GET /api/v1/analysis/prebuilt/{id}`
 
@@ -268,6 +270,16 @@ The token-gated endpoint protects against browser drive-by Cypher injection from
 
 ## Scans
 
+Scan records serialize `model.Scan` verbatim. The `status` field is one of:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Registered but not yet started. |
+| `running` | Ingest in progress. |
+| `completed` | Collection and analysis post-processing both succeeded. |
+| `completed_with_errors` | Node/edge writes succeeded (real counts persisted) but post-processing failed; `error` holds the detail. |
+| `failed` | Collection/write failure; counts are `0, 0` and `error` holds the write error. |
+
 ### `GET /api/v1/scans`
 
 | Param | Type | Default | Description |
@@ -277,7 +289,7 @@ The token-gated endpoint protects against browser drive-by Cypher injection from
 
 ### `POST /api/v1/scans` *(token required)*
 
-Register a new scan (sets `scan_id`, `started_at`, `status: in_progress`). Used by the UI's "New scan" flow; CLI ingest creates scan records implicitly.
+Register a new scan (sets `scan_id`, `started_at`, `status: pending`). Used by the UI's "New scan" flow; CLI ingest creates scan records implicitly.
 
 ### `GET /api/v1/scans/{id}`
 
@@ -285,7 +297,7 @@ Get scan details by ID.
 
 ### `DELETE /api/v1/scans/{id}` *(token required)*
 
-Delete a scan and cascade-delete the nodes and edges that scan owned. Composite edges are scoped by `source_collector` so partial scans don't bleed.
+Delete a scan after deleting the nodes and edges that scan owned from Neo4j. If graph cleanup fails, the scan record is retained and the endpoint returns an internal error.
 
 ---
 

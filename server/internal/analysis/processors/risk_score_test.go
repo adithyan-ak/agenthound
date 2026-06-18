@@ -52,20 +52,45 @@ func TestRiskScore_ProcessSuccess(t *testing.T) {
 	if stats.ProcessorName != "risk_score" {
 		t.Errorf("ProcessorName = %q", stats.ProcessorName)
 	}
-	// 3 kinds (AgentInstance, MCPServer, MCPTool) each with 1 node = 3 updated
-	if stats.NodesUpdated != 3 {
-		t.Errorf("NodesUpdated = %d, want 3", stats.NodesUpdated)
+	// 4 kinds (AgentInstance, A2AAgent, MCPServer, MCPTool) each with 1 node = 4 updated
+	if stats.NodesUpdated != 4 {
+		t.Errorf("NodesUpdated = %d, want 4", stats.NodesUpdated)
 	}
 
 	updateCalls := mock.CallsTo("UpdateNodeProperties")
-	if len(updateCalls) != 3 {
-		t.Fatalf("UpdateNodeProperties called %d times, want 3", len(updateCalls))
+	if len(updateCalls) != 4 {
+		t.Fatalf("UpdateNodeProperties called %d times, want 4", len(updateCalls))
 	}
 	for _, c := range updateCalls {
 		props, _ := c.Args[1].(map[string]any)
 		if _, ok := props["risk_score"]; !ok {
 			t.Error("expected risk_score property in update")
 		}
+	}
+}
+
+func TestRiskScore_ProcessIncludesA2AAgents(t *testing.T) {
+	mock := &graph.MockGraphDB{
+		ListNodesResult: []ingest.Node{{ID: "node-1", Kinds: []string{"A2AAgent"}}},
+		QueryFunc: func(_ context.Context, _ string, _ map[string]any) ([]map[string]any, error) {
+			return nil, nil
+		},
+	}
+
+	p := &RiskScore{}
+	_, err := p.Process(context.Background(), mock, "scan-1")
+	if err != nil {
+		t.Fatalf("Process() error = %v", err)
+	}
+
+	var sawA2A bool
+	for _, call := range mock.CallsTo("ListNodes") {
+		if kind, _ := call.Args[0].(string); kind == "A2AAgent" {
+			sawA2A = true
+		}
+	}
+	if !sawA2A {
+		t.Fatal("risk_score did not list A2AAgent nodes")
 	}
 }
 

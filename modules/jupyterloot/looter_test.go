@@ -47,6 +47,9 @@ func TestLoot_JupyterHappy(t *testing.T) {
 	if got := len(res.IngestData.Graph.Edges); got != 2 {
 		t.Errorf("edges: got %d, want 2 PROVIDES_RESOURCE edges", got)
 	}
+	if res.Summary.CredentialsFound != 0 {
+		t.Errorf("CredentialsFound = %d, want 0 for resource-only discoveries", res.Summary.CredentialsFound)
+	}
 	if res.IngestData.Graph.Nodes[0].Kinds[0] != "JupyterServer" {
 		t.Errorf("first node kind = %v, want JupyterServer", res.IngestData.Graph.Nodes[0].Kinds)
 	}

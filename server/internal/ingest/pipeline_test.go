@@ -546,10 +546,12 @@ func TestPipeline_WriteEdgesFailure_NoRollback(t *testing.T) {
 	}
 }
 
-// TestPipeline_PostProcessorFailureNonFatal verifies that errors from
-// post-processors do NOT mark the scan as failed: the writes already
-// committed, and the operator can re-run analysis later.
-func TestPipeline_PostProcessorFailureNonFatal(t *testing.T) {
+// TestPipeline_PostProcessorFailureMarksScanCompletedWithErrors verifies that
+// when node/edge collection succeeds but analysis post-processing fails, the
+// scan is recorded as completed_with_errors (NOT failed): the real, non-zero
+// node/edge counts are persisted alongside the recorded error, since the graph
+// was actually populated.
+func TestPipeline_PostProcessorFailureMarksScanCompletedWithErrors(t *testing.T) {
 	w := &fakeWriter{}
 	ss := &fakeScanStore{}
 	db := &graph.MockGraphDB{}
@@ -577,8 +579,16 @@ func TestPipeline_PostProcessorFailureNonFatal(t *testing.T) {
 	if !ok {
 		t.Fatal("expected scan update")
 	}
-	if upd.Status != model.ScanStatusCompleted {
-		t.Errorf("post-processor failure must not mark scan failed; got status=%s", upd.Status)
+	if upd.Status != model.ScanStatusCompletedWithErrors {
+		t.Errorf("expected post-processor failure to mark scan completed_with_errors; got status=%s", upd.Status)
+	}
+	if upd.Error == "" {
+		t.Error("expected post-processing error to be recorded")
+	}
+	// Collection succeeded, so the real node/edge counts must still be
+	// persisted (validIngestDataFor writes 2 nodes + 1 edge) — not 0/0.
+	if upd.NodeCount != 2 || upd.EdgeCount != 1 {
+		t.Errorf("expected real counts persisted (nodes=2 edges=1); got nodes=%d edges=%d", upd.NodeCount, upd.EdgeCount)
 	}
 }
 

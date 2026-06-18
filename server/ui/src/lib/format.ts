@@ -25,3 +25,13 @@ export function shortDateTime(iso: string): string {
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+/**
+ * Human-friendly label for a scan status. Statuses render uppercased in the
+ * UI, so the multi-word value needs spaces instead of the raw underscored
+ * enum (e.g. "completed_with_errors" -> "Completed with errors").
+ */
+export function scanStatusLabel(status: string): string {
+  if (status === "completed_with_errors") return "Completed with errors";
+  return status;
+}

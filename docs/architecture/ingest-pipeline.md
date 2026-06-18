@@ -80,7 +80,7 @@ Before running processors:
 
 Then runs 11 processors in dependency-validated order. See `docs/architecture/post-processors.md` for details.
 
-Post-processing is non-fatal: failures are logged and included in the result stats, but the ingest is still marked complete. This means a processor bug won't block data from being queryable.
+Post-processing is non-fatal to the ingest: failures are logged and included in the result stats, and the written nodes/edges stay queryable (a processor bug won't block data). The scan is, however, recorded as `completed_with_errors` — the real node/edge counts plus the `post-processing: ...` error — rather than `completed`, so an analysis failure is surfaced instead of reported as a clean success.
 
 ## Processing Order
 
@@ -112,7 +112,12 @@ Dependency validation runs before the first processor executes. If a processor a
 ## Scan Lifecycle
 
 ```
-Created (POST /api/v1/scans) --> Running (ingest starts) --> Completed | Failed
+Created (POST /api/v1/scans) --> Running (ingest starts) --> Completed | Completed with errors | Failed
 ```
+
+Terminal statuses:
+- `completed` — node/edge collection and analysis post-processing both succeeded.
+- `completed_with_errors` — node/edge writes succeeded (real counts persisted) but post-processing returned an error; the `error` field carries the `post-processing: ...` detail.
+- `failed` — collection/write failure; counts are `0, 0` and the `error` field carries the write error.
 
 The scan record in Postgres tracks: ID, collector, status, start time, node/edge counts, error message. Scans can be deleted via `DELETE /api/v1/scans/{id}`, which also removes owned edges/nodes from Neo4j.

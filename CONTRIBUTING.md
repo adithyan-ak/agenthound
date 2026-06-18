@@ -62,7 +62,7 @@ Post-processors implement the `PostProcessor` interface in `server/internal/anal
    type PostProcessor interface {
        Name() string
        Dependencies() []string
-       Process(ctx context.Context, db graph.GraphDB) error
+       Process(ctx context.Context, db graph.GraphDB, scanID string) (graph.ProcessingStats, error)
    }
    ```
 3. `Dependencies()` returns processor names that must run before this one (e.g. `CAN_REACH` depends on `HAS_ACCESS_TO`).

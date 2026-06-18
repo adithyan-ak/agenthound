@@ -92,6 +92,31 @@ func TestValidatorRejectsInvalidNodeKind(t *testing.T) {
 	assertValidationError(t, err, "graph.nodes[0].kinds[0]")
 }
 
+func TestValidatorRejectsCredentialWithoutValueHash(t *testing.T) {
+	v := NewValidator()
+	data := validIngestData()
+	data.Graph.Nodes = append(data.Graph.Nodes, ingest.Node{
+		ID:         "sha256:cred",
+		Kinds:      []string{"Credential"},
+		Properties: map[string]any{"name": "API_KEY"},
+	})
+	err := v.Validate(data)
+	assertValidationError(t, err, "graph.nodes[2].properties.value_hash")
+}
+
+func TestValidatorAcceptsCredentialWithValueHash(t *testing.T) {
+	v := NewValidator()
+	data := validIngestData()
+	data.Graph.Nodes = append(data.Graph.Nodes, ingest.Node{
+		ID:         "sha256:cred",
+		Kinds:      []string{"Credential"},
+		Properties: map[string]any{"name": "API_KEY", "value_hash": "sha256:abc"},
+	})
+	if err := v.Validate(data); err != nil {
+		t.Fatalf("expected credential with value_hash to validate, got: %v", err)
+	}
+}
+
 func TestValidatorRejectsEmptyEdgeSource(t *testing.T) {
 	v := NewValidator()
 	data := validIngestData()
