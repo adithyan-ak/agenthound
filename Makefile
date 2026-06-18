@@ -1,4 +1,4 @@
-.PHONY: build build-collector build-server build-all test lint docker docker-collector docker-server docker-standard up down clean seed demo release ui-build ui-dev ui-test standard standard-run standard-stop deps-check size-check prerelease preflight-build preflight-collector preflight-server
+.PHONY: build build-collector build-server build-all test lint docker docker-collector docker-server docker-standard up down clean seed demo release ui-build ui-dev ui-test standard standard-run standard-stop deps-check size-check prerelease preflight-build preflight-collector preflight-server preflight-docker preflight-docker-compose preflight-server-running preflight-demo
 
 # Preflight gates. Verify required tools are present and at the expected
 # major versions BEFORE attempting a build, so newcomers get a friendly
@@ -12,6 +12,18 @@ preflight-collector:
 
 preflight-server:
 	@bash scripts/preflight.sh build-server
+
+preflight-docker:
+	@bash scripts/preflight.sh docker
+
+preflight-docker-compose:
+	@bash scripts/preflight.sh docker-compose
+
+preflight-server-running:
+	@bash scripts/preflight.sh server-running
+
+preflight-demo:
+	@bash scripts/preflight.sh demo
 
 ui-build:
 	cd server/ui && npm ci --ignore-scripts && npm run build
@@ -44,23 +56,23 @@ test:
 lint:
 	golangci-lint run ./...
 
-docker-collector:
+docker-collector: preflight-docker
 	docker build -f docker/Dockerfile.agenthound -t agenthound:collector .
 
-docker-server:
+docker-server: preflight-docker
 	docker build -f docker/Dockerfile.agenthound-server -t agenthound:server .
 
-docker-standard:
+docker-standard: preflight-docker
 	docker build -f docker/Dockerfile.standard -t agenthound:standard .
 
 # `docker` builds both split images (server + collector). The all-in-one
 # standard image is built explicitly via `make docker-standard` (or `make standard`).
 docker: docker-collector docker-server
 
-up:
+up: preflight-docker-compose
 	docker compose -f docker/docker-compose.yml up -d
 
-down:
+down: preflight-docker-compose
 	docker compose -f docker/docker-compose.yml down
 
 clean:
@@ -68,24 +80,32 @@ clean:
 	# Clear built UI but keep the .gitkeep marker.
 	find server/internal/api/ui/dist -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
 
-seed:
+seed: preflight-server-running
 	@bash scripts/seed-test-data.sh
 
-demo:
+demo: preflight-demo
 	@bash scripts/seed-demo.sh
 
 release:
 	goreleaser release --clean --snapshot
 
-standard:
+standard: preflight-docker
 	docker build -f docker/Dockerfile.standard -t agenthound:latest .
 
-standard-run:
+standard-run: preflight-docker
+	# Build the image first if it doesn't exist locally. agenthound:latest
+	# is built by `make standard`; running `make standard-run` on a fresh
+	# checkout without that image would otherwise fail (or worse, pull an
+	# unrelated image from a default registry).
+	@if ! docker image inspect agenthound:latest >/dev/null 2>&1; then \
+		echo ">>> agenthound:latest not found locally; building first (this takes a few minutes)"; \
+		$(MAKE) standard; \
+	fi
 	# Bind on loopback only — the server has no application-layer auth.
 	# Override with -p 0.0.0.0:8080:8080 only inside a network you trust.
 	docker run -d --name agenthound -p 127.0.0.1:8080:8080 -v agenthound-data:/data --restart unless-stopped agenthound:latest
 
-standard-stop:
+standard-stop: preflight-docker
 	docker stop agenthound && docker rm agenthound
 
 deps-check:

@@ -50,103 +50,40 @@ All 17 findings are exposed as pre-built queries from the CLI and UI.
 
 ## Install
 
-### Collector (`agenthound`)
+Pick one. Full options (Homebrew, prebuilt Docker images, `go install`, all-in-one image, source builds) live in the [installation guide](https://docs.agenthound.io/getting-started/install/).
 
-The collector is a single static binary. No Docker, no DBs, no `sudo`.
-
-#### One-line install
+### Collector — one-line install
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
 ```
 
-The installer:
+Single static binary, no DB, no Docker, no `sudo`. SHA-256 verified on every install; cosign signature verified additionally if `cosign` is on `$PATH` (otherwise the installer prints the manual verify command). Lands in `$HOME/.local/bin/agenthound`.
 
-- Pins to the latest GitHub Release tag.
-- Downloads the archive plus `checksums.txt` and verifies the SHA-256.
-- Verifies the cosign signature on `checksums.txt` if `cosign` is on `$PATH`. If not, prints the verification command for you to run manually.
-- Extracts to `$HOME/.local/bin/agenthound` (override with `AGENTHOUND_INSTALL_DIR=/path`).
-- Atomic install via temp staging — a SIGINT mid-install never leaves a half-written binary.
-
-For reproducibility, pin to a tag explicitly:
-
-```bash
-AGENTHOUND_VERSION=v0.5.0 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v0.5.0/install.sh | sh
-```
-
-#### Homebrew
-
-```bash
-brew tap adithyan-ak/agenthound
-brew install agenthound
-```
-
-If you previously had the bundled single-binary AgentHound installed via Homebrew:
-
-```bash
-brew upgrade agenthound                              # Now the lean collector
-brew install adithyan-ak/agenthound/agenthound-server # Server is now a separate formula
-```
-
-#### Docker
-
-```bash
-docker pull ghcr.io/adithyan-ak/agenthound:latest
-docker run --rm ghcr.io/adithyan-ak/agenthound scan --help
-```
-
-#### Build from source
-
-```bash
-git clone https://github.com/adithyan-ak/agenthound
-cd agenthound
-go build -o bin/agenthound ./collector/cmd/agenthound
-```
-
-### Server (`agenthound-server`)
-
-The server runs on the operator's laptop or a host they fully control. It binds to `127.0.0.1:8080` by default. **Authentication is not implemented at the application layer** — protect access with the network layer (VPN, SSH tunnel, Tailscale, etc.). See [`docs/security.md`](docs/security.md) for the full posture.
-
-#### Docker Compose (recommended)
+### Server — Docker Compose (recommended)
 
 ```bash
 git clone https://github.com/adithyan-ak/agenthound
 cd agenthound
 docker compose -f docker/docker-compose.yml up -d
+# open http://localhost:8080
 ```
 
-Runs three containers: `graph-db` (Neo4j 4.4 + APOC), `app-db` (PostgreSQL 16), and `agenthound-server`. All ports bind to `127.0.0.1`.
+Brings up Neo4j 4.4 + Postgres 16 + `agenthound-server` together, all bound to `127.0.0.1`. **No application-layer auth** — see [security posture](https://docs.agenthound.io/operator/security/) for the network-boundary model and remote-access patterns (SSH tunnel, Tailscale, VPN).
 
-#### Homebrew
+### Prerequisites at a glance
 
-```bash
-brew install adithyan-ak/agenthound/agenthound-server
-agenthound-server serve
-```
+| Path                              | Needs                              |
+|-----------------------------------|------------------------------------|
+| Curl install (collector)          | curl, tar, sha256sum or shasum (preinstalled on macOS / Linux) |
+| Docker Compose (server, recommended) | Docker + Compose v2             |
+| All-in-one image (`make standard-run`) | Docker (auto-builds `agenthound:latest` on first run) |
+| `make build` / `make build-server` | Go 1.25+, Node 20+ (Node only for the server's React UI build) |
+| `go install ...@latest`           | Go 1.25+. (`go install` does not run `npm`; the server installed this way uses an embedded fallback page instead of the React UI. For the UI, use Docker, Homebrew, or `make build-server`.) |
 
-You'll need a running Neo4j and Postgres; the simplest path is to keep using the docker-compose file for the databases:
+The newcomer-facing Make targets — `build`, `build-collector`, `build-server`, `up`, `down`, `docker*`, `standard*`, `seed`, `demo` — preflight their prerequisites and print a friendly diagnostic if anything is missing. (`test`, `lint`, `release`, `clean` and the `prerelease` gate are developer targets and skip the preflight.) `agenthound-server serve` itself probes Neo4j + Postgres on startup and tells you exactly what to start if a backend is down.
 
-```bash
-docker compose -f docker/docker-compose.yml up -d graph-db app-db
-agenthound-server serve
-```
-
-#### Build from source
-
-```bash
-make build-server      # Builds UI + binary at bin/agenthound-server
-```
-
-### Remote access
-
-The default `127.0.0.1` bind is the security model. To reach the server from another machine, use the network you already trust:
-
-```bash
-ssh -L 8080:localhost:8080 operator-host
-# Now http://localhost:8080 on your laptop forwards to the server
-```
-
-Or run the server inside Tailscale / WireGuard / a VPN you control. **Do not** expose the server on `0.0.0.0` over plain HTTP.
+`AGENTHOUND_SKIP_PREFLIGHT=1` bypasses **only** the shell/Make preflight checks. The runtime DB probe inside `agenthound-server` ignores it — you cannot start the server with a missing backend.
 
 ---
 
@@ -186,7 +123,7 @@ agenthound loot 10.0.0.10:4000 --type litellm \
     --master-key sk-... --engagement-id ENG-001 --output -
 ```
 
-See [`docs/scanner.md`](docs/scanner.md) for the full network scanner guide (legal warnings, port set, safety controls) and [`docs/loot-litellm.md`](docs/loot-litellm.md) for the LiteLLM Looter audit-trail residue caveat.
+See the [scanner guide](https://docs.agenthound.io/operator/scanner/) for legal warnings, port set, and safety controls, and the [LiteLLM looter doc](https://docs.agenthound.io/operator/loot/litellm/) for the audit-trail residue caveat.
 
 ## Workflow
 
@@ -329,23 +266,28 @@ This stands up a multi-host Docker lab (MCP server, A2A agent, LiteLLM gateway, 
 
 AgentHound is a transparent assessment tool, not an evasion implant. The binary is named `agenthound`, is statically linked, and is detectable by any modern EDR. If your engagement requires evasion, the right tools are Sliver / Mythic / a custom implant — and you can shuttle AgentHound's JSON output through that channel.
 
-See [`docs/security.md`](docs/security.md) for the full threat model and operator OPSEC notes.
+See the [security posture doc](https://docs.agenthound.io/operator/security/) for the full threat model and operator OPSEC notes.
 
 ---
 
 ## Documentation
 
+Full documentation lives at **[docs.agenthound.io](https://docs.agenthound.io)**.
+
 | Document | Description |
 |----------|-------------|
-| [Quickstart](docs/quickstart.md) | 5-minute setup guide |
-| [CLI Reference](docs/cli-reference.md) | All commands, flags, and examples |
-| [API Reference](docs/api-reference.md) | REST API endpoints |
-| [Graph Model](docs/graph-model.md) | Node types, edge types, ID strategy, risk scoring |
-| [Detection Rules](docs/detection-rules.md) | All 17 detections with OWASP mappings |
-| [Architecture](docs/architecture.md) | System architecture for contributors |
-| [Security](docs/security.md) | Threat model and operational posture |
+| [Installation](https://docs.agenthound.io/getting-started/install/) | Every install path with prerequisites and verification |
+| [Quickstart](https://docs.agenthound.io/getting-started/quickstart/) | 10-minute end-to-end walkthrough |
+| [Demo Lab](https://docs.agenthound.io/getting-started/demo-lab/) | Self-contained Docker lab covering the full offensive chain |
+| [CLI Reference](https://docs.agenthound.io/reference/cli/) | All commands, flags, and examples |
+| [API Reference](https://docs.agenthound.io/reference/api/) | REST API endpoints |
+| [Graph Model](https://docs.agenthound.io/reference/graph-model/) | Node types, edge types, ID strategy |
+| [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) | All detections with OWASP mappings |
+| [Risk Scoring](https://docs.agenthound.io/reference/risk-scoring/) | Weighted scoring model |
+| [Architecture](https://docs.agenthound.io/architecture/system-design/) | System design for contributors |
+| [Deployment](https://docs.agenthound.io/operator/deployment/) | Production deployment patterns |
+| [Security Posture](https://docs.agenthound.io/operator/security/) | Threat model and operational posture |
 | [Two-binary split (ADR)](docs/adr/0001-two-binary-split.md) | Why and how the split happened |
-| [Future modules](docs/future-modules.md) | Deferred surface and planning notes |
 | [Contributing](CONTRIBUTING.md) | How to contribute collectors, detections, and queries |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Vulnerability reporting](SECURITY.md) | Disclosure process |

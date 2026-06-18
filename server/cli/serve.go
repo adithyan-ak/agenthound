@@ -17,6 +17,7 @@ import (
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the AgentHound API server",
+	// SilenceUsage / SilenceErrors are set on rootCmd; inherited here.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 

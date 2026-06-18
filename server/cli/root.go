@@ -19,6 +19,12 @@ runs post-processors, and serves the React UI + REST API.
 
 Single-user posture: there is no login. The server binds to 127.0.0.1
 by default; expose remotely only over your own VPN/SSH tunnel.`,
+	// Set on the root so all subcommands inherit. Without these, a
+	// preflight failure in `serve` / `ingest` / `query` would print the
+	// error twice (once by Cobra, once by main.go) AND dump the usage
+	// block — drowning the actual diagnostic.
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cfg = servercfg.LoadWithFlags(cmd.Root().PersistentFlags())
 		if err := cfg.Validate(); err != nil {

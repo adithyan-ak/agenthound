@@ -23,16 +23,23 @@ type Infrastructure struct {
 }
 
 func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
+	// Cheap TCP probe BEFORE the real driver init so a stopped DB
+	// stack produces a friendly, actionable error block instead of a
+	// generic "dial tcp ...: connect: connection refused" trailer.
+	if err := runtimePreflight(ctx, cfg); err != nil {
+		return nil, nil, err
+	}
+
 	neo4jDriver, err := graph.NewDriver(cfg.Neo4jURI, cfg.Neo4jUser, cfg.Neo4jPassword)
 	if err != nil {
-		return nil, nil, fmt.Errorf("neo4j: %w", err)
+		return nil, nil, classifyDriverError("Neo4j", cfg.Neo4jURI, err)
 	}
 	slog.Info("connected to neo4j", "uri", cfg.Neo4jURI)
 
 	pgPool, err := appdb.NewPool(cfg.PostgresURI)
 	if err != nil {
 		neo4jDriver.Close(ctx)
-		return nil, nil, fmt.Errorf("postgres: %w", err)
+		return nil, nil, classifyDriverError("PostgreSQL", cfg.PostgresURI, err)
 	}
 	slog.Info("connected to postgres")
 

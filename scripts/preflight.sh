@@ -95,6 +95,71 @@ check_npm() {
   print_status OK npm "$ver" "(bundled with Node)"
 }
 
+check_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    print_status FAIL docker "not found" ""
+    MISSING="${MISSING}docker\n"
+    return
+  fi
+  # `docker --version` -> "Docker version 27.4.0, build ..."
+  ver=$(docker --version 2>/dev/null | awk '{print $3}' | sed 's/,$//')
+  if [ -z "$ver" ]; then
+    ver="present"
+  fi
+  # Daemon liveness check: `docker info` fails if dockerd isn't running.
+  if ! docker info >/dev/null 2>&1; then
+    print_status FAIL docker "$ver" "(daemon not reachable)"
+    MISSING="${MISSING}docker-daemon\n"
+    return
+  fi
+  print_status OK docker "$ver" ""
+}
+
+check_docker_compose() {
+  # Every caller in this repo invokes `docker compose` (v2 plugin
+  # syntax): Makefile up/down, scripts/seed-demo.sh, all docs. The
+  # legacy `docker-compose` v1 binary uses a different invocation
+  # (`docker-compose -f ...`) and would fail the actual `make up`
+  # immediately after a "passing" preflight — so accepting v1 here is
+  # a false positive. Require v2.
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    ver=$(docker compose version --short 2>/dev/null)
+    [ -z "$ver" ] && ver="v2"
+    print_status OK "compose" "$ver" "(docker compose plugin)"
+    return
+  fi
+  print_status FAIL "compose" "not found" "(v2 plugin required)"
+  MISSING="${MISSING}docker-compose\n"
+}
+
+check_server_running() {
+  # Honor AGENTHOUND_URL (the var seed-test-data.sh uses); fall back
+  # to AGENTHOUND_BIND_URL for backward compat with earlier preflight
+  # versions.
+  url="${AGENTHOUND_URL:-${AGENTHOUND_BIND_URL:-http://localhost:8080}}"
+  # `make seed` and any other server-running consumer requires curl —
+  # both for this probe and downstream (seed-test-data.sh runs curl
+  # against /api/v1/ingest). Treat missing curl as a hard FAIL so the
+  # user installs it before the seed run, not after a cryptic failure.
+  if ! command -v curl >/dev/null 2>&1; then
+    print_status FAIL curl "not found" ""
+    MISSING="${MISSING}curl\n"
+    return
+  fi
+  # Probe the REAL health endpoint (/api/v1/health). The bare /health
+  # path also returns HTTP 200 because the React SPA fallback catches
+  # it — that would be a false positive ("server up" when actually it's
+  # only the embedded UI fallback page responding). Verify the JSON
+  # body claims status:ok so we know the API + DBs are actually wired.
+  body=$(curl -fsSL --max-time 2 "${url}/api/v1/health" 2>/dev/null || true)
+  if [ -n "$body" ] && printf '%s' "$body" | grep -q '"status":"ok"'; then
+    print_status OK server "up" "(${url}/api/v1/health)"
+    return
+  fi
+  print_status FAIL server "not reachable" "(${url}/api/v1/health)"
+  MISSING="${MISSING}server\n"
+}
+
 echo ">>> AgentHound preflight (target: ${TARGET})"
 
 case "$TARGET" in
@@ -105,6 +170,25 @@ case "$TARGET" in
     ;;
   build-collector)
     check_go
+    ;;
+  docker)
+    check_docker
+    ;;
+  docker-compose)
+    check_docker
+    check_docker_compose
+    ;;
+  server-running)
+    check_server_running
+    ;;
+  demo)
+    # `make demo` needs Docker + Compose for the lab containers. The
+    # seeder uses `agenthound-server ingest` (CLI path → Bootstrap →
+    # Neo4j+Postgres), NOT the HTTP API; database reachability is
+    # caught by the binary's runtime preflight at ingest time, so we
+    # don't double-check it here.
+    check_docker
+    check_docker_compose
     ;;
   *)
     # Unknown targets: be conservative and check everything.
@@ -121,10 +205,15 @@ if [ -n "$MISSING" ]; then
   printf "$MISSING" | while IFS= read -r tool; do
     [ -z "$tool" ] && continue
     case "$tool" in
-      go)   echo "    go    — install Go 1.25+ from https://go.dev/dl/" ;;
-      node) echo "    node  — install Node.js 20+ from https://nodejs.org/en/download" ;;
-      npm)  echo "    npm   — usually installed with Node.js. https://nodejs.org/en/download" ;;
-      *)    echo "    $tool — see project README" ;;
+      go)             echo "    go              — install Go 1.25+ from https://go.dev/dl/" ;;
+      node)           echo "    node            — install Node.js 20+ from https://nodejs.org/en/download" ;;
+      npm)            echo "    npm             — usually installed with Node.js. https://nodejs.org/en/download" ;;
+      docker)         echo "    docker          — install Docker Desktop / Engine from https://docs.docker.com/engine/install/" ;;
+      docker-daemon)  echo "    docker daemon   — Docker is installed but the daemon isn't running. Start Docker Desktop or 'sudo systemctl start docker'." ;;
+      docker-compose) echo "    docker compose  — install the v2 plugin (https://docs.docker.com/compose/install/) — comes with Docker Desktop by default." ;;
+      curl)           echo "    curl            — install curl (preinstalled on most systems; on Debian/Ubuntu: 'sudo apt install curl', on macOS via Homebrew: 'brew install curl')." ;;
+      server)         echo "    agenthound-server — start the server first with: docker compose -f docker/docker-compose.yml up -d  (or 'make up')" ;;
+      *)              echo "    $tool — see https://docs.agenthound.io/getting-started/install/" ;;
     esac
   done
   echo ""
