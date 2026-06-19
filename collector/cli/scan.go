@@ -573,53 +573,59 @@ func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []actio
 	for _, t := range targets {
 		host := t.Address
 		// open_ports is the authoritative per-host port list. We derive
-		// the candidate kind per port here via networkscan.PortToKind
+		// the candidate kinds per port here via networkscan.PortToKind
 		// rather than trusting candidate_kinds, which only lists ports
 		// that HAVE a kind mapping — for custom --ports with unmapped
 		// ports the two lists desync by index, which would dispatch a
 		// fingerprinter at the wrong port.
 		ports := splitCSV(t.Meta["open_ports"])
 
-		// Fingerprint each open port whose kind has a registered
-		// fingerprinter. Ports with no PortToKind mapping (custom --ports)
-		// or whose kind has no v0.2 fingerprinter (vLLM, Qdrant, MLflow,
-		// Jupyter, LangServe, OpenWebUI) silently skip.
+		// Fingerprint each open port against every candidate kind that has
+		// a registered fingerprinter. Ports with no PortToKind mapping
+		// (custom --ports) or whose kinds have no registered fingerprinter
+		// silently skip.
 		for _, portStr := range ports {
 			port, err := strconv.Atoi(portStr)
 			if err != nil {
 				continue
 			}
-			kind, ok := networkscan.PortToKind[port]
+			kinds, ok := networkscan.PortToKind[port]
 			if !ok {
 				continue
 			}
-			mod, ok := module.GetByTarget(kind, action.Fingerprint)
-			if !ok {
-				continue
+			// A port may map to multiple candidate kinds (e.g. 8000 →
+			// vLLM AND LangServe). Try each registered fingerprinter in
+			// turn; the rules are mutually exclusive so at most one matches,
+			// but we attempt all so no candidate is silently dead code.
+			for _, kind := range kinds {
+				mod, ok := module.GetByTarget(kind, action.Fingerprint)
+				if !ok {
+					continue
+				}
+				fp, ok := mod.(action.Fingerprinter)
+				if !ok {
+					continue
+				}
+				probed++
+				result, err := fp.Fingerprint(ctx, action.Target{
+					Kind:    "host",
+					Address: fmt.Sprintf("%s:%s", host, portStr),
+					Meta:    t.Meta,
+				})
+				if err != nil {
+					slog.Debug("fingerprint error", "kind", kind, "host", host, "port", portStr, "error", err)
+					continue
+				}
+				if !result.Matched || result.IngestData == nil {
+					continue
+				}
+				matched++
+				_, _ = fmt.Fprintf(stderr,
+					"[fingerprint] %s:%s → %s (version=%s, auth=%s)\n",
+					host, portStr, result.ServiceKind, result.Version, result.AuthMethod)
+				envelope.Graph.Nodes = append(envelope.Graph.Nodes, result.IngestData.Graph.Nodes...)
+				envelope.Graph.Edges = append(envelope.Graph.Edges, result.IngestData.Graph.Edges...)
 			}
-			fp, ok := mod.(action.Fingerprinter)
-			if !ok {
-				continue
-			}
-			probed++
-			result, err := fp.Fingerprint(ctx, action.Target{
-				Kind:    "host",
-				Address: fmt.Sprintf("%s:%s", host, portStr),
-				Meta:    t.Meta,
-			})
-			if err != nil {
-				slog.Debug("fingerprint error", "kind", kind, "host", host, "port", portStr, "error", err)
-				continue
-			}
-			if !result.Matched || result.IngestData == nil {
-				continue
-			}
-			matched++
-			_, _ = fmt.Fprintf(stderr,
-				"[fingerprint] %s:%s → %s (version=%s, auth=%s)\n",
-				host, portStr, result.ServiceKind, result.Version, result.AuthMethod)
-			envelope.Graph.Nodes = append(envelope.Graph.Nodes, result.IngestData.Graph.Nodes...)
-			envelope.Graph.Edges = append(envelope.Graph.Edges, result.IngestData.Graph.Edges...)
 		}
 	}
 	_, _ = fmt.Fprintf(stderr,

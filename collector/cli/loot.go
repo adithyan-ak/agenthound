@@ -41,14 +41,17 @@ var lootCmd = &cobra.Command{
 	Short: "Extract latent secrets from a discovered service (read-only)",
 	Long: `Run a registered Looter against a known service endpoint.
 
-Looters are read-only by contract: they issue ONLY GET / HEAD requests.
-The action emits Credential nodes and EXPOSES_CREDENTIAL edges into the
-graph, where the cross_service_credential_chain post-processor joins
-them with Config Collector emissions to surface credential-chain
-findings.
+Looters are read-only by contract: they make no state-mutating requests.
+GET / HEAD is the norm; a few use idempotent, side-effect-free search or
+lookup POSTs that some APIs expose only via POST (e.g. MLflow runs/search,
+Ollama /api/show) — these read without changing target state, and each is
+guarded by a get_only regression test. The action emits Credential nodes
+and EXPOSES_CREDENTIAL edges into the graph, where the
+cross_service_credential_chain post-processor joins them with Config
+Collector emissions to surface credential-chain findings.
 
-v0.2 supports --type litellm against a LiteLLM gateway. Future Looters
-(Ollama, Jupyter, MLflow) land in v0.3+.
+Supported Looters include --type litellm (LiteLLM gateway), ollama,
+jupyter, and mlflow.
 
 Example:
 
@@ -219,7 +222,7 @@ func requireLootAcknowledged(stderr io.Writer, stdin io.Reader) error {
 	_, _ = fmt.Fprintln(stderr)
 	_, _ = fmt.Fprintln(stderr, "[loot] First loot invocation on this machine.")
 	_, _ = fmt.Fprintln(stderr, "[loot] Looters extract credentials from running services. They are read-only —")
-	_, _ = fmt.Fprintln(stderr, "[loot] no mutating HTTP methods — but every probe shows up in the target's audit")
+	_, _ = fmt.Fprintln(stderr, "[loot] no state-mutating HTTP methods — but every probe shows up in the target's audit")
 	_, _ = fmt.Fprintln(stderr, "[loot] log. Coordinate with the target's IR/security team out-of-band BEFORE")
 	_, _ = fmt.Fprintln(stderr, "[loot] running this against any production system. See docs/loot-litellm.md.")
 	_, _ = fmt.Fprint(stderr, "[loot] If you have authorization for this engagement, type AUTHORIZED to proceed: ")

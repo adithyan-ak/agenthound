@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/adithyan-ak/agenthound/modules/networkscan"
 	"github.com/adithyan-ak/agenthound/sdk/action"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 	"github.com/adithyan-ak/agenthound/sdk/module"
@@ -75,6 +76,97 @@ func TestDispatchFingerprints_DerivesKindFromPort(t *testing.T) {
 	}
 	if len(envelope.Graph.Nodes) != 1 || envelope.Graph.Nodes[0].ID != "sha256:litellm-node" {
 		t.Errorf("matched node not merged into envelope: %+v", envelope.Graph.Nodes)
+	}
+}
+
+// conditionalFingerprinter is a mock that only reports Matched when its
+// shouldMatch flag is set, so a dispatch test can prove that BOTH candidate
+// kinds for a multi-kind port are probed while only the matching one emits.
+type conditionalFingerprinter struct {
+	targetKind  string
+	shouldMatch bool
+	probeCount  int
+	gotAddress  string
+	matchedNode string
+}
+
+func (m *conditionalFingerprinter) ID() string            { return "cond.fingerprint." + m.targetKind }
+func (m *conditionalFingerprinter) Action() action.Action { return action.Fingerprint }
+func (m *conditionalFingerprinter) Target() string        { return m.targetKind }
+func (m *conditionalFingerprinter) Description() string   { return "conditional mock fingerprinter" }
+func (m *conditionalFingerprinter) Version() string       { return "0.0.0" }
+func (m *conditionalFingerprinter) IsDestructive() bool   { return false }
+func (m *conditionalFingerprinter) Fingerprint(ctx context.Context, t action.Target) (*action.FingerprintResult, error) {
+	m.probeCount++
+	m.gotAddress = t.Address
+	if !m.shouldMatch {
+		return &action.FingerprintResult{Matched: false}, nil
+	}
+	return &action.FingerprintResult{
+		Matched:     true,
+		ServiceKind: m.targetKind,
+		IngestData: &ingest.IngestData{
+			Graph: ingest.GraphData{
+				Nodes: []ingest.Node{{ID: m.matchedNode, Kinds: []string{"AIService"}}},
+			},
+		},
+	}, nil
+}
+
+// TestPortToKind_8000IsMultiKind locks in that port 8000 maps to BOTH vLLM and
+// LangServe. Before the fix it was a single string "vllm", which made
+// langservefp dead code on the scan path.
+func TestPortToKind_8000IsMultiKind(t *testing.T) {
+	kinds := networkscan.PortToKind[8000]
+	want := map[string]bool{"vllm": false, "langserve": false}
+	for _, k := range kinds {
+		if _, ok := want[k]; ok {
+			want[k] = true
+		}
+	}
+	for k, seen := range want {
+		if !seen {
+			t.Errorf("PortToKind[8000] = %v, missing kind %q", kinds, k)
+		}
+	}
+}
+
+// TestDispatchFingerprints_TriesAllCandidateKinds is the Finding 2 regression.
+// Port 8000 maps to both "vllm" and "langserve". dispatchFingerprints must
+// probe BOTH candidate kinds, not just the first. Here vLLM does not match and
+// LangServe does, so the LangServe node must still be emitted — proving the
+// second candidate is reached.
+func TestDispatchFingerprints_TriesAllCandidateKinds(t *testing.T) {
+	vllm := &conditionalFingerprinter{targetKind: "vllm", shouldMatch: false}
+	langserve := &conditionalFingerprinter{targetKind: "langserve", shouldMatch: true, matchedNode: "sha256:langserve-node"}
+	module.Register(vllm)
+	module.Register(langserve)
+	defer deregisterModule(t, vllm.ID())
+	defer deregisterModule(t, langserve.ID())
+
+	targets := []action.Target{{
+		Kind:    "host",
+		Address: "10.0.0.9",
+		Meta: map[string]string{
+			"open_ports":      "8000",
+			"candidate_kinds": "vllm,langserve",
+		},
+	}}
+
+	envelope := &ingest.IngestData{}
+	dispatchFingerprints(context.Background(), io.Discard, targets, envelope)
+
+	if vllm.probeCount != 1 {
+		t.Errorf("vllm probed %d time(s), want exactly 1", vllm.probeCount)
+	}
+	if langserve.probeCount != 1 {
+		t.Errorf("langserve probed %d time(s), want exactly 1 (second candidate must be reached)", langserve.probeCount)
+	}
+	if vllm.gotAddress != "10.0.0.9:8000" || langserve.gotAddress != "10.0.0.9:8000" {
+		t.Errorf("dispatch addresses: vllm=%q langserve=%q, want both 10.0.0.9:8000", vllm.gotAddress, langserve.gotAddress)
+	}
+	if len(envelope.Graph.Nodes) != 1 || envelope.Graph.Nodes[0].ID != "sha256:langserve-node" {
+		t.Errorf("LangServe node not merged into envelope: %+v", envelope.Graph.Nodes)
 	}
 }
 

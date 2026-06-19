@@ -9,10 +9,22 @@ import (
 
 // Looter extracts latent secrets, configuration, or state from a Target
 // WITHOUT modifying it. Looters are read-only by contract: they MUST
-// only issue GET/HEAD requests; mutating methods (POST, PUT, DELETE)
-// are prohibited because they would create side-effects in the target's
-// audit trail and observable state. See docs/plans/sprint3-offensive-primitives.md
-// 4.7 for the full Reverter contract discussion.
+// NOT issue state-mutating requests. GET/HEAD is the norm; PUT, PATCH,
+// and DELETE are always prohibited because they change observable target
+// state.
+//
+// Narrow carve-out: a Looter MAY issue a POST when, and only when, the
+// target API exposes an idempotent, side-effect-free search/lookup query
+// solely via POST (e.g. MLflow's /api/2.0/mlflow/runs/search, Ollama's
+// /api/show). Such a POST reads without mutating. Every Looter that uses
+// one MUST ship a get_only_test.go regression guard that allowlists the
+// specific search/lookup call site (with a justifying comment) and fails
+// on any other non-GET method — see modules/ollamaloot/get_only_test.go
+// and modules/mlflowloot/get_only_test.go for the pattern. This keeps the
+// contract, the code, and the operator-facing CLI claims in agreement.
+//
+// See docs/plans/sprint3-offensive-primitives.md 4.7 for the full
+// Reverter contract discussion.
 //
 // Implementations also implement sdk/module.Module.
 type Looter interface {

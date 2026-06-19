@@ -9,7 +9,7 @@ Choose the interface that matches your module's purpose:
 | Interface | Action | Contract | Mutating? |
 |-----------|--------|----------|-----------|
 | `Fingerprinter` | `fingerprint` | Probe a target, identify the service kind/version/auth | No |
-| `Looter` | `loot` | Extract secrets/state via GET/HEAD only | No |
+| `Looter` | `loot` | Extract secrets/state read-only (GET/HEAD; idempotent search/lookup POSTs allowed with a `get_only` guard) | No |
 | `Extractor` | `extract` | Pull specific resources by reference (compute-heavy) | No (billing-heavy) |
 | `Poisoner` | `poison` | Inject content into upstream artifacts | **Yes** -- requires Reverter |
 | `Implanter` | `implant` | Plant persistent backdoors in target config | **Yes** -- requires Reverter |

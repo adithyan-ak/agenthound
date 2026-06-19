@@ -147,7 +147,7 @@ agenthound discover 10.0.0.0/24 --mcp --output -
 
 ### `agenthound loot`
 
-Extract latent secrets from a discovered service. Looters are **read-only by contract** (GET/HEAD only). Emits Credential nodes and EXPOSES_CREDENTIAL edges for the credential-chain post-processor.
+Extract latent secrets from a discovered service. Looters are **read-only by contract**: no state-mutating requests. GET/HEAD is the norm; a few use idempotent, side-effect-free search/lookup POSTs that some APIs expose only via POST (e.g. MLflow `runs/search`, Ollama `/api/show`), each guarded by a `get_only` regression test. Emits Credential nodes and EXPOSES_CREDENTIAL edges for the credential-chain post-processor.
 
 ```
 agenthound loot <host:port> --type <kind> [flags]
