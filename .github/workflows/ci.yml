@@ -76,6 +76,27 @@ jobs:
       - name: Size-check
         run: bash scripts/size-check.sh
 
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: server/ui/package-lock.json
+      # --ignore-scripts: no lifecycle hooks relied upon; eslint/vitest run from node_modules/.bin
+      - name: Install UI deps
+        run: cd server/ui && npm ci --ignore-scripts
+      - name: Lint (architecture import boundaries)
+        run: cd server/ui && npm run lint
+      - name: Unit tests (vitest)
+        run: cd server/ui && npm test
+      # SLOP_SKIP=hardcoded-grids: the dashboard grid-cols -> Every-Layout migration is
+      # a deferred, visually-QA'd task; the other design-system rules are enforced now.
+      - name: Slop-check (design-system gate)
+        run: SLOP_SKIP=hardcoded-grids bash scripts/slop-check.sh
+
   test-integration:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
