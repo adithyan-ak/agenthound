@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { EyeOff, Eye } from "lucide-react";
 import { useExplorerStore } from "@/store/explorer";
 import { useExplorerGraph } from "@/hooks/useExplorerGraph";
+import { useBlastRadius } from "@/hooks/useBlastRadius";
 import { getLens } from "@/lib/explorer/lens-config";
 import { buildExplorerGraph } from "@/lib/explorer/graph-builder";
 import { SEVERITY } from "@/theme/tokens";
@@ -13,10 +14,29 @@ export function InfoCard() {
   const subPresets = useExplorerStore((s) => s.subPresets[activeLens] ?? []);
   const showOrphans = useExplorerStore((s) => s.showOrphans);
   const toggleShowOrphans = useExplorerStore((s) => s.toggleShowOrphans);
+  const blastRadiusSourceId = useExplorerStore((s) => s.blastRadiusSourceId);
+  const blastDirection = useExplorerStore((s) => s.blastRadiusDirection);
+  const blastMaxHops = useExplorerStore((s) => s.blastRadiusMaxHops);
+
+  const { data: blastData } = useBlastRadius(
+    activeLens === "blast-radius" ? blastRadiusSourceId : null,
+    blastDirection,
+    blastMaxHops,
+  );
 
   const metrics = useMemo(() => {
     if (!data) return null;
     const lens = getLens(activeLens);
+
+    const blastRadius =
+      activeLens === "blast-radius" && blastData && blastRadiusSourceId
+        ? {
+            sourceId: blastRadiusSourceId,
+            nodeIds: blastData.nodeIdSet,
+            edgeKeys: blastData.edgeKeySet,
+          }
+        : undefined;
+
     const built = buildExplorerGraph(
       { nodes: data.nodes, edges: data.edges },
       {
@@ -24,11 +44,12 @@ export function InfoCard() {
         activeLensId: activeLens,
         subPresets,
         findings: data.findings,
+        blastRadius,
         showOrphans,
       },
     );
     return built.metrics;
-  }, [data, activeLens, subPresets, showOrphans]);
+  }, [data, activeLens, subPresets, showOrphans, blastData, blastRadiusSourceId]);
 
   const lens = getLens(activeLens);
 
