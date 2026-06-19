@@ -12,5 +12,5 @@ paths:
 - APOC fallback: all APOC-dependent code needs non-APOC fallbacks. APOC only required for Dijkstra.
 - Batch writes: group by (primaryLabel, sortedUmbrellaLabels) tuple. 1000 ops/txn with UNWIND.
 - go:embed constraint: server/ui/dist must be copied to server/internal/api/ui/dist before build.
-- 18 pre-built queries in server/internal/analysis/prebuilt/
-- 11 post-processors in server/internal/analysis/processors/ — execution order is dependency-driven
+- 19 pre-built queries in server/internal/analysis/prebuilt/
+- 15 post-processors in server/internal/analysis/processors/ — execution order is dependency-driven

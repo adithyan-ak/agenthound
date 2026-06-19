@@ -100,8 +100,17 @@ const findingSelectColumns = `f.fingerprint, f.severity, f.category, f.title, f.
 // filters by exact level when non-empty. When includeSuppressed is false,
 // findings triaged as accepted-risk / false-positive are dropped.
 func (s *FindingStore) ListLatestPerFingerprint(ctx context.Context, severity string, includeSuppressed bool) ([]model.Finding, error) {
+	// The inner subquery joins findings + finding_triage (aliases f, t) and
+	// keeps the latest row per fingerprint. The outer query must read every
+	// column back from the `latest` subquery — including the triage columns
+	// (status/note/updated_at), which at the outer level live on `latest`,
+	// NOT on `t` (that alias is only in scope inside the subquery). Listing
+	// the outer columns explicitly keeps the projection order aligned with
+	// scanFindings' positional scan.
 	query := `
-SELECT ` + strings.ReplaceAll(findingSelectColumns, "f.", "latest.") + `
+SELECT latest.fingerprint, latest.severity, latest.category, latest.title, latest.description, latest.edge_kind,
+       latest.source_id, latest.source_name, latest.source_kind, latest.target_id, latest.target_name, latest.target_kind,
+       latest.confidence, latest.owasp_map, latest.status, latest.note, latest.updated_at
 FROM (
     SELECT DISTINCT ON (f.fingerprint) ` + findingSelectColumns + `
     FROM findings f

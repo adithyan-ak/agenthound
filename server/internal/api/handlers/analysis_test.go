@@ -11,8 +11,66 @@ import (
 
 	"github.com/adithyan-ak/agenthound/server/internal/analysis"
 	"github.com/adithyan-ak/agenthound/server/internal/graph"
+	"github.com/adithyan-ak/agenthound/server/model"
 	"github.com/go-chi/chi/v5"
 )
+
+// recordingFindingLister captures the args HandleFindings forwards to the
+// snapshot store so the ?include_suppressed / ?severity plumbing can be
+// asserted at the handler layer without a database.
+type recordingFindingLister struct {
+	gotSeverity   string
+	gotSuppressed bool
+	findings      []model.Finding
+}
+
+func (m *recordingFindingLister) ListLatestPerFingerprint(_ context.Context, severity string, includeSuppressed bool) ([]model.Finding, error) {
+	m.gotSeverity = severity
+	m.gotSuppressed = includeSuppressed
+	return m.findings, nil
+}
+
+func TestHandleFindings_SuppressedHiddenByDefault(t *testing.T) {
+	mock := &recordingFindingLister{findings: []model.Finding{{ID: "aaaaaaaaaaaaaaaa", Severity: "high"}}}
+	h := &AnalysisHandler{findingStore: mock}
+	w := httptest.NewRecorder()
+	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings", nil)
+	h.HandleFindings(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if mock.gotSuppressed {
+		t.Error("default findings request must pass includeSuppressed=false")
+	}
+}
+
+func TestHandleFindings_IncludeSuppressedTrue(t *testing.T) {
+	mock := &recordingFindingLister{}
+	h := &AnalysisHandler{findingStore: mock}
+	w := httptest.NewRecorder()
+	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings?include_suppressed=true", nil)
+	h.HandleFindings(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !mock.gotSuppressed {
+		t.Error("?include_suppressed=true must pass includeSuppressed=true to the store")
+	}
+}
+
+func TestHandleFindings_SeverityForwarded(t *testing.T) {
+	mock := &recordingFindingLister{}
+	h := &AnalysisHandler{findingStore: mock}
+	w := httptest.NewRecorder()
+	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings?severity=critical", nil)
+	h.HandleFindings(w, r)
+
+	if mock.gotSeverity != "critical" {
+		t.Errorf("severity filter not forwarded: got %q", mock.gotSeverity)
+	}
+}
 
 func TestHandleShortestPath_MissingSource(t *testing.T) {
 	h := NewAnalysisHandler(&mockGraphDB{}, nil)

@@ -72,6 +72,14 @@ type triageUpdateRequest struct {
 	Note   string `json:"note"`
 }
 
+// maxTriageBodySize bounds the PUT body (a tiny {status, note} JSON);
+// mirrors the ingest handler's MaxBytesReader guard. maxTriageNoteLen caps
+// the note so a single field cannot bloat the finding_triage table.
+const (
+	maxTriageBodySize = 64 << 10 // 64 KB
+	maxTriageNoteLen  = 4096
+)
+
 // HandleSet records (or updates) the triage decision for a fingerprint.
 // Gated by the LocalToken middleware (mutating endpoint).
 func (h *TriageHandler) HandleSet(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +89,7 @@ func (h *TriageHandler) HandleSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxTriageBodySize)
 	var req triageUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteValidationError(w, "invalid JSON: "+err.Error())
@@ -88,6 +97,10 @@ func (h *TriageHandler) HandleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validTriageStatuses[req.Status] {
 		WriteValidationError(w, "invalid status; must be one of: new, triaging, confirmed, accepted-risk, false-positive")
+		return
+	}
+	if len(req.Note) > maxTriageNoteLen {
+		WriteValidationError(w, "note exceeds 4096 characters")
 		return
 	}
 	if h.store == nil {
