@@ -24,8 +24,7 @@ export async function fetchAllFindings(): Promise<Finding[]> {
     severities.map((sev) =>
       api
         .get("analysis/findings", { searchParams: { severity: sev } })
-        .json<Finding[]>()
-        .catch(() => [] as Finding[]),
+        .json<Finding[]>(),
     ),
   );
   return results.flat();

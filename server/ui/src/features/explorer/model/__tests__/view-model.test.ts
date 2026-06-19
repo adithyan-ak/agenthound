@@ -101,6 +101,8 @@ describe("explorer view-model — three distinct shapes", () => {
       const metrics = buildLensMetrics(DATA, {
         activeLens: "attack-surface",
         subPresets: ATTACK_PRESETS,
+        blastData: undefined,
+        blastRadiusSourceId: null,
         showOrphans: false,
       });
       const direct = buildExplorerGraph(
@@ -120,19 +122,44 @@ describe("explorer view-model — three distinct shapes", () => {
       const metrics = buildLensMetrics(DATA, {
         activeLens: "attack-surface",
         subPresets: ATTACK_PRESETS,
+        blastData: undefined,
+        blastRadiusSourceId: null,
         showOrphans: false,
       });
       expect(metrics.visibleEdgeCount).toBe(2);
       expect(metrics.criticalCount).toBe(1);
     });
 
-    it("does NOT reflect blast-radius scope (no blast input)", () => {
-      // On the blast-radius lens with no blast data, the lens-only build
-      // selects no edges — the InfoCard's number stays 0 regardless of any
-      // active blast source the canvas might be showing.
+    it("reflects blast-radius scope so the InfoCard tracks the canvas", () => {
+      // The card is blast-radius-aware: with a blast source + data it counts
+      // the in-scope subgraph edges (matching buildRenderGraph's metrics)
+      // instead of reading 0 on the blast-radius lens.
+      const blastData = {
+        nodes: [],
+        edges: [],
+        rings: {},
+        nodeIdSet: new Set(["agent-1", "resource-1"]),
+        edgeKeySet: new Set(["agent-1|resource-1|CAN_REACH"]),
+      } as unknown as BlastRadiusData;
+
       const metrics = buildLensMetrics(DATA, {
         activeLens: "blast-radius",
         subPresets: [],
+        blastData,
+        blastRadiusSourceId: "agent-1",
+        showOrphans: false,
+      });
+      expect(metrics.visibleEdgeCount).toBe(1);
+    });
+
+    it("selects no edges on the blast-radius lens until blast data loads", () => {
+      // Without blast data the scope is undefined, so the build can't select
+      // any in-scope edges yet — the card reads 0 only in this transient state.
+      const metrics = buildLensMetrics(DATA, {
+        activeLens: "blast-radius",
+        subPresets: [],
+        blastData: undefined,
+        blastRadiusSourceId: "agent-1",
         showOrphans: false,
       });
       expect(metrics.visibleEdgeCount).toBe(0);

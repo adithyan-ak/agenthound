@@ -26,6 +26,8 @@ export interface RenderParams {
 export interface LensMetricsParams {
   activeLens: LensId;
   subPresets: string[];
+  blastData: BlastRadiusData | undefined;
+  blastRadiusSourceId: string | null;
   showOrphans: boolean;
 }
 
@@ -88,16 +90,29 @@ export function buildRenderGraph(
 }
 
 /**
- * (3) Lens-only metrics for the InfoCard. Deliberately omits blast / chokepoint
- * / owned / high-value / highlight inputs so the InfoCard's numbers do NOT
- * change on the blast-radius lens or when a highlight is active — exactly what
- * the InfoCard computed before.
+ * (3) Lens metrics for the InfoCard. Mirrors the canvas's blast-radius scope so
+ * the card's numbers track the rendered blast subgraph instead of reading 0
+ * edges on the blast-radius lens. Still omits the chokepoint / owned /
+ * high-value / highlight inputs — those are canvas-only decorations that must
+ * not move the InfoCard's counts.
  */
 export function buildLensMetrics(
   data: ExplorerRawData,
   params: LensMetricsParams,
 ): LensMetrics {
   const lens = getLens(params.activeLens);
+
+  const blastRadius =
+    params.activeLens === "blast-radius" &&
+    params.blastData &&
+    params.blastRadiusSourceId
+      ? {
+          sourceId: params.blastRadiusSourceId,
+          nodeIds: params.blastData.nodeIdSet,
+          edgeKeys: params.blastData.edgeKeySet,
+        }
+      : undefined;
+
   const built = buildExplorerGraph(
     { nodes: data.nodes, edges: data.edges },
     {
@@ -105,6 +120,7 @@ export function buildLensMetrics(
       activeLensId: params.activeLens,
       subPresets: params.subPresets,
       findings: data.findings,
+      blastRadius,
       showOrphans: params.showOrphans,
     },
   );

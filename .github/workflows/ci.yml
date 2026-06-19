@@ -63,7 +63,7 @@ jobs:
           cache: npm
           cache-dependency-path: server/ui/package-lock.json
       - run: cd server/ui && npm ci --ignore-scripts && npm run build
-      - run: mkdir -p server/internal/api/ui && cp -r server/ui/dist server/internal/api/ui/dist
+      - run: mkdir -p server/internal/api/ui/dist && cp -r server/ui/dist/. server/internal/api/ui/dist/
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version: "1.25.11"

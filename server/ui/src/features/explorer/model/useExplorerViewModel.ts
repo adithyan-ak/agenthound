@@ -93,8 +93,23 @@ export function useExplorerViewModel(): ExplorerViewModel {
 
   const lensMetrics = useMemo(
     () =>
-      data ? buildLensMetrics(data, { activeLens, subPresets, showOrphans }) : null,
-    [data, activeLens, subPresets, showOrphans],
+      data
+        ? buildLensMetrics(data, {
+            activeLens,
+            subPresets,
+            blastData,
+            blastRadiusSourceId,
+            showOrphans,
+          })
+        : null,
+    [
+      data,
+      activeLens,
+      subPresets,
+      blastData,
+      blastRadiusSourceId,
+      showOrphans,
+    ],
   );
 
   return { data, isLoading, error, totals, render, lensMetrics };
