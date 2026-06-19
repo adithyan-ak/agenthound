@@ -359,3 +359,32 @@ export const LENS_MAP: Record<LensId, LensDefinition> = LENS_LIST.reduce(
 export function getLens(id: LensId): LensDefinition {
   return LENS_MAP[id];
 }
+
+/**
+ * Maps a finding's headline edge kind to the lens that best frames it, so a
+ * "View in Explorer" deep-link lands on the right view rather than the default
+ * topology. Credential and poisoning edges get their dedicated lenses; all
+ * other composite/attack edges use Attack Surface; structural edges fall back
+ * to Topology.
+ */
+export function lensForEdgeKind(kind: string): LensId {
+  switch (kind) {
+    case "AUTHENTICATES_WITH":
+    case "USES_CREDENTIAL":
+    case "HAS_ENV_VAR":
+    case "EXPOSES_CREDENTIAL":
+      return "credentials";
+    case "SHADOWS":
+    case "POISONED_DESCRIPTION":
+    case "POISONED_INSTRUCTIONS":
+      return "poisoning";
+    case "HAS_ACCESS_TO":
+    case "CAN_EXECUTE":
+    case "CAN_REACH":
+    case "CAN_EXFILTRATE_VIA":
+    case "CAN_IMPERSONATE":
+      return "attack-surface";
+    default:
+      return "topology";
+  }
+}

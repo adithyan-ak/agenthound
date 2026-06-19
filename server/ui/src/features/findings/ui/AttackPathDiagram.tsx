@@ -13,6 +13,9 @@ interface AttackPathDiagramProps {
   targetId: string;
   targetName: string;
   targetKind: string;
+  /** Shared hop focus with the hop-evidence timeline (the path "spine"). */
+  activeHop?: number | null;
+  onHopSelect?: (index: number) => void;
 }
 
 export function AttackPathDiagram({
@@ -24,6 +27,8 @@ export function AttackPathDiagram({
   targetId,
   targetName,
   targetKind,
+  activeHop,
+  onHopSelect,
 }: AttackPathDiagramProps) {
   const hasPath = !!path && path.nodes.length > 0;
 
@@ -53,7 +58,16 @@ export function AttackPathDiagram({
             return (
               <div key={node.id} className="flex items-center">
                 <PathHexNode node={node} isFirst={isFirst} isLast={isLast} severity={severity} />
-                {!isLast && edgeKind && <PathEdgeArrow kind={edgeKind} />}
+                {!isLast && edgeKind && (
+                  <PathEdgeArrow
+                    kind={edgeKind}
+                    index={i}
+                    active={activeHop === i}
+                    onClick={
+                      hasPath && onHopSelect ? () => onHopSelect(i) : undefined
+                    }
+                  />
+                )}
               </div>
             );
           })}

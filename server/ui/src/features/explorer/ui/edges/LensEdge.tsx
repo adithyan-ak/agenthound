@@ -1,24 +1,12 @@
 import { memo, useId } from "react";
 import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react";
 import type { LensEdgeData } from "@features/explorer/model/graph";
-import type { SeverityLevel } from "@features/explorer/model/lens-config";
-import { SEVERITY, EDGE_COLORS, NODE_KIND_COLORS } from "@shared/theme/tokens";
-
-const SEVERITY_COLORS: Record<SeverityLevel, string> = {
-  critical: SEVERITY.critical.solid,
-  high: SEVERITY.high.solid,
-  medium: SEVERITY.medium.solid,
-  low: SEVERITY.low.solid,
-  info: SEVERITY.info.solid,
-};
-
-const NEUTRAL_COLOR: string = EDGE_COLORS.structure;
-const CROSS_PROTOCOL_COLOR: string = NODE_KIND_COLORS.A2AAgent;
+import { useExplorerStore } from "@features/explorer/model/store";
+import { edgeLabel } from "@entities/edge";
+import { EDGE_COLORS } from "@shared/theme/tokens";
 
 function edgeColor(data: LensEdgeData): string {
-  if (data.isCrossProtocol) return CROSS_PROTOCOL_COLOR;
-  if (data.severity) return SEVERITY_COLORS[data.severity];
-  return NEUTRAL_COLOR;
+  return data.color ?? EDGE_COLORS.structure;
 }
 
 function edgeStroke(data: LensEdgeData): {
@@ -43,7 +31,13 @@ function LensEdgeComponent(props: EdgeProps) {
   const d = (data ?? {}) as LensEdgeData;
   const pathId = useId();
 
-  const [path] = getBezierPath({
+  // Each edge self-identifies hover/selection from the store so only the
+  // matching edge re-renders (selector returns a boolean).
+  const isSelected = useExplorerStore((s) => s.selectedEdge?.id === props.id);
+  const isHovered = useExplorerStore((s) => s.hoveredEdge?.id === props.id);
+  const active = (isSelected || isHovered) && !d.dim;
+
+  const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -54,11 +48,28 @@ function LensEdgeComponent(props: EdgeProps) {
   });
 
   const color = edgeColor(d);
-  const { width, dashArray } = edgeStroke(d);
-  const opacity = d.dim ? 0.06 : d.showFlowDot ? 1 : 0.75;
+  const stroke = edgeStroke(d);
+  const width = active ? stroke.width + 1 : stroke.width;
+  const dashArray = stroke.dashArray;
+  const opacity = d.dim ? 0.06 : active ? 1 : d.showFlowDot ? 1 : 0.75;
+
+  const extra = d.bundledCount > 1 ? ` +${d.bundledCount - 1}` : "";
+  const labelText = (edgeLabel(d.kind) + extra).toUpperCase();
+  const labelWidth = labelText.length * 5.7 + 14;
 
   return (
     <>
+      {active && (
+        <path
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={width + 4}
+          strokeLinecap="round"
+          opacity={0.2}
+          style={{ pointerEvents: "none" }}
+        />
+      )}
       <BaseEdge
         id={props.id}
         path={path}
@@ -112,18 +123,45 @@ function LensEdgeComponent(props: EdgeProps) {
           </circle>
         </>
       )}
-      {d.bundledCount > 1 && !d.dim && (
-        <text
-          x={(sourceX + targetX) / 2}
-          y={(sourceY + targetY) / 2 - 6}
-          fill={color}
-          fontSize={10}
-          fontWeight={600}
-          textAnchor="middle"
-          style={{ pointerEvents: "none", opacity }}
-        >
-          ×{d.bundledCount}
-        </text>
+      {active ? (
+        <g style={{ pointerEvents: "none" }}>
+          <rect
+            x={labelX - labelWidth / 2}
+            y={labelY - 9}
+            width={labelWidth}
+            height={17}
+            rx={3}
+            fill="#0B1220"
+            stroke={color}
+            strokeOpacity={0.55}
+          />
+          <text
+            x={labelX}
+            y={labelY + 3}
+            fill={color}
+            fontSize={9}
+            fontWeight={700}
+            textAnchor="middle"
+            style={{ letterSpacing: "0.04em" }}
+          >
+            {labelText}
+          </text>
+        </g>
+      ) : (
+        d.bundledCount > 1 &&
+        !d.dim && (
+          <text
+            x={(sourceX + targetX) / 2}
+            y={(sourceY + targetY) / 2 - 6}
+            fill={color}
+            fontSize={10}
+            fontWeight={600}
+            textAnchor="middle"
+            style={{ pointerEvents: "none", opacity }}
+          >
+            ×{d.bundledCount}
+          </text>
+        )
       )}
     </>
   );

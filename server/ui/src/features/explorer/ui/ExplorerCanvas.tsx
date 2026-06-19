@@ -57,6 +57,7 @@ export function ExplorerCanvas({
   const activeLens = useExplorerStore((s) => s.activeLens);
   const selectNode = useExplorerStore((s) => s.selectNode);
   const selectEdge = useExplorerStore((s) => s.selectEdge);
+  const setHoveredEdge = useExplorerStore((s) => s.setHoveredEdge);
   const openDrawer = useExplorerStore((s) => s.openDrawer);
   const clearSelection = useExplorerStore((s) => s.clearSelection);
   const setBlastRadiusSource = useExplorerStore((s) => s.setBlastRadiusSource);
@@ -65,6 +66,8 @@ export function ExplorerCanvas({
   const closeContextMenu = useExplorerStore((s) => s.closeContextMenu);
   const clearHighlight = useExplorerStore((s) => s.clearHighlight);
   const setHighlight = useExplorerStore((s) => s.setHighlight);
+  const pendingFocus = useExplorerStore((s) => s.pendingFocus);
+  const setPendingFocus = useExplorerStore((s) => s.setPendingFocus);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LensEdgeData>>([]);
@@ -157,6 +160,26 @@ export function ExplorerCanvas({
     }
   }, [nodes, showOrphans, layoutReady]);
 
+  // Deep-link / programmatic focus: when an external surface (e.g. a finding's
+  // "View in Explorer") requests focus on a set of nodes, pan/zoom to them once
+  // the layout is ready, then clear the request so it fires exactly once.
+  useEffect(() => {
+    if (!layoutReady || !pendingFocus) return;
+    const ids = new Set(pendingFocus.nodeIds);
+    const present = nodes.filter((n) => ids.has(n.id));
+    if (present.length === 0) return;
+    const timer = setTimeout(() => {
+      reactFlowRef.current.fitView({
+        nodes: present.map((n) => ({ id: n.id })),
+        padding: 0.4,
+        duration: 700,
+        maxZoom: 1.2,
+      });
+      setPendingFocus(null);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [pendingFocus, nodes, layoutReady, setPendingFocus]);
+
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
       selectNode(node.id);
@@ -178,9 +201,38 @@ export function ExplorerCanvas({
 
   const onEdgeClick: EdgeMouseHandler = useCallback(
     (_, edge) => {
-      selectEdge(edge.id);
+      const d = edge.data as LensEdgeData | undefined;
+      if (!d) return;
+      selectEdge({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: d,
+      });
+      setHoveredEdge(null);
     },
-    [selectEdge],
+    [selectEdge, setHoveredEdge],
+  );
+
+  const onEdgeMouseMove: EdgeMouseHandler = useCallback(
+    (event, edge) => {
+      const d = edge.data as LensEdgeData | undefined;
+      if (!d || d.dim) return;
+      setHoveredEdge({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: d,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [setHoveredEdge],
+  );
+
+  const onEdgeMouseLeave: EdgeMouseHandler = useCallback(
+    () => setHoveredEdge(null),
+    [setHoveredEdge],
   );
 
   const onNodeContextMenu: NodeMouseHandler = useCallback(
@@ -243,6 +295,8 @@ export function ExplorerCanvas({
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
       onEdgeClick={onEdgeClick}
+      onEdgeMouseMove={onEdgeMouseMove}
+      onEdgeMouseLeave={onEdgeMouseLeave}
       onNodeContextMenu={onNodeContextMenu}
       onPaneClick={onPaneClick}
       nodeTypes={nodeTypes}

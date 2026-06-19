@@ -1,9 +1,40 @@
 import type { APIEdge, APINode } from "@entities/graph/dto";
 import type { Finding } from "@entities/finding/model";
+import { getEdgeColor } from "@entities/edge";
 import type { SeverityLevel } from "../lens-config";
 import type { BuildOptions, BundledEdge, LensEdgeData, LogicalEdge } from "./types";
 import { edgeKey, bundleKey } from "./edge-key";
 import { isCrossProtocolEdge } from "./protocol";
+import { SEVERITY, EDGE_COLORS, NODE_KIND_COLORS } from "@shared/theme/tokens";
+
+const SEVERITY_COLOR: Record<SeverityLevel, string> = {
+  critical: SEVERITY.critical.solid,
+  high: SEVERITY.high.solid,
+  medium: SEVERITY.medium.solid,
+  low: SEVERITY.low.solid,
+  info: SEVERITY.info.solid,
+};
+
+/**
+ * Resolve an edge's final stroke color from the lens coloring policy. Mirrors
+ * the legend's decoder so the canvas and legend never disagree:
+ *   - cross-protocol edges → A2A purple (the differentiator)
+ *   - severity-coloring lens with a finding → severity color
+ *   - severity-coloring lens, no finding → neutral structure slate (recede)
+ *   - non-severity lens → the edge's category color (trust / structure / attack)
+ */
+export function resolveEdgeColor(
+  kind: string,
+  severity: SeverityLevel | null,
+  isCrossProtocol: boolean,
+  colorBySeverity: boolean,
+): string {
+  if (isCrossProtocol) return NODE_KIND_COLORS.A2AAgent;
+  if (colorBySeverity) {
+    return severity ? SEVERITY_COLOR[severity] : EDGE_COLORS.structure;
+  }
+  return getEdgeColor(kind);
+}
 
 export function severityRank(severity: SeverityLevel | null): number {
   switch (severity) {
@@ -176,6 +207,13 @@ export function buildLogicalEdges(
     touchedNodeIds.add(primary.source);
     touchedNodeIds.add(primary.target);
 
+    const color = resolveEdgeColor(
+      primary.kind,
+      topSeverity,
+      crossProtocol,
+      lens.colorEdgesBySeverity,
+    );
+
     edges.push({
       id: edgeId,
       source: primary.source,
@@ -195,6 +233,7 @@ export function buildLogicalEdges(
         dim,
         emphasized: false,
         showFlowDot,
+        color,
       } satisfies LensEdgeData,
     });
   }

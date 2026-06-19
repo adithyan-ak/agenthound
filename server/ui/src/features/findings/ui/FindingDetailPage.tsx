@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "@shared/ui/primitives/skeleton";
 import { Stack, Sidebar } from "@shared/ui/layout";
 import { isEditableTarget } from "@shared/lib";
@@ -18,6 +18,15 @@ export function FindingDetailPage() {
   const navigate = useNavigate();
   const { data: detail, isLoading, error } = useFindingDetail(findingId);
   const { prevId, nextId } = useFindingsNavigation(findingId);
+
+  // Shared hop focus links the attack-path strip and the hop-evidence timeline
+  // into a single "spine": selecting a hop in one expands/scrolls the other.
+  const [activeHop, setActiveHop] = useState<number | null>(null);
+
+  // Reset the focused hop when navigating between findings.
+  useEffect(() => {
+    setActiveHop(null);
+  }, [findingId]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -101,6 +110,8 @@ export function FindingDetailPage() {
             targetId={f.target_id}
             targetName={f.target_name}
             targetKind={f.target_kind}
+            activeHop={activeHop}
+            onHopSelect={setActiveHop}
           />
 
           <Sidebar
@@ -114,7 +125,13 @@ export function FindingDetailPage() {
                 <FindingReferences finding={f} />
               </Stack>
             }
-            main={<HopEvidenceTimeline path={detail.attack_path} />}
+            main={
+              <HopEvidenceTimeline
+                path={detail.attack_path}
+                activeHop={activeHop}
+                onHopSelect={setActiveHop}
+              />
+            }
           />
         </Stack>
       </div>

@@ -44,6 +44,14 @@ export interface LensEdgeData extends Record<string, unknown> {
   dim: boolean;
   emphasized: boolean;
   showFlowDot: boolean;
+  /**
+   * Final resolved stroke color, computed once at build time from the lens'
+   * coloring policy: cross-protocol → purple; severity lens with a finding →
+   * severity color; otherwise the edge's category color (trust/structure/
+   * attack). Centralizing it here keeps the renderer dumb and the legend
+   * honest (the legend decodes the same policy).
+   */
+  color: string;
 }
 
 export interface BundledEdge {
