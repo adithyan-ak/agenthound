@@ -1,5 +1,7 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { LENS_LIST } from "./lens-config";
+import type { LensEdgeData } from "./graph";
 
 export type LensId =
   | "topology"
@@ -15,7 +17,8 @@ export type DrawerTab =
   | "properties"
   | "connections"
   | "evidence"
-  | "remediation";
+  | "remediation"
+  | "findings";
 
 export type BlastDirection = "out" | "in" | "both";
 
@@ -25,11 +28,38 @@ export interface HighlightState {
   title?: string;
 }
 
+/** A selected edge carries its full bundled data so the edge drawer can render
+ * every constituent relationship without re-parsing the React-Flow edge id. */
+export interface SelectedEdge {
+  id: string;
+  source: string;
+  target: string;
+  data: LensEdgeData;
+}
+
+/** Edge under the cursor — drives the floating edge tooltip. */
+export interface HoveredEdge {
+  id: string;
+  source: string;
+  target: string;
+  data: LensEdgeData;
+  x: number;
+  y: number;
+}
+
+/** A request to pan/zoom the canvas onto a set of nodes (deep-link focus). */
+export interface PendingFocus {
+  nodeIds: string[];
+  title?: string;
+}
+
 interface ExplorerState {
   activeLens: LensId;
   subPresets: Record<LensId, string[]>;
   selectedNodeId: string | null;
-  selectedEdgeId: string | null;
+  selectedEdge: SelectedEdge | null;
+  hoveredEdge: HoveredEdge | null;
+  pendingFocus: PendingFocus | null;
   drawerOpen: boolean;
   drawerTab: DrawerTab;
   blastRadiusSourceId: string | null;
@@ -49,7 +79,8 @@ interface ExplorerActions {
   setSubPresets: (lens: LensId, presets: string[]) => void;
   toggleSubPreset: (lens: LensId, preset: string) => void;
   selectNode: (id: string | null) => void;
-  selectEdge: (id: string | null) => void;
+  selectEdge: (edge: SelectedEdge | null) => void;
+  setHoveredEdge: (edge: HoveredEdge | null) => void;
   clearSelection: () => void;
   openDrawer: (tab?: DrawerTab) => void;
   closeDrawer: () => void;
@@ -61,6 +92,7 @@ interface ExplorerActions {
   toggleShowOrphans: () => void;
   setHighlight: (highlight: HighlightState | null) => void;
   clearHighlight: () => void;
+  setPendingFocus: (focus: PendingFocus | null) => void;
   openContextMenu: (nodeId: string, x: number, y: number) => void;
   closeContextMenu: () => void;
 }
@@ -71,7 +103,7 @@ interface ExplorerActions {
 // leaving genuinely-emitted edges (e.g. CAN_IMPERSONATE, EXPOSES_CREDENTIAL)
 // off by default. `LensId` is imported by lens-config as a type-only import,
 // so this value import introduces no runtime circular dependency.
-const DEFAULT_SUB_PRESETS = Object.fromEntries(
+export const DEFAULT_SUB_PRESETS = Object.fromEntries(
   LENS_LIST.map((lens) => [
     lens.id,
     lens.subPresets.filter((sp) => sp.defaultEnabled).map((sp) => sp.id),
@@ -79,11 +111,14 @@ const DEFAULT_SUB_PRESETS = Object.fromEntries(
 ) as Record<LensId, string[]>;
 
 export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
-  (set) => ({
+  persist(
+    (set) => ({
       activeLens: "topology",
       subPresets: DEFAULT_SUB_PRESETS,
       selectedNodeId: null,
-      selectedEdgeId: null,
+      selectedEdge: null,
+      hoveredEdge: null,
+      pendingFocus: null,
       drawerOpen: false,
       drawerTab: "properties",
       blastRadiusSourceId: null,
@@ -112,14 +147,19 @@ export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
           };
         }),
 
-      selectNode: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
+      selectNode: (id) =>
+        set({ selectedNodeId: id, selectedEdge: null }),
 
-      selectEdge: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
+      selectEdge: (edge) =>
+        set({ selectedEdge: edge, selectedNodeId: null }),
+
+      setHoveredEdge: (edge) => set({ hoveredEdge: edge }),
 
       clearSelection: () =>
         set({
           selectedNodeId: null,
-          selectedEdgeId: null,
+          selectedEdge: null,
+          hoveredEdge: null,
           drawerOpen: false,
           highlight: null,
           contextMenu: null,
@@ -152,9 +192,23 @@ export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
 
       clearHighlight: () => set({ highlight: null }),
 
+      setPendingFocus: (focus) => set({ pendingFocus: focus }),
+
       openContextMenu: (nodeId, x, y) =>
         set({ contextMenu: { nodeId, x, y } }),
 
       closeContextMenu: () => set({ contextMenu: null }),
     }),
+    {
+      // Persist only durable view preferences. Selection / hover / focus /
+      // blast-radius are ephemeral and intentionally excluded so a reload
+      // restores the user's lens + sub-preset choices without restoring a
+      // stale selection.
+      name: "agenthound-explorer-view",
+      partialize: (state) => ({
+        activeLens: state.activeLens,
+        subPresets: state.subPresets,
+      }),
+    },
+  ),
 );

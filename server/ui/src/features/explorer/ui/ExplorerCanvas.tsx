@@ -57,6 +57,7 @@ export function ExplorerCanvas({
   const activeLens = useExplorerStore((s) => s.activeLens);
   const selectNode = useExplorerStore((s) => s.selectNode);
   const selectEdge = useExplorerStore((s) => s.selectEdge);
+  const setHoveredEdge = useExplorerStore((s) => s.setHoveredEdge);
   const openDrawer = useExplorerStore((s) => s.openDrawer);
   const clearSelection = useExplorerStore((s) => s.clearSelection);
   const setBlastRadiusSource = useExplorerStore((s) => s.setBlastRadiusSource);
@@ -65,6 +66,8 @@ export function ExplorerCanvas({
   const closeContextMenu = useExplorerStore((s) => s.closeContextMenu);
   const clearHighlight = useExplorerStore((s) => s.clearHighlight);
   const setHighlight = useExplorerStore((s) => s.setHighlight);
+  const pendingFocus = useExplorerStore((s) => s.pendingFocus);
+  const setPendingFocus = useExplorerStore((s) => s.setPendingFocus);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<LensEdgeData>>([]);
@@ -75,6 +78,15 @@ export function ExplorerCanvas({
   reactFlowRef.current = reactFlow;
   const hasInitialLayoutRef = useRef(false);
   const prevShowOrphansRef = useRef(showOrphans);
+  // Refs (not deps) so the async layout effect can read the latest lens / focus
+  // without re-running for unrelated `built` recomputations. lastFitLensRef
+  // tracks the lens we last fit the camera to, so a re-fit fires exactly once
+  // per lens switch.
+  const activeLensRef = useRef(activeLens);
+  activeLensRef.current = activeLens;
+  const pendingFocusRef = useRef(pendingFocus);
+  pendingFocusRef.current = pendingFocus;
+  const lastFitLensRef = useRef(activeLens);
 
   const ownedNodeIds = useMarksStore((s) => s.ownedNodeIds);
   const highValueNodeIds = useMarksStore((s) => s.highValueNodeIds);
@@ -105,6 +117,7 @@ export function ExplorerCanvas({
   useEffect(() => {
     if (!built) return;
     let cancelled = false;
+    const lensAtBuild = activeLensRef.current;
     computeExplorerLayout(built.nodes, built.edges).then((positioned) => {
       if (cancelled) return;
       setNodes(positioned.nodes);
@@ -112,10 +125,26 @@ export function ExplorerCanvas({
       if (!hasInitialLayoutRef.current) {
         hasInitialLayoutRef.current = true;
         setLayoutReady(true);
+        lastFitLensRef.current = lensAtBuild;
         setTimeout(
           () => reactFlowRef.current.fitView({ padding: 0.18, duration: 400 }),
           80,
         );
+        return;
+      }
+      // A lens switch recomputes the node/edge subset and ELK positions, so the
+      // viewport would otherwise stay parked over the previous lens' (now empty
+      // or offscreen) region — reading as "nothing here". Re-fit once per lens
+      // change, after the new layout is committed. Deep-link focus drives its
+      // own targeted fit via pendingFocus, so defer to it when one is queued.
+      if (lensAtBuild !== lastFitLensRef.current) {
+        lastFitLensRef.current = lensAtBuild;
+        if (!pendingFocusRef.current) {
+          setTimeout(
+            () => reactFlowRef.current.fitView({ padding: 0.18, duration: 400 }),
+            80,
+          );
+        }
       }
     });
     return () => {
@@ -157,6 +186,26 @@ export function ExplorerCanvas({
     }
   }, [nodes, showOrphans, layoutReady]);
 
+  // Deep-link / programmatic focus: when an external surface (e.g. a finding's
+  // "View in Explorer") requests focus on a set of nodes, pan/zoom to them once
+  // the layout is ready, then clear the request so it fires exactly once.
+  useEffect(() => {
+    if (!layoutReady || !pendingFocus) return;
+    const ids = new Set(pendingFocus.nodeIds);
+    const present = nodes.filter((n) => ids.has(n.id));
+    if (present.length === 0) return;
+    const timer = setTimeout(() => {
+      reactFlowRef.current.fitView({
+        nodes: present.map((n) => ({ id: n.id })),
+        padding: 0.4,
+        duration: 700,
+        maxZoom: 1.2,
+      });
+      setPendingFocus(null);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [pendingFocus, nodes, layoutReady, setPendingFocus]);
+
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {
       selectNode(node.id);
@@ -178,9 +227,38 @@ export function ExplorerCanvas({
 
   const onEdgeClick: EdgeMouseHandler = useCallback(
     (_, edge) => {
-      selectEdge(edge.id);
+      const d = edge.data as LensEdgeData | undefined;
+      if (!d) return;
+      selectEdge({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: d,
+      });
+      setHoveredEdge(null);
     },
-    [selectEdge],
+    [selectEdge, setHoveredEdge],
+  );
+
+  const onEdgeMouseMove: EdgeMouseHandler = useCallback(
+    (event, edge) => {
+      const d = edge.data as LensEdgeData | undefined;
+      if (!d || d.dim) return;
+      setHoveredEdge({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: d,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [setHoveredEdge],
+  );
+
+  const onEdgeMouseLeave: EdgeMouseHandler = useCallback(
+    () => setHoveredEdge(null),
+    [setHoveredEdge],
   );
 
   const onNodeContextMenu: NodeMouseHandler = useCallback(
@@ -243,6 +321,8 @@ export function ExplorerCanvas({
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
       onEdgeClick={onEdgeClick}
+      onEdgeMouseMove={onEdgeMouseMove}
+      onEdgeMouseLeave={onEdgeMouseLeave}
       onNodeContextMenu={onNodeContextMenu}
       onPaneClick={onPaneClick}
       nodeTypes={nodeTypes}

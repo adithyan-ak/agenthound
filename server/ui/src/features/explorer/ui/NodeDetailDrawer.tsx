@@ -9,10 +9,12 @@ import { PropertiesTab } from "./drawer/PropertiesTab";
 import { ConnectionsTab } from "./drawer/ConnectionsTab";
 import { EvidenceTab } from "./drawer/EvidenceTab";
 import { RemediationTab } from "./drawer/RemediationTab";
+import { FindingsTab } from "./drawer/FindingsTab";
 
 const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "properties", label: "Properties" },
   { id: "connections", label: "Connections" },
+  { id: "findings", label: "Findings" },
   { id: "evidence", label: "Evidence" },
   { id: "remediation", label: "Remediation" },
 ];
@@ -126,6 +128,9 @@ export function NodeDetailDrawer() {
               {drawerTab === "properties" && <PropertiesTab node={node} />}
               {drawerTab === "connections" && (
                 <ConnectionsTab nodeId={selectedNodeId} edges={edges} />
+              )}
+              {drawerTab === "findings" && (
+                <FindingsTab nodeId={selectedNodeId} />
               )}
               {drawerTab === "evidence" && <EvidenceTab node={node} />}
               {drawerTab === "remediation" && (

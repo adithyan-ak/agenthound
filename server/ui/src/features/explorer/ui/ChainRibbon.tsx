@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { AlertOctagon, ArrowRight, Shield } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertOctagon, ArrowRight, ExternalLink, Shield } from "lucide-react";
 import { useExplorerGraph } from "@features/explorer/model/useExplorerGraph";
 import { useExplorerStore } from "@features/explorer/model/store";
 import {
@@ -10,6 +11,7 @@ import { SEVERITY, SIGNAL_OK } from "@shared/theme/tokens";
 import { cn } from "@shared/lib/utils";
 
 export function ChainRibbon() {
+  const navigate = useNavigate();
   const activeLens = useExplorerStore((s) => s.activeLens);
   const selectNode = useExplorerStore((s) => s.selectNode);
   const selectedNodeId = useExplorerStore((s) => s.selectedNodeId);
@@ -74,6 +76,7 @@ export function ChainRibbon() {
               selectNode(chain.sourceId);
               openDrawer();
             }}
+            onOpenFinding={() => navigate(`/findings/${chain.findingId}`)}
           />
         ))}
       </div>
@@ -85,17 +88,27 @@ function ChainCard({
   chain,
   selected,
   onSelect,
+  onOpenFinding,
 }: {
   chain: CriticalChain;
   selected: boolean;
   onSelect: () => void;
+  onOpenFinding: () => void;
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={cn(
-        "relative w-[280px] flex-shrink-0 overflow-hidden rounded-[3px] border p-3 text-left",
-        "transition-[border-color,background-color] duration-150 ease-out",
+        "relative w-[280px] flex-shrink-0 cursor-pointer overflow-hidden rounded-[3px] border p-3 text-left outline-none",
+        "transition-[border-color,background-color] duration-150 ease-out focus-visible:border-primary/60",
         selected
           ? "border-destructive/60 bg-destructive/10"
           : "border-border bg-black/30 hover:border-mauve-7 hover:bg-white/[0.03]",
@@ -115,9 +128,22 @@ function ChainCard({
             Critical
           </span>
         </div>
-        <span className="font-mono text-[9px] tabular-nums text-muted-foreground">
-          {(chain.confidence * 100).toFixed(0)}% conf
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[9px] tabular-nums text-muted-foreground">
+            {(chain.confidence * 100).toFixed(0)}% conf
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenFinding();
+            }}
+            className="flex h-5 w-5 items-center justify-center rounded-[2px] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-primary"
+            aria-label="Open finding detail"
+            title="Open finding detail"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
       </div>
       <div className="mb-1.5 line-clamp-2 text-xs font-semibold text-foreground">{chain.title}</div>
       <div className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
@@ -126,6 +152,6 @@ function ChainCard({
         <span className="max-w-[80px] truncate">{chain.targetName}</span>
         <span className="ml-auto text-[9px] uppercase">{chain.edgeKind.replace(/_/g, " ")}</span>
       </div>
-    </button>
+    </div>
   );
 }

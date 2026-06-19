@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ListTree } from "lucide-react";
 import { WidgetCard } from "@shared/ui/widgets";
 import { Grid } from "@shared/ui/layout";
 import { getEdgeCategory } from "@entities/edge";
 import { EDGE_EXPLOIT } from "../lib/edge-exploits";
 import { EDGE_COLORS, SEVERITY } from "@shared/theme/tokens";
+import { cn } from "@shared/lib/utils";
 import type { AttackPath } from "@entities/finding/model";
 
 interface HopEvidenceTimelineProps {
   path: AttackPath | null;
+  /** Shared hop focus with the attack-path strip (the path "spine"). */
+  activeHop?: number | null;
+  onHopSelect?: (index: number) => void;
 }
 
-export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
+export function HopEvidenceTimeline({
+  path,
+  activeHop,
+  onHopSelect,
+}: HopEvidenceTimelineProps) {
   const edges = path?.edges ?? [];
   const nodeMap = new Map((path?.nodes ?? []).map((n) => [n.id, n]));
 
@@ -24,6 +32,20 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
     return initial;
   });
 
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+
+  // When a hop is focused from the strip, expand it and scroll it into view.
+  useEffect(() => {
+    if (activeHop == null) return;
+    setExpanded((prev) => {
+      if (prev.has(activeHop)) return prev;
+      const next = new Set(prev);
+      next.add(activeHop);
+      return next;
+    });
+    rowRefs.current[activeHop]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeHop]);
+
   function toggle(index: number) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -31,6 +53,7 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
       else next.add(index);
       return next;
     });
+    onHopSelect?.(index);
   }
 
   if (edges.length === 0) {
@@ -66,10 +89,18 @@ export function HopEvidenceTimeline({ path }: HopEvidenceTimelineProps) {
           const tgtName = (tgtNode?.properties?.name as string) || edge.target.slice(0, 16);
 
           return (
-            <div key={i}>
+            <div
+              key={i}
+              ref={(el) => {
+                rowRefs.current[i] = el;
+              }}
+            >
               <button
                 onClick={() => toggle(i)}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                className={cn(
+                  "flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition-colors",
+                  activeHop === i ? "bg-white/[0.05]" : "hover:bg-white/[0.03]",
+                )}
                 style={{ boxShadow: `inset 2px 0 0 0 ${color}` }}
               >
                 {isOpen ? (

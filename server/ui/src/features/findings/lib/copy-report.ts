@@ -1,5 +1,32 @@
 import type { Finding, AttackPath, RemediationStep } from "@entities/finding/model";
 
+/**
+ * Campaign export: a markdown summary table of multiple findings (the register
+ * selection). Path-level detail requires per-finding fetches, so this stays a
+ * summary — id, severity, relationship, endpoints, OWASP, confidence.
+ */
+export function buildFindingsTableMarkdown(findings: Finding[]): string {
+  const lines: string[] = [];
+  lines.push(`## AgentHound Findings (${findings.length})`);
+  lines.push("");
+  lines.push(
+    "| Severity | Finding | Relationship | Source → Target | OWASP | Conf |",
+  );
+  lines.push("|----------|---------|--------------|-----------------|-------|------|");
+  for (const f of findings) {
+    const src = f.source_name || f.source_id.slice(0, 12);
+    const tgt = f.target_name || f.target_id.slice(0, 12);
+    const owasp = f.owasp_map.join(", ") || "—";
+    lines.push(
+      `| ${f.severity.toUpperCase()} | ${f.title} | ${f.edge_kind} | ${src} → ${tgt} | ${owasp} | ${Math.round(
+        f.confidence * 100,
+      )}% |`,
+    );
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 export function buildMarkdownReport(
   finding: Finding,
   path: AttackPath | null,

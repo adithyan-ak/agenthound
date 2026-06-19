@@ -8,6 +8,9 @@ import { StatusStrip } from "./ui/StatusStrip";
 import { ChainRibbon } from "./ui/ChainRibbon";
 import { BlastRadiusRings } from "./ui/BlastRadiusRings";
 import { NodeDetailDrawer } from "./ui/NodeDetailDrawer";
+import { EdgeDetailDrawer } from "./ui/EdgeDetailDrawer";
+import { EdgeTooltip } from "./ui/EdgeTooltip";
+import { ExplorerDeepLink } from "./ui/ExplorerDeepLink";
 import { ExplorerNodeContextMenu } from "./ui/ExplorerNodeContextMenu";
 
 export function ExplorerPage() {
@@ -41,7 +44,10 @@ function ExplorerWorkspace() {
       <InfoCard metrics={vm.lensMetrics} />
       <Legend />
       <ChainRibbon />
+      <ExplorerDeepLink />
       <NodeDetailDrawer />
+      <EdgeDetailDrawer />
+      <EdgeTooltip />
       <StatusStrip totals={vm.totals} />
       <ExplorerNodeContextMenu />
     </>

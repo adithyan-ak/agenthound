@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Compass, Copy, Check } from "lucide-react";
 import { MiniHexIcon } from "./MiniHexIcon";
+import { TriageControl } from "./TriageControl";
 import { cn } from "@shared/lib/utils";
 import { SEVERITY, SEVERITY_BY_KEY } from "@shared/theme/tokens";
 import type { FindingDetail } from "@entities/finding/model";
@@ -146,8 +147,12 @@ export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingH
           </div>
 
           {/* Actions */}
-          <div className="flex shrink-0 flex-col gap-2">
-            <button className={consoleBtn} onClick={() => navigate("/explorer")}>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <TriageControl findingId={f.id} />
+            <button
+              className={consoleBtn}
+              onClick={() => navigate(`/explorer?finding=${f.id}`)}
+            >
               <Compass className="h-3.5 w-3.5" /> View in Explorer
             </button>
             <button className={consoleBtn} onClick={handleCopy}>
