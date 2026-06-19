@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { LENS_LIST } from "./lens-config";
 
 export type LensId =
   | "topology"
@@ -64,30 +65,18 @@ interface ExplorerActions {
   closeContextMenu: () => void;
 }
 
-const DEFAULT_SUB_PRESETS: Record<LensId, string[]> = {
-  topology: [
-    "TRUSTS_SERVER",
-    "PROVIDES_TOOL",
-    "PROVIDES_RESOURCE",
-    "PROVIDES_PROMPT",
-    "ADVERTISES_SKILL",
-    "RUNS_ON",
-    "CONFIGURED_IN",
-    "LOADS_INSTRUCTIONS",
-  ],
-  "attack-surface": [
-    "HAS_ACCESS_TO",
-    "CAN_EXECUTE",
-    "CAN_REACH",
-    "CAN_EXFILTRATE_VIA",
-  ],
-  critical: [],
-  "cross-protocol": [],
-  credentials: ["AUTHENTICATES_WITH", "USES_CREDENTIAL", "HAS_ENV_VAR"],
-  poisoning: ["SHADOWS", "POISONED_DESCRIPTION", "POISONED_INSTRUCTIONS"],
-  "blast-radius": [],
-  chokepoints: [],
-};
+// Default-enabled sub-presets are DERIVED from lens-config's `defaultEnabled`
+// flags so the two can never drift. This was previously a hand-maintained
+// literal that silently fell behind lens-config as new edge kinds were added,
+// leaving genuinely-emitted edges (e.g. CAN_IMPERSONATE, EXPOSES_CREDENTIAL)
+// off by default. `LensId` is imported by lens-config as a type-only import,
+// so this value import introduces no runtime circular dependency.
+const DEFAULT_SUB_PRESETS = Object.fromEntries(
+  LENS_LIST.map((lens) => [
+    lens.id,
+    lens.subPresets.filter((sp) => sp.defaultEnabled).map((sp) => sp.id),
+  ]),
+) as Record<LensId, string[]>;
 
 export const useExplorerStore = create<ExplorerState & ExplorerActions>()(
   (set) => ({
