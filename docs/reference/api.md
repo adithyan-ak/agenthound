@@ -29,6 +29,7 @@ If you need to expose the server beyond loopback, do so at the network layer (VP
 - `POST /api/v1/analysis/shortest-path`
 - `POST /api/v1/analysis/all-paths`
 - `POST /api/v1/analysis/weighted-path`
+- `PUT /api/v1/findings/triage/{fingerprint}`
 
 A request to any of these without the header returns `401 Unauthorized`.
 
@@ -217,19 +218,39 @@ Same request format as shortest-path. Response includes `"algorithm": "dijkstra"
 
 ### `GET /api/v1/analysis/findings`
 
-List all composite edges as security findings.
+List findings from the latest persisted snapshot (one row per fingerprint), each with inline `triage` state. Reads from the Postgres snapshot, not live graph edges, so results are stable across the next scan's stale-edge cleanup.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `severity` | string | Filter: `critical`, `high`, `medium`, `low` |
+| `include_suppressed` | bool | Default `false`. When `true`, include findings triaged `accepted-risk` / `false-positive` (hidden otherwise). |
 
 ### `GET /api/v1/analysis/findings/{id}`
 
 Return evidence detail for a specific finding.
 
+### `GET /api/v1/findings/triage/{fingerprint}`
+
+Return the cross-scan triage decision for a finding fingerprint (16-char hex). Open read; a fingerprint with no recorded decision returns the implicit `new` state.
+
+```json
+{ "status": "accepted-risk", "note": "Approved by sec-review", "updated_at": "2026-06-19T12:00:00Z" }
+```
+
+### `PUT /api/v1/findings/triage/{fingerprint}` *(token required)*
+
+Record (or update) the triage decision for a finding fingerprint. Triage state has no foreign key to findings, so it survives scan deletion and re-detection.
+
+```json
+// Request
+{ "status": "accepted-risk", "note": "Approved by sec-review" }
+```
+
+`status` must be one of `new`, `triaging`, `confirmed`, `accepted-risk`, `false-positive`.
+
 ### `GET /api/v1/analysis/prebuilt`
 
-List all 18 pre-built queries with metadata.
+List all 19 pre-built queries with metadata.
 
 ### `GET /api/v1/analysis/prebuilt/{id}`
 
@@ -305,7 +326,7 @@ Delete a scan after deleting the nodes and edges that scan owned from Neo4j. If 
 
 ### `GET /api/v1/rules`
 
-List all 30 active YAML detection rules from `sdk/rules/builtin/`.
+List all 35 active YAML detection rules from `sdk/rules/builtin/`.
 
 ### `GET /api/v1/rules/{id}`
 

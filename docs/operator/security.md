@@ -55,8 +55,10 @@ attacker-chosen ingest data. To shut that drive-by path:
   subsequent restarts (idempotent).
 - All mutating HTTP routes require
   `Authorization: Bearer <token>`. Specifically: `POST /ingest`,
-  `POST /query`, `POST /scans`, `DELETE /scans/{id}`, and the three
-  `POST /analysis/*-path` endpoints.
+  `POST /query`, `POST /scans`, `DELETE /scans/{id}`, the three
+  `POST /analysis/*-path` endpoints, and
+  `PUT /findings/triage/{fingerprint}`. The triage *read*
+  (`GET /findings/triage/{fingerprint}`) stays open like other reads.
 - Read endpoints (graph reads, findings, prebuilt queries, rules,
   health, docs) stay open. Localhost-only reads on a single-user box
   are fine; gating them would force the UI to plumb auth through
@@ -76,6 +78,17 @@ To revoke the token (e.g. you suspect another user on the box read
 the file), delete `~/.agenthound/server.token` and restart the
 server. The next startup generates a fresh token; any open UI tab
 will need a refresh to re-fetch.
+
+### Triage state retention
+
+Triage decisions written via `PUT /findings/triage/{fingerprint}` live
+in the Postgres `finding_triage` table, keyed by the finding fingerprint.
+This table has **no foreign key** to the per-scan `findings` snapshot: an
+analyst's `accepted-risk` / `false-positive` decisions deliberately
+survive scan deletion and re-detection, so deleting a scan (or re-running
+a collector) does not silently re-surface a finding that was already
+adjudicated. Operators who want a clean slate must clear `finding_triage`
+explicitly.
 
 ## Collector network behaviour
 

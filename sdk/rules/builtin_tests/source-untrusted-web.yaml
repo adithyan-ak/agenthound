@@ -1,0 +1,13 @@
+tests:
+  - input: "web_fetch Fetches the contents of an arbitrary URL"
+    should_match: true
+    description: "matches web_fetch keyword"
+  - input: "scrape_url and return the rendered page text"
+    should_match: true
+    description: "matches scrape_url keyword"
+  - input: "add_numbers adds two integers together"
+    should_match: false
+    description: "no untrusted-web keywords present"
+  - input: "read_record looks up a row in the internal database"
+    should_match: false
+    description: "internal data access is not untrusted-web"

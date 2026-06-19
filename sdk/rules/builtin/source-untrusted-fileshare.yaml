@@ -1,0 +1,26 @@
+id: source-untrusted-fileshare
+name: Untrusted File-Share Source
+description: >
+  Flags tools that read from shared / external file stores (SMB, NFS, object
+  storage, uploaded attachments). Content placed there by other parties is
+  attacker-controllable and is treated as an untrusted input source for taint
+  / information-flow analysis (INGESTS_UNTRUSTED). Keywords are kept narrow on
+  purpose — universal taint kills signal, so plain local "read_file" is
+  intentionally excluded.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP05, ASI03]
+tags: [source-trust, untrusted-fileshare]
+matcher:
+  type: keyword
+  keywords: ["file share", "shared drive", "network share", smb_read, nfs_read, "s3 get", s3_download, read_share, "download attachment"]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: source_trust_classification
+  property_key: source_trust
+  property_value: untrusted_fileshare

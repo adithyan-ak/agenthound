@@ -20,15 +20,15 @@ These are the node kinds accepted in ingest input (`sdk/ingest.AllowedNodeKinds`
 
 | Label | Source | Key Properties |
 |-------|--------|----------------|
-| `MCPServer` | Config + MCP | `name`, `endpoint`, `transport` (stdio/http), `auth_method`, `protocol_version`, `instructions`, `capabilities`, `is_pinned`, `has_tasks_capability` |
-| `MCPTool` | MCP | `name`, `description`, `input_schema`, `output_schema`, `annotations`, `description_hash` (SHA-256), `capability_surface[]`, `has_injection_patterns`, `has_cross_references` |
+| `MCPServer` | Config + MCP | `name`, `endpoint`, `transport` (stdio/http), `auth_method`, `auth_strength` (numeric, post-processor), `protocol_version`, `instructions`, `instructions_hash` (SHA-256), `capabilities`, `is_pinned`, `has_tasks_capability` |
+| `MCPTool` | MCP | `name`, `description`, `input_schema`, `output_schema`, `annotations`, `description_hash` (SHA-256), `input_schema_hash` (SHA-256), `schema_keys[]`, `capability_surface[]`, `source_trust` (untrusted_web/email/fileshare), `has_injection_patterns`, `has_cross_references` |
 | `MCPResource` | MCP | `uri`, `name`, `mime_type`, `size`, `uri_scheme`, `sensitivity` (auto-classified) |
 | `MCPPrompt` | MCP | `name`, `description`, `arguments` |
-| `A2AAgent` | A2A | `name`, `description`, `url`, `provider`, `version`, `protocol_versions`, `capabilities`, `security_schemes`, `auth_method`, `is_signed`, `signature_valid`, `card_hash` |
+| `A2AAgent` | A2A | `name`, `description`, `url`, `provider`, `version`, `protocol_versions`, `capabilities`, `security_schemes`, `auth_method`, `auth_strength` (numeric, post-processor), `is_signed`, `signature_valid`, `card_hash` |
 | `A2ASkill` | A2A | `id`, `name`, `description`, `input_modes`, `output_modes`, `description_hash`, `has_injection_patterns` |
 | `AgentInstance` | Config | `name`, `framework`, `config_path` |
 | `Identity` | Config + MCP | `type` (none/apiKey/oauth/bearer/mtls), `scope`, `is_static` |
-| `Credential` | Config + LiteLLM Looter | `type` (envVar/hardcoded/vaultRef/inputPrompt/master_key/apiKey/virtual_key), `name`, `source`, `is_exposed`, `high_entropy`, `value_hash` (SHA-256) |
+| `Credential` | Config + LiteLLM Looter | `type` (envVar/hardcoded/vaultRef/inputPrompt/master_key/apiKey/virtual_key), `name`, `source`, `is_exposed`, `high_entropy`, `value_hash` (SHA-256), `blast_radius` (distinct reachable agents, post-processor) |
 | `Host` | Config + A2A | `hostname`, `ip`, `is_local`, `is_private`, `is_public` |
 | `ConfigFile` | Config | `path`, `client`, `server_count` |
 | `InstructionFile` | Config | `path`, `type` (agents.md/claude.md/cursorrules/copilot-instructions/memory.md), `hash`, `is_suspicious` |
@@ -81,7 +81,7 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 
 ## 3. Edge Types
 
-### Raw Edges (17 collector-produced)
+### Raw Edges (18 collector-produced)
 
 | Edge | Source | Target | Collector | Meaning |
 |------|--------|--------|-----------|---------|
@@ -102,8 +102,9 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 | `EXPOSES_CREDENTIAL` | AIService | Credential | LiteLLM Looter | Service exposes credential material (master keys, upstream provider keys, virtual keys) |
 | `PROVIDES_MODEL` | OllamaInstance | AIModel | Ollama Looter | Instance serves this model |
 | `EXTRACTED_FROM` | AIModel | ExtractedTrainingSignal | Extractors | Extracted signal was derived from this model |
+| `INGESTS_UNTRUSTED` | MCPTool | MCPResource | MCP | Tool with rule-derived `source_trust` (web/email/fileshare) ingests untrusted input that taints same-server resources. **Raw edge** — not swept by composite cleanup (see post-processors doc) |
 
-### Composite Edges (8 post-processor computed)
+### Composite Edges (12 post-processor computed)
 
 | Edge | Source | Target | Depends On | Meaning |
 |------|--------|--------|------------|---------|
@@ -112,9 +113,13 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 | `SHADOWS` | MCPTool | MCPTool | Raw edges | Tool on another server references this tool's name/description |
 | `POISONED_DESCRIPTION` | MCPTool | MCPTool (self-edge) | Raw edges | Tool description contains injection patterns |
 | `POISONED_INSTRUCTIONS` | InstructionFile | InstructionFile (self-edge) | Raw edges | Suspicious patterns: imperative overrides, exfiltration commands, hidden Unicode |
+| `TAINTS` | MCPTool | MCPTool | INGESTS_UNTRUSTED + `schema_keys` | Untrusted-input tool shares ≥2 schema keys with a tool on another server, so attacker data can flow between them |
 | `CAN_REACH` | AgentInstance / A2AAgent | MCPResource | HAS_ACCESS_TO | Transitive access through trust chain (includes cross-protocol and credential chain variants up to 6 hops) |
-| `CAN_EXFILTRATE_VIA` | AgentInstance | MCPTool | CAN_REACH | Agent reaches sensitive data AND has outbound exfiltration channel |
+| `CAN_EXFILTRATE_VIA` | AgentInstance | MCPTool | CAN_REACH | Agent reaches sensitive data AND has outbound exfiltration channel (incl. `auto_fetch_render` / `allowlisted_proxy` channels) |
+| `IFC_VIOLATION` | MCPTool | MCPTool | INGESTS_UNTRUSTED + HAS_ACCESS_TO (≤3 hops) | Untrusted source shares a resource with a high-impact sink (credential_access/file_write/email_send) |
 | `CAN_IMPERSONATE` | A2AAgent | A2AAgent | Raw edges | TF-IDF cosine similarity > 0.8 on skill descriptions |
+| `CONFUSED_DEPUTY` | A2AAgent | A2AAgent | auth_strength + can_reach | Weakly-authed agent (`auth_strength` ≥ 80) delegates to a strongly-authed one (≤ 30) |
+| `POISONS_CONTEXT` | MCPTool | MCPTool | Raw edges | Injection-bearing tool can poison context driving a high-capability tool (fan-out capped at 20 sinks/source) |
 
 ### Edge Struct (Go SDK)
 
@@ -191,17 +196,21 @@ Processors run in strict dependency order. A processor may only read edges produ
 
 | Order | Processor | Produces | Dependencies |
 |-------|-----------|----------|--------------|
-| 1 | has_access_to | `HAS_ACCESS_TO` | Raw edges only |
-| 2 | can_execute | `CAN_EXECUTE` | Raw edges only |
-| 3 | shadows | `SHADOWS` | Raw edges only |
-| 4 | poisoned_description | `POISONED_DESCRIPTION` | Raw edges only |
-| 5 | poisoned_instructions | `POISONED_INSTRUCTIONS` | Raw edges only |
-| 6 | can_reach | `CAN_REACH` | 1 (HAS_ACCESS_TO) |
-| 7 | cross_service_credential_chain | `CAN_REACH` (credential variant) | 1, 6 (joins on `Credential.value_hash`) |
-| 8 | can_exfiltrate_via | `CAN_EXFILTRATE_VIA` | 6 (CAN_REACH) |
-| 9 | can_impersonate | `CAN_IMPERSONATE` | Raw edges only |
-| 10 | cross_protocol | `CAN_REACH` (cross-protocol) | 1 (HAS_ACCESS_TO) + DELEGATES_TO |
-| 11 | risk_score | Node property updates | 1–10 (all prior processors) |
+| 1 | auth_strength | `auth_strength` node property (pre-pass) | None |
+| 2 | has_access_to | `HAS_ACCESS_TO` | Raw edges only |
+| 3 | can_execute | `CAN_EXECUTE` | Raw edges only |
+| 4 | shadows | `SHADOWS` + `POISONS_CONTEXT` | Raw edges only |
+| 5 | poisoned_description | `POISONED_DESCRIPTION` | Raw edges only |
+| 6 | poisoned_instructions | `POISONED_INSTRUCTIONS` | Raw edges only |
+| 7 | taints | `TAINTS` | INGESTS_UNTRUSTED + `schema_keys` |
+| 8 | can_reach | `CAN_REACH` | 2 (HAS_ACCESS_TO) |
+| 9 | cross_service_credential_chain | `CAN_REACH` (credential variant) + `Credential.blast_radius` | 2, 8 (joins on `Credential.value_hash`) |
+| 10 | ifc_violation | `IFC_VIOLATION` | 2 (HAS_ACCESS_TO) + INGESTS_UNTRUSTED |
+| 11 | can_exfiltrate_via | `CAN_EXFILTRATE_VIA` | 8 (CAN_REACH) |
+| 12 | can_impersonate | `CAN_IMPERSONATE` | Raw edges only |
+| 13 | confused_deputy | `CONFUSED_DEPUTY` | 1 (auth_strength) + 8 (can_reach) |
+| 14 | cross_protocol | `CAN_REACH` (cross-protocol) | 2 (HAS_ACCESS_TO) + DELEGATES_TO |
+| 15 | risk_score | Node property updates | 1–14 (all prior processors) |
 
 ---
 
@@ -254,7 +263,7 @@ Lower weight = easier to exploit = higher risk. Used by Dijkstra weighted-path q
 Nodes merge by `objectid` using Cypher `MERGE`. When the same entity appears from multiple collectors:
 
 - Properties use **last-write-wins** semantics
-- `ON MATCH SET n.previous_description_hash = n.description_hash` preserves old hash for rug-pull detection
+- The node MERGE pivots the previous-hash trio (`previous_description_hash`, `previous_input_schema_hash`, `previous_instructions_hash`) on both `ON CREATE` (seeded from the incoming hashes) and `ON MATCH` (set to the prior values before `n += node.properties` overwrites them) for rug-pull detection
 - Edges accumulate (different collectors contribute different edge types to the same node)
 
 ### Stale Edge Cleanup

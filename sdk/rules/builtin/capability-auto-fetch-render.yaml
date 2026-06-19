@@ -1,0 +1,26 @@
+id: capability-auto-fetch-render
+name: Auto Fetch/Render Capability
+description: >
+  Classifies tools that return content the host may auto-fetch or render
+  (markdown images, HTML previews, embedded links). Such tools can be abused
+  as an out-of-band exfiltration channel when an attacker controls the
+  rendered content. Caveat: this detects tools that RETURN renderable
+  content, not the host's render policy — host-side render behavior is not
+  observable by the collector.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP04, ASI10]
+tags: [capability, auto-fetch-render, exfiltration]
+matcher:
+  type: keyword
+  keywords: [render_markdown, render_html, "markdown image", "embed image", auto_render, render_preview, "image markdown"]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: auto_fetch_render

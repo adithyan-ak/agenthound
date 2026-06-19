@@ -1,9 +1,13 @@
 import { api } from "@shared/api/client";
-import type { Finding, FindingDetail } from "./model";
+import type { Finding, FindingDetail, TriageState } from "./model";
 
-export async function fetchFindings(severity?: string): Promise<Finding[]> {
+export async function fetchFindings(
+  severity?: string,
+  includeSuppressed?: boolean,
+): Promise<Finding[]> {
   const params: Record<string, string> = {};
   if (severity) params["severity"] = severity;
+  if (includeSuppressed) params["include_suppressed"] = "true";
   return api
     .get("analysis/findings", { searchParams: params })
     .json<Finding[]>();
@@ -11,6 +15,20 @@ export async function fetchFindings(severity?: string): Promise<Finding[]> {
 
 export async function fetchFindingDetail(id: string): Promise<FindingDetail> {
   return api.get(`analysis/findings/${id}`).json<FindingDetail>();
+}
+
+export async function getTriage(fingerprint: string): Promise<TriageState> {
+  return api.get(`findings/triage/${fingerprint}`).json<TriageState>();
+}
+
+export async function setTriage(
+  fingerprint: string,
+  status: string,
+  note: string,
+): Promise<TriageState> {
+  return api
+    .put(`findings/triage/${fingerprint}`, { json: { status, note } })
+    .json<TriageState>();
 }
 
 /**

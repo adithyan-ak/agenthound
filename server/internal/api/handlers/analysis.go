@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -10,16 +11,33 @@ import (
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 	"github.com/adithyan-ak/agenthound/server/internal/analysis"
 	"github.com/adithyan-ak/agenthound/server/internal/analysis/prebuilt"
+	"github.com/adithyan-ak/agenthound/server/internal/appdb"
 	"github.com/adithyan-ak/agenthound/server/internal/graph"
+	"github.com/adithyan-ak/agenthound/server/model"
 	"github.com/go-chi/chi/v5"
 )
 
-type AnalysisHandler struct {
-	graphDB graph.GraphDB
+// findingLister is the subset of *appdb.FindingStore that the findings
+// endpoint reads from. When nil (e.g. in unit tests without Postgres),
+// HandleFindings falls back to live composite edges in the graph.
+type findingLister interface {
+	ListLatestPerFingerprint(ctx context.Context, severity string, includeSuppressed bool) ([]model.Finding, error)
 }
 
-func NewAnalysisHandler(db graph.GraphDB) *AnalysisHandler {
-	return &AnalysisHandler{graphDB: db}
+type AnalysisHandler struct {
+	graphDB      graph.GraphDB
+	findingStore findingLister
+}
+
+func NewAnalysisHandler(db graph.GraphDB, findingStore *appdb.FindingStore) *AnalysisHandler {
+	h := &AnalysisHandler{graphDB: db}
+	// Avoid the typed-nil-into-interface trap: only populate the
+	// interface field when the concrete pointer is non-nil so the
+	// `h.findingStore != nil` fallback check stays correct.
+	if findingStore != nil {
+		h.findingStore = findingStore
+	}
+	return h
 }
 
 var allowedNodeLabels = func() map[string]bool {
@@ -303,14 +321,26 @@ func (h *AnalysisHandler) HandleWeightedPath(w http.ResponseWriter, r *http.Requ
 
 func (h *AnalysisHandler) HandleFindings(w http.ResponseWriter, r *http.Request) {
 	severity := r.URL.Query().Get("severity")
+	includeSuppressed := r.URL.Query().Get("include_suppressed") == "true"
 
-	findings, err := analysis.QueryFindings(r.Context(), h.graphDB, severity)
+	var findings []model.Finding
+	var err error
+	if h.findingStore != nil {
+		// Default data source: the persisted per-scan snapshot, with
+		// triage state joined in and suppressed findings hidden unless
+		// include_suppressed=true.
+		findings, err = h.findingStore.ListLatestPerFingerprint(r.Context(), severity, includeSuppressed)
+	} else {
+		// Fallback for setups without a Postgres snapshot (unit tests):
+		// read live composite edges directly from the graph.
+		findings, err = analysis.QueryFindings(r.Context(), h.graphDB, severity)
+	}
 	if err != nil {
 		WriteInternalError(w, r, fmt.Errorf("findings query: %w", err))
 		return
 	}
 	if findings == nil {
-		findings = []analysis.Finding{}
+		findings = []model.Finding{}
 	}
 	WriteJSON(w, http.StatusOK, findings)
 }

@@ -42,14 +42,15 @@ var serveCmd = &cobra.Command{
 		}
 
 		server := api.NewServer(api.ServerDeps{
-			GraphDB:     infra.GraphDB,
-			Reader:      infra.Reader,
-			PGPool:      infra.PGPool,
-			Pipeline:    infra.Pipeline,
-			ScanStore:   infra.ScanStore,
-			RulesEngine: rulesEngine,
-			CORSOrigins: cfg.CORSOrigins,
-			LocalToken:  localToken,
+			GraphDB:      infra.GraphDB,
+			Reader:       infra.Reader,
+			PGPool:       infra.PGPool,
+			Pipeline:     infra.Pipeline,
+			ScanStore:    infra.ScanStore,
+			FindingStore: infra.FindingStore,
+			RulesEngine:  rulesEngine,
+			CORSOrigins:  cfg.CORSOrigins,
+			LocalToken:   localToken,
 		})
 
 		errCh := make(chan error, 1)

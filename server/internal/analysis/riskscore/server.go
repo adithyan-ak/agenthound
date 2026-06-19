@@ -7,7 +7,11 @@ import (
 	"github.com/adithyan-ak/agenthound/server/internal/graph"
 )
 
-var authStrengthScores = map[string]float64{
+// AuthStrengthScores maps a categorical auth_method to a numeric weakness
+// score (higher = weaker). Exported so the auth_strength post-processor can
+// materialize the same scores onto :MCPServer / :A2AAgent nodes as a Cypher
+// CASE without the two definitions drifting.
+var AuthStrengthScores = map[string]float64{
 	"none":   100,
 	"apiKey": 70,
 	"bearer": 50,
@@ -47,7 +51,7 @@ func serverAuthStrength(ctx context.Context, db graph.GraphDB, objectID string) 
 		return 100, nil
 	}
 	am, _ := rows[0]["am"].(string)
-	if s, ok := authStrengthScores[am]; ok {
+	if s, ok := AuthStrengthScores[am]; ok {
 		return s, nil
 	}
 	return 100, nil
@@ -110,7 +114,7 @@ RETURN h.is_public AS pub, h.is_private AS priv, h.is_local AS loc`
 func serverCredentialHandling(ctx context.Context, db graph.GraphDB, objectID string) (float64, error) {
 	cypher := `
 MATCH (s {objectid: $id})-[:HAS_ENV_VAR]->(c:Credential)
-RETURN c.high_entropy AS high_entropy, c.type AS cred_type`
+RETURN c.high_entropy AS high_entropy, c.type AS cred_type, c.blast_radius AS blast_radius`
 
 	rows, err := db.Query(ctx, cypher, map[string]any{"id": objectID})
 	if err != nil {
@@ -120,13 +124,24 @@ RETURN c.high_entropy AS high_entropy, c.type AS cred_type`
 		return 0, nil
 	}
 
+	// base captures intrinsic handling risk (high-entropy / hardcoded
+	// secrets max it out). blast amplifies it by how many distinct agents
+	// can reach the secret (materialized as Credential.blast_radius by the
+	// cross_service_credential_chain processor), mirroring a2aBlastRadius.
+	base := 50.0
+	var blast float64
 	for _, row := range rows {
 		if he, ok := row["high_entropy"].(bool); ok && he {
-			return 100, nil
+			base = 100
 		}
 		if ct, ok := row["cred_type"].(string); ok && ct == "hardcoded" {
-			return 100, nil
+			base = 100
+		}
+		if br := toInt64(row["blast_radius"]); br > 0 {
+			if b := math.Min(float64(br)*10, 100); b > blast {
+				blast = b
+			}
 		}
 	}
-	return 50, nil
+	return math.Max(base, blast), nil
 }

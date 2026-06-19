@@ -1,29 +1,32 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown } from "lucide-react";
 import {
-  useTriageStore,
   TRIAGE_ORDER,
   TRIAGE_META,
   type TriageStatus,
 } from "@shared/model/triage";
+import { useSetTriage } from "@entities/finding";
 import { cn } from "@shared/lib/utils";
 
 interface TriageControlProps {
   findingId: string;
+  /** Current triage status (controlled). List rows pass the inline
+   * f.triage status; the dossier header passes the fetched status. */
+  status: TriageStatus;
   /** Compact = inline register cell; full = dossier header. */
   compact?: boolean;
 }
 
 /**
  * Status dropdown shared by the findings register (inline, compact) and the
- * dossier header (full). Reads/writes the persisted triage store. Stops click
- * propagation so it can live inside a clickable table row without triggering
- * row navigation.
+ * dossier header (full). Controlled: the current status is supplied by the
+ * caller and writes go through the server-backed useSetTriage mutation. Stops
+ * click propagation so it can live inside a clickable table row without
+ * triggering row navigation.
  */
-export function TriageControl({ findingId, compact = false }: TriageControlProps) {
-  const status = useTriageStore((s) => s.status[findingId] ?? "new");
-  const setStatus = useTriageStore((s) => s.setStatus);
-  const meta = TRIAGE_META[status as TriageStatus];
+export function TriageControl({ findingId, status, compact = false }: TriageControlProps) {
+  const setTriage = useSetTriage();
+  const meta = TRIAGE_META[status] ?? TRIAGE_META.new;
 
   return (
     <DropdownMenu.Root>
@@ -65,7 +68,7 @@ export function TriageControl({ findingId, compact = false }: TriageControlProps
             return (
               <DropdownMenu.Item
                 key={s}
-                onSelect={() => setStatus(findingId, s)}
+                onSelect={() => setTriage.mutate({ fingerprint: findingId, status: s })}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-[3px] px-2 py-1.5 text-xs outline-none",
                   "focus:bg-white/[0.05] data-[highlighted]:bg-white/[0.05]",

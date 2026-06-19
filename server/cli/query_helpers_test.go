@@ -282,6 +282,8 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().String("to", "", "")
 	cmd.Flags().String("format", "table", "")
 	cmd.Flags().String("fail-on", "", "")
+	cmd.Flags().Bool("all-findings", false, "")
+	cmd.Flags().String("diff", "", "")
 	return cmd
 }
 
@@ -322,7 +324,7 @@ func TestRunQuery_MultipleModes(t *testing.T) {
 }
 
 func TestRunFindings_InvalidSeverity(t *testing.T) {
-	err := runFindings(context.Background(), "bogus", "table", "")
+	err := runFindings(context.Background(), "bogus", "table", "", false)
 	if err == nil {
 		t.Fatal("expected error for invalid severity")
 	}

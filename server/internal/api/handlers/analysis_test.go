@@ -15,7 +15,7 @@ import (
 )
 
 func TestHandleShortestPath_MissingSource(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodPost, "/api/v1/analysis/shortest-path", []byte(`{}`))
 	h.HandleShortestPath(w, r)
@@ -33,7 +33,7 @@ func TestHandleShortestPath_MissingSource(t *testing.T) {
 }
 
 func TestHandleShortestPath_InvalidKind(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodPost, "/api/v1/analysis/shortest-path",
 		[]byte(`{"source":"x","source_kind":"INVALID"}`))
@@ -45,7 +45,7 @@ func TestHandleShortestPath_InvalidKind(t *testing.T) {
 }
 
 func TestHandleFindings_Empty(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{queryResult: nil})
+	h := NewAnalysisHandler(&mockGraphDB{queryResult: nil}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings", nil)
 	h.HandleFindings(w, r)
@@ -63,7 +63,7 @@ func TestHandleFindings_Empty(t *testing.T) {
 }
 
 func TestHandleListPreBuilt(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/prebuilt", nil)
 	h.HandleListPreBuilt(w, r)
@@ -75,13 +75,13 @@ func TestHandleListPreBuilt(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&queries); err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 18 {
-		t.Fatalf("expected 18 pre-built queries, got %d", len(queries))
+	if len(queries) != 19 {
+		t.Fatalf("expected 19 pre-built queries, got %d", len(queries))
 	}
 }
 
 func TestHandlePreBuilt_NotFound(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	router := chi.NewRouter()
 	router.Get("/api/v1/analysis/prebuilt/{id}", h.HandlePreBuilt)
 
@@ -191,7 +191,7 @@ func TestClamp(t *testing.T) {
 }
 
 func TestHandleAllPaths_MissingSource(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodPost, "/api/v1/analysis/all-paths", []byte(`{}`))
 	h.HandleAllPaths(w, r)
@@ -209,7 +209,7 @@ func TestHandleAllPaths_MissingSource(t *testing.T) {
 }
 
 func TestHandleWeightedPath_MissingFields(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodPost, "/api/v1/analysis/weighted-path", []byte(`{}`))
 	h.HandleWeightedPath(w, r)
@@ -276,7 +276,7 @@ func TestHandleFindingDetail_Success(t *testing.T) {
 			return []map[string]any{pathRow()}, nil
 		},
 	}
-	h := NewAnalysisHandler(mock)
+	h := NewAnalysisHandler(mock, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings/"+testFindingID, nil)
 	r = withChiURLParam(r, "id", testFindingID)
@@ -307,7 +307,7 @@ func TestHandleFindingDetail_Success(t *testing.T) {
 }
 
 func TestHandleFindingDetail_InvalidID_TooShort(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings/abc123", nil)
 	r = withChiURLParam(r, "id", "abc123")
@@ -326,7 +326,7 @@ func TestHandleFindingDetail_InvalidID_TooShort(t *testing.T) {
 }
 
 func TestHandleFindingDetail_InvalidID_NonHex(t *testing.T) {
-	h := NewAnalysisHandler(&mockGraphDB{})
+	h := NewAnalysisHandler(&mockGraphDB{}, nil)
 	w := httptest.NewRecorder()
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings/zzzzzzzzzzzzzzzz", nil)
 	r = withChiURLParam(r, "id", "zzzzzzzzzzzzzzzz")
@@ -350,7 +350,7 @@ func TestHandleFindingDetail_NotFound(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := NewAnalysisHandler(mock)
+	h := NewAnalysisHandler(mock, nil)
 	w := httptest.NewRecorder()
 	validHexID := "aabbccdd11223344"
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings/"+validHexID, nil)
@@ -375,7 +375,7 @@ func TestHandleFindingDetail_QueryError(t *testing.T) {
 			return nil, errors.New("neo4j connection refused")
 		},
 	}
-	h := NewAnalysisHandler(mock)
+	h := NewAnalysisHandler(mock, nil)
 	w := httptest.NewRecorder()
 	validHexID := "aabbccdd11223344"
 	r := newTestRequest(http.MethodGet, "/api/v1/analysis/findings/"+validHexID, nil)

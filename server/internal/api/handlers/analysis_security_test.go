@@ -22,7 +22,7 @@ func TestCypherInjectionViaNodeKind(t *testing.T) {
 	}
 
 	mock := &graph.MockGraphDB{}
-	h := NewAnalysisHandler(mock)
+	h := NewAnalysisHandler(mock, nil)
 
 	for _, kind := range injections {
 		t.Run(kind, func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestValidNodeKindAcceptsAllLabels(t *testing.T) {
 
 func TestCypherInjectionViaTargetKind(t *testing.T) {
 	mock := &graph.MockGraphDB{}
-	h := NewAnalysisHandler(mock)
+	h := NewAnalysisHandler(mock, nil)
 
 	body := `{"source":"test","source_kind":"MCPServer","target":"x","target_kind":"MCPTool' OR 1=1--"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/analysis/shortest-path", strings.NewReader(body))

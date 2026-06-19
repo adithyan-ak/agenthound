@@ -13,13 +13,14 @@ import (
 )
 
 type Infrastructure struct {
-	Neo4jDriver neo4j.DriverWithContext
-	PGPool      *pgxpool.Pool
-	Writer      *graph.Writer
-	Reader      *graph.Reader
-	GraphDB     graph.GraphDB
-	ScanStore   *appdb.ScanStore
-	Pipeline    *ingest.Pipeline
+	Neo4jDriver  neo4j.DriverWithContext
+	PGPool       *pgxpool.Pool
+	Writer       *graph.Writer
+	Reader       *graph.Reader
+	GraphDB      graph.GraphDB
+	ScanStore    *appdb.ScanStore
+	FindingStore *appdb.FindingStore
+	Pipeline     *ingest.Pipeline
 }
 
 func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
@@ -58,7 +59,8 @@ func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
 	reader := graph.NewReader(neo4jDriver)
 	graphDB := graph.NewDB(reader, writer)
 	scanStore := appdb.NewScanStore(pgPool)
-	pipeline := ingest.NewPipeline(writer, graphDB, scanStore)
+	findingStore := appdb.NewFindingStore(pgPool)
+	pipeline := ingest.NewPipeline(writer, graphDB, scanStore, findingStore)
 
 	cleanup := func() {
 		pgPool.Close()
@@ -66,12 +68,13 @@ func Bootstrap(ctx context.Context) (*Infrastructure, func(), error) {
 	}
 
 	return &Infrastructure{
-		Neo4jDriver: neo4jDriver,
-		PGPool:      pgPool,
-		Writer:      writer,
-		Reader:      reader,
-		GraphDB:     graphDB,
-		ScanStore:   scanStore,
-		Pipeline:    pipeline,
+		Neo4jDriver:  neo4jDriver,
+		PGPool:       pgPool,
+		Writer:       writer,
+		Reader:       reader,
+		GraphDB:      graphDB,
+		ScanStore:    scanStore,
+		FindingStore: findingStore,
+		Pipeline:     pipeline,
 	}, cleanup, nil
 }

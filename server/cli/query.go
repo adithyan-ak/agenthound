@@ -36,6 +36,8 @@ func init() {
 	queryCmd.Flags().String("to", "", "Target node in Kind:name format (e.g. MCPResource:postgres://prod)")
 	queryCmd.Flags().String("format", "table", "Output format: table or json")
 	queryCmd.Flags().String("fail-on", "", "Exit 1 if findings at or above severity: critical, high, medium, low")
+	queryCmd.Flags().Bool("all-findings", false, "Include suppressed findings (accepted-risk, false-positive); --fail-on always ignores suppressed")
+	queryCmd.Flags().String("diff", "", "Diff two scans' findings: scanA,scanB")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -49,6 +51,8 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 
 	failOn, _ := cmd.Flags().GetString("fail-on")
+	includeSuppressed, _ := cmd.Flags().GetBool("all-findings")
+	diffArg, _ := cmd.Flags().GetString("diff")
 
 	if format != "table" && format != "json" {
 		return fmt.Errorf("invalid format %q: must be table or json", format)
@@ -67,8 +71,11 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	if shortestPath {
 		modes++
 	}
+	if diffArg != "" {
+		modes++
+	}
 	if modes == 0 {
-		return fmt.Errorf("specify a query mode: raw Cypher argument, --prebuilt, --findings, or --shortest-path")
+		return fmt.Errorf("specify a query mode: raw Cypher argument, --prebuilt, --findings, --diff, or --shortest-path")
 	}
 	if modes > 1 {
 		return fmt.Errorf("specify only one query mode at a time")
@@ -78,7 +85,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 
 	switch {
 	case findings:
-		return runFindings(ctx, severity, format, failOn)
+		return runFindings(ctx, severity, format, failOn, includeSuppressed)
+	case diffArg != "":
+		return runDiff(ctx, diffArg, format, includeSuppressed)
 	case prebuiltID != "":
 		return runPrebuilt(ctx, prebuiltID, format)
 	case shortestPath:
@@ -128,7 +137,7 @@ func runPrebuilt(ctx context.Context, id, format string) error {
 	return printRows(rows, format)
 }
 
-func runFindings(ctx context.Context, severity, format, failOn string) error {
+func runFindings(ctx context.Context, severity, format, failOn string, includeSuppressed bool) error {
 	if severity != "" {
 		switch severity {
 		case "critical", "high", "medium", "low":
@@ -143,44 +152,55 @@ func runFindings(ctx context.Context, severity, format, failOn string) error {
 	}
 	defer cleanup()
 
-	findings, err := analysis.QueryFindings(ctx, infra.GraphDB, severity)
+	// Reads come from the persisted Postgres snapshot, not live graph
+	// edges: the snapshot is invariant under the next scan's stale-edge
+	// cleanup, and it carries triage state for suppression.
+	findings, err := infra.FindingStore.ListLatestPerFingerprint(ctx, severity, includeSuppressed)
 	if err != nil {
 		return fmt.Errorf("query findings: %w", err)
 	}
 
 	if len(findings) == 0 {
 		fmt.Println("No findings found.")
-		return nil
-	}
-
-	if format == "json" {
-		return printJSON(findings)
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tSEVERITY\tCATEGORY\tTITLE\tSOURCE\tTARGET")
-	for _, f := range findings {
-		srcLabel := f.SourceName
-		if srcLabel == "" {
-			srcLabel = f.SourceID
+	} else if format == "json" {
+		if err := printJSON(findings); err != nil {
+			return err
 		}
-		tgtLabel := f.TargetName
-		if tgtLabel == "" {
-			tgtLabel = f.TargetID
+	} else {
+		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		_, _ = fmt.Fprintln(w, "ID\tSEVERITY\tTRIAGE\tCATEGORY\tTITLE\tSOURCE\tTARGET")
+		for _, f := range findings {
+			srcLabel := f.SourceName
+			if srcLabel == "" {
+				srcLabel = f.SourceID
+			}
+			tgtLabel := f.TargetName
+			if tgtLabel == "" {
+				tgtLabel = f.TargetID
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				f.ID, f.Severity, triageStatus(f), f.Category, f.Title, srcLabel, tgtLabel)
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			f.ID, f.Severity, f.Category, f.Title, srcLabel, tgtLabel)
+		_ = w.Flush()
+		_, _ = fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
 	}
-	_ = w.Flush()
-
-	_, _ = fmt.Fprintf(os.Stderr, "\n%d finding(s)\n", len(findings))
 
 	if failOn != "" {
 		threshold, ok := severityRank[failOn]
 		if !ok {
 			return fmt.Errorf("invalid --fail-on value %q: must be critical, high, medium, or low", failOn)
 		}
-		count := countAtOrAbove(findings, threshold)
+		// --fail-on ALWAYS evaluates against the non-suppressed set so an
+		// accepted-risk / false-positive never breaks CI, regardless of
+		// whether --all-findings was passed to widen the display.
+		gate := findings
+		if includeSuppressed {
+			gate, err = infra.FindingStore.ListLatestPerFingerprint(ctx, severity, false)
+			if err != nil {
+				return fmt.Errorf("query findings for fail-on: %w", err)
+			}
+		}
+		count := countAtOrAbove(gate, threshold)
 		if count > 0 {
 			_, _ = fmt.Fprintf(os.Stderr, "Failed: %d finding(s) at severity %q or above\n", count, failOn)
 			os.Exit(1)
@@ -350,4 +370,67 @@ func countAtOrAbove(findings []analysis.Finding, threshold int) int {
 		}
 	}
 	return count
+}
+
+func triageStatus(f analysis.Finding) string {
+	if f.Triage != nil && f.Triage.Status != "" {
+		return f.Triage.Status
+	}
+	return "new"
+}
+
+// runDiff compares two scans' persisted findings snapshots. By default
+// suppressed findings are dropped from the added set so CI-style diffs
+// don't re-alert on an accepted risk reappearing; --all-findings includes
+// them.
+func runDiff(ctx context.Context, diffArg, format string, includeSuppressed bool) error {
+	parts := strings.SplitN(diffArg, ",", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return fmt.Errorf("--diff requires two scan IDs separated by a comma: scanA,scanB")
+	}
+	scanA, scanB := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+
+	infra, cleanup, err := Bootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	diff, err := infra.FindingStore.Diff(ctx, scanA, scanB, includeSuppressed)
+	if err != nil {
+		return fmt.Errorf("diff findings: %w", err)
+	}
+
+	if format == "json" {
+		return printJSON(diff)
+	}
+
+	printDiffSection("+ ADDED", diff.Added)
+	printDiffSection("- REMOVED", diff.Removed)
+	printDiffSection("= UNCHANGED", diff.Unchanged)
+	_, _ = fmt.Fprintf(os.Stderr, "\n+%d  -%d  =%d   (%s -> %s)\n",
+		len(diff.Added), len(diff.Removed), len(diff.Unchanged), scanA, scanB)
+	return nil
+}
+
+func printDiffSection(label string, findings []analysis.Finding) {
+	if len(findings) == 0 {
+		return
+	}
+	fmt.Printf("\n%s (%d)\n", label, len(findings))
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "ID\tSEVERITY\tCATEGORY\tTITLE\tSOURCE\tTARGET")
+	for _, f := range findings {
+		srcLabel := f.SourceName
+		if srcLabel == "" {
+			srcLabel = f.SourceID
+		}
+		tgtLabel := f.TargetName
+		if tgtLabel == "" {
+			tgtLabel = f.TargetID
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			f.ID, f.Severity, f.Category, f.Title, srcLabel, tgtLabel)
+	}
+	_ = w.Flush()
 }

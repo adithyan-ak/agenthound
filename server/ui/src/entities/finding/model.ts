@@ -1,5 +1,15 @@
 // Finding domain types + severity view-model helpers.
 
+// TriageState is the cross-scan analyst decision attached to a finding by
+// fingerprint. Returned inline on list findings (so the register renders the
+// dropdown without a per-row round-trip) and standalone from the triage
+// endpoints.
+export interface TriageState {
+  status: string;
+  note: string;
+  updated_at: string;
+}
+
 export interface Finding {
   id: string;
   severity: string;
@@ -15,6 +25,7 @@ export interface Finding {
   target_kind: string;
   confidence: number;
   owasp_map: string[];
+  triage?: TriageState | null;
 }
 
 export interface AttackPathNode {

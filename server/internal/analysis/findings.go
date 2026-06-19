@@ -75,6 +75,30 @@ var findingsMeta = map[string]struct {
 		desc:     "Tool %s has inferred access to a resource",
 		owasp:    []string{"MCP04", "ASI08"},
 	},
+	"CONFUSED_DEPUTY": {
+		category: "Authorization Confusion",
+		title:    "Confused deputy delegation",
+		desc:     "Low-auth agent delegates to higher-privileged agent %s",
+		owasp:    []string{"ASI06", "MCP04"},
+	},
+	"TAINTS": {
+		category: "Cross-Tool Taint",
+		title:    "Tool taints another tool",
+		desc:     "Untrusted-input tool shares schema with %s, tainting its inputs",
+		owasp:    []string{"MCP05", "ASI03"},
+	},
+	"IFC_VIOLATION": {
+		category: "Information Flow Violation",
+		title:    "Information-flow violation",
+		desc:     "Untrusted source reaches sensitive sink %s",
+		owasp:    []string{"MCP05", "ASI08"},
+	},
+	"POISONS_CONTEXT": {
+		category: "Context Poisoning",
+		title:    "Tool poisons agent context",
+		desc:     "Injection-bearing tool can poison high-capability tool %s",
+		owasp:    []string{"MCP05", "ASI03"},
+	},
 }
 
 const findingsQuery = `
@@ -172,9 +196,10 @@ func classifySeverity(edgeKind string, crossProtocol bool, confidence float64, t
 			return "high"
 		}
 		return "medium"
-	case "POISONED_DESCRIPTION", "SHADOWS", "POISONED_INSTRUCTIONS":
+	case "POISONED_DESCRIPTION", "SHADOWS", "POISONED_INSTRUCTIONS",
+		"CONFUSED_DEPUTY", "IFC_VIOLATION", "POISONS_CONTEXT":
 		return "high"
-	case "CAN_IMPERSONATE", "CAN_EXECUTE", "HAS_ACCESS_TO":
+	case "CAN_IMPERSONATE", "CAN_EXECUTE", "HAS_ACCESS_TO", "TAINTS":
 		return "medium"
 	default:
 		return "low"
