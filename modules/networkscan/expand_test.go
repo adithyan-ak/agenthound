@@ -162,6 +162,30 @@ func TestExpand_CIDR(t *testing.T) {
 			t.Errorf("err = %v, want ErrInvalidCIDR", err)
 		}
 	})
+
+	// Straddling CIDR: 192.168.0.0/15 has a private masked base (192.168.0.0)
+	// but its range spans into 192.169.0.0/16, which is public. The per-IP
+	// gate must catch the public address even though the network base passes.
+	// /15 is below the /16 cap, so AllowLargeCIDR is required to reach the
+	// per-IP enumeration (the cap check fires first otherwise).
+	t.Run("straddling CIDR refused on public address without flag", func(t *testing.T) {
+		_, err := Expand("192.168.0.0/15", ExpandOptions{AllowLargeCIDR: true})
+		if !errors.Is(err, ErrPublicTarget) {
+			t.Errorf("err = %v, want ErrPublicTarget", err)
+		}
+	})
+
+	t.Run("straddling CIDR allowed with public flag", func(t *testing.T) {
+		got, err := Expand("192.168.0.0/15", ExpandOptions{AllowLargeCIDR: true, AllowPublicTargets: true})
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		// /15 = 131072 addresses; just assert the enumeration succeeded and
+		// includes a public address from the straddling half.
+		if len(got) != 131072 {
+			t.Errorf("got %d hosts, want 131072", len(got))
+		}
+	})
 }
 
 func TestExpand_TargetsFile(t *testing.T) {

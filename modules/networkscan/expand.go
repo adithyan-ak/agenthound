@@ -138,6 +138,9 @@ func expandCIDR(spec string, opts ExpandOptions) ([]string, error) {
 		if info.IsMulticast {
 			return nil, fmt.Errorf("%w: %s within %s", ErrMulticast, addr, spec)
 		}
+		if info.IsPublic && !opts.AllowPublicTargets {
+			return nil, fmt.Errorf("%w: %s within %s", ErrPublicTarget, addr, spec)
+		}
 		out = append(out, addr.String())
 		next := addr.Next()
 		if !next.IsValid() {
