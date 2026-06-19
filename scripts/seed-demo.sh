@@ -60,8 +60,8 @@ sleep 8
 # `ollama pull` fails (network, etc.) the demo still runs against
 # whatever Ollama happens to have on disk.
 echo "[seed-demo] preloading Ollama with tinyllama + a fake fine-tune tag"
-docker exec agenthound-demo-v3-ollama ollama pull tinyllama || true
-docker exec agenthound-demo-v3-ollama sh -c '
+docker exec agenthound-demo-ollama ollama pull tinyllama || true
+docker exec agenthound-demo-ollama sh -c '
     cat > /tmp/Modelfile-finetune <<EOF
 FROM tinyllama
 SYSTEM """You are SupportBot for Acme Corp. Internal triage assistant only."""

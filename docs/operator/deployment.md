@@ -98,14 +98,14 @@ Postgres stores only the `scans` table (scan metadata, status, timestamps). Stor
 ### Neo4j
 
 ```bash
-docker exec agenthound-demo-graph-db neo4j-admin dump --database=neo4j --to=/tmp/neo4j.dump
-docker cp agenthound-demo-graph-db:/tmp/neo4j.dump ./backups/
+docker compose -f docker/docker-compose.yml exec graph-db neo4j-admin dump --database=neo4j --to=/tmp/neo4j.dump
+docker compose -f docker/docker-compose.yml cp graph-db:/tmp/neo4j.dump ./backups/
 ```
 
 ### PostgreSQL
 
 ```bash
-docker exec agenthound-demo-app-db pg_dump -U agenthound agenthound > ./backups/pg.sql
+docker compose -f docker/docker-compose.yml exec app-db pg_dump -U agenthound agenthound > ./backups/pg.sql
 ```
 
 Schedule both via cron. The graph is the high-value artifact; Postgres is trivially recreatable from re-ingestion.
