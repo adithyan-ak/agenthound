@@ -2,26 +2,26 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { Dashboard } from "@/components/dashboard/Dashboard";
-import { StatCards } from "@/components/dashboard/StatCards";
+import { Dashboard } from "@features/dashboard";
+import { StatCards } from "@features/dashboard/ui/StatCards";
 
-vi.mock("@/hooks/useGraph", () => ({
+vi.mock("@entities/graph-stats/api", () => ({
   useGraphStats: vi.fn(),
 }));
 
-vi.mock("@/api/analysis", () => ({
+vi.mock("@entities/finding/api", () => ({
   fetchFindings: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@/api/graph", () => ({
+vi.mock("@entities/node/api", () => ({
   fetchNodes: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@/api/scans", () => ({
+vi.mock("@entities/scan/api", () => ({
   fetchScans: vi.fn().mockResolvedValue([]),
 }));
 
-import { useGraphStats } from "@/hooks/useGraph";
+import { useGraphStats } from "@entities/graph-stats/api";
 
 const mockedUseGraphStats = vi.mocked(useGraphStats);
 

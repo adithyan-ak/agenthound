@@ -1,19 +1,15 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { QueryLibrary } from "@/components/queries/QueryLibrary";
-import type { PreBuiltQuery } from "@/api/types";
+import { QueryLibrary } from "@features/queries";
+import type { PreBuiltQuery } from "@entities/prebuilt";
 
-vi.mock("@/api/analysis", () => ({
+vi.mock("@entities/prebuilt/api", () => ({
   fetchPreBuiltQueries: vi.fn(),
   runPreBuiltQuery: vi.fn(),
-  fetchFindings: vi.fn(),
-  findShortestPath: vi.fn(),
-  findAllPaths: vi.fn(),
-  findWeightedPath: vi.fn(),
 }));
 
-import { fetchPreBuiltQueries, runPreBuiltQuery } from "@/api/analysis";
+import { fetchPreBuiltQueries, runPreBuiltQuery } from "@entities/prebuilt/api";
 
 const mockedFetchQueries = vi.mocked(fetchPreBuiltQueries);
 const mockedRunQuery = vi.mocked(runPreBuiltQuery);

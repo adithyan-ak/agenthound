@@ -1,17 +1,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { EntityInspector } from "@/components/inspector/EntityInspector";
-import { useGraphStore } from "@/store/graph";
+import { EntityInspector } from "@features/inspector";
+import { useGraphStore } from "@features/inspector/model/graph-store";
 
-vi.mock("@/api/graph", () => ({
+vi.mock("@entities/node/api", () => ({
   fetchNode: vi.fn(),
-  fetchGraphStats: vi.fn(),
   fetchNodes: vi.fn(),
-  fetchEdges: vi.fn(),
+  fetchBlastRadius: vi.fn(),
 }));
 
-import { fetchNode } from "@/api/graph";
+import { fetchNode } from "@entities/node/api";
 
 const mockedFetchNode = vi.mocked(fetchNode);
 

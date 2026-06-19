@@ -38,8 +38,8 @@ set -e
 cd "$(dirname "$0")/.."
 
 UI_SRC="server/ui/src"
-TOKENS_FILE="$UI_SRC/theme/tokens.ts"
-GLOBALS_FILE="$UI_SRC/styles/globals.css"
+TOKENS_FILE="$UI_SRC/shared/theme/tokens.ts"
+GLOBALS_FILE="$UI_SRC/shared/styles/globals.css"
 
 if [ ! -d "$UI_SRC" ]; then
   echo "slop-check: $UI_SRC does not exist; skipping"

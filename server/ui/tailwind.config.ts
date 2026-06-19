@@ -109,8 +109,6 @@ const config: Config = {
           critical: "#EF4444",
           high: "#F97316",
           medium: "#EAB308",
-          low: "#94A3B8",
-          info: "#64748B",
         },
         explorer: { canvas: "rgb(var(--explorer-canvas) / <alpha-value>)" },
         // OBSIDIAN TERMINAL signature accents. Amber "phosphor" is the single
