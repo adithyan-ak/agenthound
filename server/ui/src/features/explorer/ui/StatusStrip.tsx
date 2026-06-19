@@ -35,7 +35,7 @@ export function StatusStrip({ totals }: { totals: ExplorerTotals }) {
       </div>
       <div className="hidden items-center gap-2 sm:flex">
         <span className="text-primary/60">▸</span>
-        <span>Drag · scroll to zoom · click a node</span>
+        <span>Drag · scroll to zoom · click a node or edge</span>
       </div>
     </div>
   );

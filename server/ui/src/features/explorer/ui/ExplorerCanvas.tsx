@@ -78,6 +78,15 @@ export function ExplorerCanvas({
   reactFlowRef.current = reactFlow;
   const hasInitialLayoutRef = useRef(false);
   const prevShowOrphansRef = useRef(showOrphans);
+  // Refs (not deps) so the async layout effect can read the latest lens / focus
+  // without re-running for unrelated `built` recomputations. lastFitLensRef
+  // tracks the lens we last fit the camera to, so a re-fit fires exactly once
+  // per lens switch.
+  const activeLensRef = useRef(activeLens);
+  activeLensRef.current = activeLens;
+  const pendingFocusRef = useRef(pendingFocus);
+  pendingFocusRef.current = pendingFocus;
+  const lastFitLensRef = useRef(activeLens);
 
   const ownedNodeIds = useMarksStore((s) => s.ownedNodeIds);
   const highValueNodeIds = useMarksStore((s) => s.highValueNodeIds);
@@ -108,6 +117,7 @@ export function ExplorerCanvas({
   useEffect(() => {
     if (!built) return;
     let cancelled = false;
+    const lensAtBuild = activeLensRef.current;
     computeExplorerLayout(built.nodes, built.edges).then((positioned) => {
       if (cancelled) return;
       setNodes(positioned.nodes);
@@ -115,10 +125,26 @@ export function ExplorerCanvas({
       if (!hasInitialLayoutRef.current) {
         hasInitialLayoutRef.current = true;
         setLayoutReady(true);
+        lastFitLensRef.current = lensAtBuild;
         setTimeout(
           () => reactFlowRef.current.fitView({ padding: 0.18, duration: 400 }),
           80,
         );
+        return;
+      }
+      // A lens switch recomputes the node/edge subset and ELK positions, so the
+      // viewport would otherwise stay parked over the previous lens' (now empty
+      // or offscreen) region — reading as "nothing here". Re-fit once per lens
+      // change, after the new layout is committed. Deep-link focus drives its
+      // own targeted fit via pendingFocus, so defer to it when one is queued.
+      if (lensAtBuild !== lastFitLensRef.current) {
+        lastFitLensRef.current = lensAtBuild;
+        if (!pendingFocusRef.current) {
+          setTimeout(
+            () => reactFlowRef.current.fitView({ padding: 0.18, duration: 400 }),
+            80,
+          );
+        }
       }
     });
     return () => {

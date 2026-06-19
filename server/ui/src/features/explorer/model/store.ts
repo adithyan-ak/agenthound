@@ -103,7 +103,7 @@ interface ExplorerActions {
 // leaving genuinely-emitted edges (e.g. CAN_IMPERSONATE, EXPOSES_CREDENTIAL)
 // off by default. `LensId` is imported by lens-config as a type-only import,
 // so this value import introduces no runtime circular dependency.
-const DEFAULT_SUB_PRESETS = Object.fromEntries(
+export const DEFAULT_SUB_PRESETS = Object.fromEntries(
   LENS_LIST.map((lens) => [
     lens.id,
     lens.subPresets.filter((sp) => sp.defaultEnabled).map((sp) => sp.id),

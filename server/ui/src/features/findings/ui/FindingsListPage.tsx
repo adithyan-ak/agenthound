@@ -294,10 +294,21 @@ export function FindingsListPage() {
     });
   }
 
+  // Toggle only the currently-visible rows, preserving any selection that lives
+  // outside the active filter. `selected` can retain ids that are no longer in
+  // `ordered` after a filter change, so the header state must be derived from
+  // the visible rows — never from `selected.size` alone.
   function toggleSelectAll() {
     setSelected((prev) => {
-      if (prev.size === ordered.length) return new Set();
-      return new Set(ordered.map((f) => f.id));
+      const next = new Set(prev);
+      const allVisibleSelected =
+        ordered.length > 0 && ordered.every((f) => prev.has(f.id));
+      if (allVisibleSelected) {
+        for (const f of ordered) next.delete(f.id);
+      } else {
+        for (const f of ordered) next.add(f.id);
+      }
+      return next;
     });
   }
 
@@ -321,7 +332,9 @@ export function FindingsListPage() {
     );
   }
 
-  const allSelected = ordered.length > 0 && selected.size === ordered.length;
+  const allSelected =
+    ordered.length > 0 && ordered.every((f) => selected.has(f.id));
+  const someSelected = !allSelected && ordered.some((f) => selected.has(f.id));
 
   // Renders a single finding row; `globalIndex` indexes into `ordered` so the
   // keyboard cursor and ref array line up across groups.
@@ -579,6 +592,9 @@ export function FindingsListPage() {
                     <th className="w-9 px-3 py-2">
                       <input
                         type="checkbox"
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
                         checked={allSelected}
                         onChange={toggleSelectAll}
                         className="h-3.5 w-3.5 cursor-pointer accent-primary"

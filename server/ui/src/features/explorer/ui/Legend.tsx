@@ -152,10 +152,7 @@ export function Legend() {
         <div className="mb-2 space-y-1">
           {shownEdges.map((kind) => (
             <div key={kind} className="flex items-center gap-2" title={edgeDescription(kind)}>
-              <LineSwatch
-                color={getEdgeColor(kind)}
-                dashed={kind === "DELEGATES_TO" || kind === "SAME_AUTH_DOMAIN"}
-              />
+              <LineSwatch color={getEdgeColor(kind)} />
               <span className="truncate font-mono text-[10px] text-foreground/80">
                 {edgeLabel(kind).toLowerCase()}
               </span>

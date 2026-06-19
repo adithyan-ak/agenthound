@@ -1,9 +1,29 @@
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check, RotateCcw } from "lucide-react";
 import { LENS_LIST, type LensDefinition } from "@features/explorer/model/lens-config";
-import { useExplorerStore, type LensId } from "@features/explorer/model/store";
+import {
+  DEFAULT_SUB_PRESETS,
+  useExplorerStore,
+  type LensId,
+} from "@features/explorer/model/store";
 import { cn } from "@shared/lib/utils";
+
+/**
+ * A lens is "filtered" when its enabled sub-presets resolve to a different set
+ * of visible edge kinds than the lens default. An empty selection is NOT
+ * filtered: the graph builder treats "none enabled" as "show the full lens set"
+ * (see build-edges.ts), so it matches the default's visible scope.
+ */
+function lensIsFiltered(lens: LensDefinition, enabled: string[]): boolean {
+  if (lens.subPresets.length === 0) return false;
+  const effective = (ids: string[]) => (ids.length === 0 ? lens.edgeKinds : ids);
+  const current = effective(enabled);
+  const base = effective(DEFAULT_SUB_PRESETS[lens.id] ?? []);
+  return (
+    current.length !== base.length || current.some((k) => !base.includes(k))
+  );
+}
 
 interface LensPillProps {
   lens: LensDefinition;
@@ -15,9 +35,11 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
   const Icon = lens.icon;
   const subPresets = useExplorerStore((s) => s.subPresets[lens.id] ?? []);
   const toggleSubPreset = useExplorerStore((s) => s.toggleSubPreset);
+  const setSubPresets = useExplorerStore((s) => s.setSubPresets);
   const [open, setOpen] = useState(false);
 
   const hasSubPresets = lens.subPresets.length > 0;
+  const isFiltered = lensIsFiltered(lens, subPresets);
 
   const pillClasses = cn(
     "group relative flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.06em]",
@@ -44,6 +66,13 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
   return (
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <div className={pillClasses} style={pillStyle}>
+        {isFiltered && (
+          <span
+            aria-hidden
+            title="Filtered — sub-presets differ from default"
+            className="pointer-events-none absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-card"
+          />
+        )}
         <button onClick={onClick} className="flex items-center gap-1.5">
           <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
           <span>{lens.label}</span>
@@ -112,6 +141,22 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
               </DropdownMenu.Item>
             );
           })}
+          <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+          <DropdownMenu.Item
+            disabled={!isFiltered}
+            onSelect={(e) => {
+              e.preventDefault();
+              setSubPresets(lens.id, DEFAULT_SUB_PRESETS[lens.id] ?? []);
+            }}
+            className={cn(
+              "flex items-center gap-2 rounded-[3px] px-2 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] outline-none transition-colors",
+              "cursor-pointer text-muted-foreground hover:text-foreground focus:bg-white/[0.05] data-[highlighted]:bg-white/[0.05]",
+              "data-[disabled]:pointer-events-none data-[disabled]:cursor-default data-[disabled]:opacity-40",
+            )}
+          >
+            <RotateCcw className="h-3 w-3" strokeWidth={2.25} />
+            Reset to default
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
