@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -296,7 +297,12 @@ func readFileBounded(path string) (content string, hash string, existed bool, mo
 		return "", "", false, 0, fmt.Errorf("file %q too large (%d bytes; cap %d)", path, st.Size(), MaxFileBytes)
 	}
 	data := make([]byte, st.Size())
-	if _, err := f.Read(data); err != nil && err.Error() != "EOF" {
+	// io.ReadFull guarantees the buffer is fully populated; a single
+	// f.Read may under-fill it (io.Reader contract), leaving trailing
+	// zero bytes that would corrupt both the content and its SHA-256 —
+	// load-bearing for the receipt's revert integrity. An empty file
+	// (size 0) yields a nil error without reading.
+	if _, err := io.ReadFull(f, data); err != nil {
 		return "", "", false, 0, err
 	}
 	return string(data), sha256Hex(data), true, st.Mode().Perm(), nil
