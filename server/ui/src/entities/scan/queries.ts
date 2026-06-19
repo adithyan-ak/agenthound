@@ -8,7 +8,8 @@ import { qk } from "@shared/api/query-keys";
 import { deleteScan, fetchScans, uploadScan } from "./api";
 
 // Page size for the scan-manager list. The dashboard requests its own smaller
-// page (20) under a distinct cache key, so writes here never disturb it.
+// page (20) under a distinct cache key; scan writes invalidate the entire
+// ["scans"] prefix below, so both the manager and dashboard pages refresh.
 export const SCANS_LIST_LIMIT = 50;
 
 export function useScans(limit = SCANS_LIST_LIMIT) {

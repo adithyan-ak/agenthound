@@ -89,22 +89,12 @@ const config: Config = {
           9: "rgb(var(--tomato-9-raw) / <alpha-value>)",
           11: "rgb(var(--tomato-11-raw) / <alpha-value>)",
         },
-        // Domain palettes — node-kind hues (graph identity) and severity
-        // (information signal). These remain literal hex because they
-        // have to be perceptually distinct ACROSS hues, not within one
-        // ramp; a Radix scale per kind would defeat the purpose.
-        node: {
-          agent: "#06B6D4",
-          server: "#10B981",
-          tool: "#F59E0B",
-          resource: "#EF4444",
-          a2a: "#A855F7",
-          skill: "#C084FC",
-          identity: "#94A3B8",
-          credential: "#EC4899",
-          config: "#D97706",
-          host: "#475569",
-        },
+        // Severity palette — literal hex (levels must be perceptually
+        // distinct, not a single ramp). Kept in lockstep with tokens.ts
+        // SEVERITY[*].solid by the theme parity test
+        // (src/shared/theme/parity.test.ts). Node-kind colors are NOT
+        // duplicated here — they live solely in tokens.ts (NODE_KIND_COLORS);
+        // the former unused `node.*` palette was removed.
         severity: {
           critical: "#EF4444",
           high: "#F97316",

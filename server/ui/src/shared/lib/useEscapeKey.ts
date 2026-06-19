@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isEditableTarget } from "./is-editable-target";
 
 export interface UseEscapeKeyOptions {
   /** When false the listener is detached entirely. Defaults to true. */
@@ -29,12 +30,7 @@ export function useEscapeKey(
     if (!enabled) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      if (ignoreInputs) {
-        const target = e.target as HTMLElement | null;
-        if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") {
-          return;
-        }
-      }
+      if (ignoreInputs && isEditableTarget(e.target)) return;
       handlerRef.current();
     }
     window.addEventListener("keydown", onKey);

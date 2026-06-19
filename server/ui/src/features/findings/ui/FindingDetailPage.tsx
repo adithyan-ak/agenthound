@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Skeleton } from "@shared/ui/primitives/skeleton";
 import { Stack, Sidebar } from "@shared/ui/layout";
+import { isEditableTarget } from "@shared/lib";
 import { useFindingDetail } from "@entities/finding";
 import { useFindingsNavigation } from "../model/useFindingsNavigation";
 import { buildMarkdownReport } from "../lib/copy-report";
@@ -20,7 +21,7 @@ export function FindingDetailPage() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isEditableTarget(e.target)) return;
       if (e.key === "ArrowLeft" && prevId) navigate(`/findings/${prevId}`);
       if (e.key === "ArrowRight" && nextId) navigate(`/findings/${nextId}`);
       if (e.key === "Escape") navigate("/findings");

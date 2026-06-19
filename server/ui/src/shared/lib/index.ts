@@ -2,6 +2,7 @@
 export { cn } from "./utils";
 export { useCountUp } from "./useCountUp";
 export { useEscapeKey, type UseEscapeKeyOptions } from "./useEscapeKey";
+export { isEditableTarget } from "./is-editable-target";
 export {
   buildAdjacencyIndex,
   bfsFrom,
