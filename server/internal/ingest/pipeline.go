@@ -34,6 +34,14 @@ type scanRecorder interface {
 // without exercising every concrete processor.
 type postProcessFunc func(ctx context.Context, db graph.GraphDB, scanID string, collectors []string) ([]graph.ProcessingStats, error)
 
+// findingSnapshotter persists the per-scan findings snapshot to Postgres.
+// *appdb.FindingStore satisfies it implicitly; defined as an interface so
+// tests can substitute a recorder and so a nil store cleanly disables the
+// snapshot stage.
+type findingSnapshotter interface {
+	InsertFindings(ctx context.Context, scanID string, findings []model.Finding) error
+}
+
 // Pipeline serializes ingests through a single mutex.
 //
 // The post-processing stage's stale-edge cleanup deletes composite
@@ -45,16 +53,17 @@ type postProcessFunc func(ctx context.Context, db graph.GraphDB, scanID string, 
 // for the duration of a single scan, and concurrent UI uploads are not
 // a target scenario.
 type Pipeline struct {
-	mu         sync.Mutex
-	validator  *Validator
-	normalizer *Normalizer
-	writer     nodeEdgeWriter
-	graphDB    graph.GraphDB
-	scanStore  scanRecorder
-	runPP      postProcessFunc
+	mu           sync.Mutex
+	validator    *Validator
+	normalizer   *Normalizer
+	writer       nodeEdgeWriter
+	graphDB      graph.GraphDB
+	scanStore    scanRecorder
+	findingStore findingSnapshotter
+	runPP        postProcessFunc
 }
 
-func NewPipeline(writer *graph.Writer, graphDB graph.GraphDB, scanStore *appdb.ScanStore) *Pipeline {
+func NewPipeline(writer *graph.Writer, graphDB graph.GraphDB, scanStore *appdb.ScanStore, findingStore *appdb.FindingStore) *Pipeline {
 	p := &Pipeline{
 		validator:  NewValidator(),
 		normalizer: NewNormalizer(),
@@ -69,6 +78,9 @@ func NewPipeline(writer *graph.Writer, graphDB graph.GraphDB, scanStore *appdb.S
 	}
 	if scanStore != nil {
 		p.scanStore = scanStore
+	}
+	if findingStore != nil {
+		p.findingStore = findingStore
 	}
 	return p
 }
@@ -143,6 +155,22 @@ func (p *Pipeline) Ingest(ctx context.Context, data *sdkingest.IngestData) (*sdk
 				Duration:      s.Duration,
 				Error:         s.Error,
 			})
+		}
+	}
+
+	// Stage 6.5: Persist findings snapshot (non-fatal). Post-processing
+	// above already ran cleanStaleCompositeEdges, so the graph now holds
+	// only this scan's composite edges — snapshotting here captures
+	// exactly this scan's findings. All triage/diff reads come from this
+	// Postgres snapshot, which is invariant under the next scan's cleanup.
+	if p.findingStore != nil && p.graphDB != nil {
+		snapshot, qErr := analysis.QueryFindings(ctx, p.graphDB, "")
+		if qErr != nil {
+			slog.Warn("findings snapshot query failed", "error", qErr)
+		} else if iErr := p.findingStore.InsertFindings(ctx, data.Meta.ScanID, snapshot); iErr != nil {
+			slog.Warn("findings snapshot insert failed", "error", iErr)
+		} else {
+			slog.Info("findings snapshot persisted", "scan_id", data.Meta.ScanID, "count", len(snapshot))
 		}
 	}
 

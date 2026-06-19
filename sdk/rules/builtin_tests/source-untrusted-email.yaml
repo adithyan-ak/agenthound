@@ -1,0 +1,13 @@
+tests:
+  - input: "read_email Reads the body of a message from the user's inbox"
+    should_match: true
+    description: "matches read_email keyword"
+  - input: "list_emails returns recent messages"
+    should_match: true
+    description: "matches list_emails keyword"
+  - input: "send_email delivers a drafted message"
+    should_match: false
+    description: "sending email is an outbound action, not an untrusted source"
+  - input: "compute_sum totals a list of numbers"
+    should_match: false
+    description: "no untrusted-email keywords present"

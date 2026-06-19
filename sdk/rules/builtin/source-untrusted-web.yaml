@@ -1,0 +1,25 @@
+id: source-untrusted-web
+name: Untrusted Web Source
+description: >
+  Flags tools that ingest content fetched from the open web (URL fetch, web
+  scraping, page crawling, web search). Such content is attacker-controllable
+  and is treated as an untrusted input source for taint / information-flow
+  analysis (INGESTS_UNTRUSTED). Keywords are kept narrow on purpose —
+  universal taint kills signal.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP05, ASI03]
+tags: [source-trust, untrusted-web]
+matcher:
+  type: keyword
+  keywords: [fetch_url, web_fetch, "fetch web page", scrape_url, web_scrape, crawl_url, "scrape website", browse_url, web_search]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: source_trust_classification
+  property_key: source_trust
+  property_value: untrusted_web

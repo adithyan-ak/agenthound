@@ -4,11 +4,18 @@ import "github.com/adithyan-ak/agenthound/server/internal/analysis/processors"
 
 func allProcessors() []PostProcessor {
 	return []PostProcessor{
+		// auth_strength is a pre-pass: it materializes a numeric
+		// auth_strength node property that confused_deputy compares in
+		// Cypher. No deps; must run before any processor that reads it.
+		&processors.AuthStrength{},
 		&processors.HasAccessTo{},
 		&processors.CanExecute{},
 		&processors.Shadows{},
 		&processors.PoisonedDescription{},
 		&processors.PoisonedInstructions{},
+		// taints runs before can_reach so its cross-tool taint edges can
+		// influence the transitive reachability walk.
+		&processors.Taints{},
 		&processors.CanReach{},
 		// CrossServiceCredentialChain depends on can_reach and emits
 		// CAN_REACH edges that span Config Collector + LiteLLM Looter
@@ -17,8 +24,13 @@ func allProcessors() []PostProcessor {
 		// description; design rationale in
 		// docs/plans/sprint3-offensive-primitives.md 3.7 + 4.5.
 		&processors.CrossServiceCredentialChain{},
+		// ifc_violation reads HAS_ACCESS_TO paths populated earlier and the
+		// raw INGESTS_UNTRUSTED edges; runs after the credential chain,
+		// before the exfiltration detector.
+		&processors.IfcViolation{},
 		&processors.CanExfiltrate{},
 		&processors.CanImpersonate{},
+		&processors.ConfusedDeputy{},
 		&processors.CrossProtocol{},
 		&processors.RiskScore{},
 	}

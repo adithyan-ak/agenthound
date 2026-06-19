@@ -452,7 +452,7 @@ ssh target 'agenthound scan --output -' | agenthound-server ingest -
 
 ### `agenthound-server query`
 
-Query the graph database. Four mutually exclusive modes.
+Query the graph database. Five mutually exclusive modes.
 
 ```bash
 # Raw Cypher
@@ -461,8 +461,11 @@ agenthound-server query "MATCH (n:MCPServer) RETURN n.name, n.transport"
 # Pre-built query
 agenthound-server query --prebuilt agents-shell-access
 
-# Findings (composite edges as security findings)
-agenthound-server query --findings [--severity critical]
+# Findings (from the persisted snapshot, with triage state)
+agenthound-server query --findings [--severity critical] [--all-findings]
+
+# Diff two scans' findings
+agenthound-server query --diff scan_a,scan_b
 
 # Shortest path
 agenthound-server query --shortest-path --from AgentInstance:claude --to MCPResource:postgres://prod
@@ -473,13 +476,19 @@ agenthound-server query --shortest-path --from AgentInstance:claude --to MCPReso
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--prebuilt` | | Pre-built query ID. |
-| `--findings` | `false` | List all findings. |
+| `--findings` | `false` | List findings from the latest persisted snapshot (suppressed hidden by default). |
+| `--all-findings` | `false` | Include suppressed (`accepted-risk` / `false-positive`) findings in `--findings` / `--diff` output. |
+| `--diff` | | Diff two scans' findings: `scanA,scanB`. Reports added / removed / unchanged. |
 | `--severity` | | Filter findings: `critical`, `high`, `medium`, `low`. |
 | `--shortest-path` | `false` | Find shortest path between two nodes. |
 | `--from` | | Source node (`Kind:name`). |
 | `--to` | | Target node (`Kind:name`). |
 | `--format` | `table` | `table` or `json`. |
-| `--fail-on` | | Exit 1 if findings at or above severity (CI gate). |
+| `--fail-on` | | Exit 1 if findings at or above severity (CI gate). Always ignores suppressed findings, even with `--all-findings`. |
+
+#### Suppression semantics
+
+Triage decisions (`accepted-risk`, `false-positive`) suppress a finding from the default `--findings` view and from the `added` set of `--diff`. `--all-findings` reveals them. `--fail-on` *always* evaluates against the non-suppressed set, so an accepted risk can never break CI regardless of `--all-findings`.
 
 #### Pre-Built Query IDs
 
@@ -496,6 +505,7 @@ agenthound-server query --shortest-path --from AgentInstance:claude --to MCPReso
 | `tool-shadowing` | Vulnerabilities | high |
 | `no-auth-servers` | Vulnerabilities | high |
 | `no-auth-a2a` | Vulnerabilities | high |
+| `tool-name-collision` | Vulnerabilities | high |
 | `rug-pull` | Vulnerabilities | high |
 | `instruction-poisoning` | Supply Chain | high |
 | `high-entropy-secrets` | Supply Chain | high |

@@ -52,6 +52,13 @@ func (p *CrossServiceCredentialChain) Process(ctx context.Context, db graph.Grap
 	// hand-loaded test fixtures where both nodes happen to share an
 	// objectid; in real graphs they always have different objectids
 	// because the Config Collector and Looter compute IDs differently).
+	// Single query (one ExecuteWrite): the same agent→server→credential
+	// join also yields the credential blast radius (count of distinct
+	// agents that can reach the merged secret), which we materialize on
+	// both the env-var credential (c1) and its value_hash-merged master
+	// (c1master). Folding it here avoids re-MATCHing the join path. The
+	// agents are collected for the count, then re-UNWOUND so the CAN_REACH
+	// MERGE stays one edge per (agent, upstream-credential) as before.
 	cypher := `
 MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s:MCPServer)
       -[:HAS_ENV_VAR]->(c1:Credential)
@@ -60,6 +67,11 @@ MATCH (gw:LiteLLMGateway)-[:EXPOSES_CREDENTIAL]->(c1master:Credential)
 WHERE c1master.value_hash = c1.value_hash AND c1master.objectid <> c1.objectid
 MATCH (gw)-[:EXPOSES_CREDENTIAL]->(c2:Credential)
 WHERE c2.type IN ['apiKey', 'virtual_key'] AND c2.objectid <> c1master.objectid
+WITH s, c1, c1master, c2, gw, collect(DISTINCT a) AS agents
+WITH s, c1, c1master, c2, gw, agents, size(agents) AS reachable_agents
+SET c1.blast_radius = reachable_agents, c1master.blast_radius = reachable_agents
+WITH s, c1, c1master, c2, gw, agents
+UNWIND agents AS a
 MERGE (a)-[e:CAN_REACH]->(c2)
 SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
     e.source_collector = 'cross_service_credential_chain',

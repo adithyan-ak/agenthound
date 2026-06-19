@@ -56,11 +56,12 @@ var UmbrellaLabels = map[string]bool{
 	"AIService": true,
 }
 
-// RawEdgeKinds are the 17 collector-produced edge kinds accepted in ingest
+// RawEdgeKinds are the 18 collector-produced edge kinds accepted in ingest
 // input. EXPOSES is reserved in v0.2 for v0.3 fingerprinters; EXPOSES_CREDENTIAL
 // is emitted by the v0.2 LiteLLM Looter; PROVIDES_MODEL is emitted by the v0.3
 // Ollama Looter; EXTRACTED_FROM is emitted by the v0.5 embedding-inversion
-// Extractor (AIModel → ExtractedTrainingSignal).
+// Extractor (AIModel → ExtractedTrainingSignal); INGESTS_UNTRUSTED is emitted by
+// the MCP Collector for tools whose rule-derived source_trust is untrusted.
 var RawEdgeKinds = map[string]bool{
 	"TRUSTS_SERVER":      true,
 	"PROVIDES_TOOL":      true,
@@ -79,9 +80,10 @@ var RawEdgeKinds = map[string]bool{
 	"EXPOSES_CREDENTIAL": true,
 	"PROVIDES_MODEL":     true,
 	"EXTRACTED_FROM":     true,
+	"INGESTS_UNTRUSTED":  true,
 }
 
-// AllowedEdgeKinds includes all 25 edge kinds (17 raw + 8 composite) for Neo4j writer dispatch.
+// AllowedEdgeKinds includes all 30 edge kinds (18 raw + 12 composite) for Neo4j writer dispatch.
 var AllowedEdgeKinds = map[string]bool{
 	// Raw (collector-produced)
 	"TRUSTS_SERVER":      true,
@@ -101,6 +103,7 @@ var AllowedEdgeKinds = map[string]bool{
 	"EXPOSES_CREDENTIAL": true,
 	"PROVIDES_MODEL":     true,
 	"EXTRACTED_FROM":     true,
+	"INGESTS_UNTRUSTED":  true,
 	// Composite (post-processor produced)
 	"HAS_ACCESS_TO":         true,
 	"CAN_EXECUTE":           true,
@@ -110,6 +113,10 @@ var AllowedEdgeKinds = map[string]bool{
 	"POISONED_DESCRIPTION":  true,
 	"CAN_IMPERSONATE":       true,
 	"POISONED_INSTRUCTIONS": true,
+	"CONFUSED_DEPUTY":       true,
+	"TAINTS":                true,
+	"IFC_VIOLATION":         true,
+	"POISONS_CONTEXT":       true,
 }
 
 // AllowedCollectors are the valid collector identifiers in ingest meta.
@@ -153,6 +160,11 @@ var EdgeKindEndpoints = map[string]EdgeEndpoints{
 	"EXPOSES_CREDENTIAL":    {SourceKinds: []string{"AIService"}, TargetKinds: []string{"Credential"}},
 	"PROVIDES_MODEL":        {SourceKinds: []string{"OllamaInstance"}, TargetKinds: []string{"AIModel"}},
 	"EXTRACTED_FROM":        {SourceKinds: []string{"AIModel"}, TargetKinds: []string{"ExtractedTrainingSignal"}},
+	"INGESTS_UNTRUSTED":     {SourceKinds: []string{"MCPTool"}, TargetKinds: []string{"MCPResource"}},
+	"CONFUSED_DEPUTY":       {SourceKinds: []string{"A2AAgent"}, TargetKinds: []string{"A2AAgent"}},
+	"TAINTS":                {SourceKinds: []string{"MCPTool"}, TargetKinds: []string{"MCPTool"}},
+	"IFC_VIOLATION":         {SourceKinds: []string{"MCPTool"}, TargetKinds: []string{"MCPTool"}},
+	"POISONS_CONTEXT":       {SourceKinds: []string{"MCPTool"}, TargetKinds: []string{"MCPTool"}},
 }
 
 // ResolveEdgeEndpoints returns the source and target node kinds for an edge,

@@ -19,9 +19,20 @@ export const qk = {
   edges: () => ["edges", "all"] as const,
 
   // One findings cache — unifies the dashboard, findings list, node findings,
-  // references, and navigation surfaces (all fetched the full set).
-  findings: () => ["findings"] as const,
+  // references, and navigation surfaces (all fetched the full set). The
+  // optional includeSuppressed segment lets the findings register show
+  // accepted-risk / false-positive rows under a distinct cache entry; call
+  // with no argument to address the whole findings namespace for
+  // invalidation.
+  findings: (includeSuppressed?: boolean) =>
+    includeSuppressed === undefined
+      ? (["findings"] as const)
+      : (["findings", includeSuppressed] as const),
   findingDetail: (id: string) => ["finding-detail", id] as const,
+  // Per-fingerprint triage state — one key per finding so a triage edit
+  // invalidates just that row's standalone query (the list query carries
+  // triage inline and is invalidated by prefix).
+  triage: (fingerprint: string) => ["triage", fingerprint] as const,
 
   // One scans hook, parameterized by page size: the scan manager (50) and the
   // dashboard (20) keep distinct cache entries so a write to one does not

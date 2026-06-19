@@ -1,0 +1,24 @@
+id: capability-allowlisted-proxy
+name: Allowlisted Proxy Capability
+description: >
+  Classifies tools that proxy requests through an allowlisted egress
+  (corporate proxy, URL allowlist, fetch-through gateway). These can serve as
+  a covert outbound exfiltration channel that slips past naive egress
+  controls because the destination looks allowlisted.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP04, ASI10]
+tags: [capability, allowlisted-proxy, exfiltration]
+matcher:
+  type: keyword
+  keywords: [proxy_request, allowlisted_proxy, "proxy fetch", egress_proxy, "forward request", proxy_url, "allowlist proxy"]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: capability_classification
+  property_key: capability_surface
+  property_value: allowlisted_proxy

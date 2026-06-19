@@ -189,6 +189,15 @@ func init() {
 			Cypher:      CypherUnpinnedShell,
 			OWASPMap:    []string{"MCP01", "MCP09", "ASI06", "ASI09"},
 		},
+		"tool-name-collision": {
+			ID:          "tool-name-collision",
+			Name:        "Cross-Server Tool Name Collisions",
+			Description: "Finds tools on different servers that share a normalized name -- a malicious server can shadow a trusted tool by reusing its name.",
+			Category:    "Vulnerabilities",
+			Severity:    "high",
+			Cypher:      CypherToolNameCollision,
+			OWASPMap:    []string{"MCP05", "ASI03"},
+		},
 	}
 }
 

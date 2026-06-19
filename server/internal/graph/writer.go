@@ -114,8 +114,15 @@ func nodeCypherForKindTuple(primaryKind string, extraLabels []string) string {
 	var sb strings.Builder
 	sb.WriteString("UNWIND $nodes AS node\n")
 	fmt.Fprintf(&sb, "MERGE (n:%s {objectid: node.id})\n", primaryKind)
-	sb.WriteString("ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.first_seen = datetime(), n.last_seen = datetime()\n")
-	sb.WriteString("ON MATCH SET n.previous_description_hash = n.description_hash, n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()")
+	// ON CREATE: seed the previous-hash trio from the incoming hashes so the
+	// rug-pull predicates (which gate on previous_*_hash IS NOT NULL) do not
+	// fire spuriously on a tool's/server's first scan. Reading from
+	// node.properties.* is unambiguous regardless of SET-item ordering.
+	sb.WriteString("ON CREATE SET n = node.properties, n.objectid = node.id, n.scan_id = $scan_id, n.first_seen = datetime(), n.last_seen = datetime(), n.previous_description_hash = node.properties.description_hash, n.previous_input_schema_hash = node.properties.input_schema_hash, n.previous_instructions_hash = node.properties.instructions_hash\n")
+	// ON MATCH: pivot previous_*_hash = current hash BEFORE n += node.properties
+	// overwrites the current values. SET items apply left-to-right, so the
+	// three pivots capture the prior scan's hashes (rug-pull change detection).
+	sb.WriteString("ON MATCH SET n.previous_description_hash = n.description_hash, n.previous_input_schema_hash = n.input_schema_hash, n.previous_instructions_hash = n.instructions_hash, n += node.properties, n.scan_id = $scan_id, n.last_seen = datetime()")
 	for _, lbl := range extraLabels {
 		fmt.Fprintf(&sb, "\nSET n:%s", lbl)
 	}

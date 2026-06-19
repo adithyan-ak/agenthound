@@ -22,17 +22,21 @@ can_impersonate
 
 | # | Processor | Dependencies |
 |---|-----------|--------------|
-| 1 | has_access_to | none |
-| 2 | can_execute | none |
-| 3 | shadows | none |
-| 4 | poisoned_description | none |
-| 5 | poisoned_instructions | none |
-| 6 | can_reach | has_access_to |
-| 7 | cross_service_credential_chain | has_access_to, can_reach |
-| 8 | can_exfiltrate | can_reach |
-| 9 | can_impersonate | none |
-| 10 | cross_protocol | has_access_to |
-| 11 | risk_score | all of 1-10 |
+| 1 | auth_strength | none (pre-pass) |
+| 2 | has_access_to | none |
+| 3 | can_execute | none |
+| 4 | shadows (+ POISONS_CONTEXT) | none |
+| 5 | poisoned_description | none |
+| 6 | poisoned_instructions | none |
+| 7 | taints | none (reads INGESTS_UNTRUSTED + schema_keys) |
+| 8 | can_reach | has_access_to |
+| 9 | cross_service_credential_chain | has_access_to, can_reach |
+| 10 | ifc_violation | has_access_to (reads INGESTS_UNTRUSTED) |
+| 11 | can_exfiltrate | can_reach |
+| 12 | can_impersonate | none |
+| 13 | confused_deputy | auth_strength, can_reach |
+| 14 | cross_protocol | has_access_to |
+| 15 | risk_score | all of 1-14 |
 
 ## Processor Interface
 
@@ -45,6 +49,19 @@ type PostProcessor interface {
 ```
 
 `ProcessingStats` returns: `ProcessorName`, `EdgesCreated`, `NodesUpdated`, `Duration`, `Error`.
+
+> The Execution Order table above is the canonical sequence. The numbered
+> section headings below predate later additions; new processors
+> (`auth_strength`, `taints`, `ifc_violation`, `confused_deputy`) and the
+> `POISONS_CONTEXT` pass are documented under their own headings.
+
+---
+
+## auth_strength (pre-pass)
+
+**Computes:** `auth_strength` numeric property on every node with an `auth_method` (`MCPServer`, `A2AAgent`).
+
+A pre-pass with no dependencies that materializes the runtime weakness score map (`riskscore.AuthStrengthScores`: none=100, apiKey=70, bearer=50, oauth=25, mtls=10) onto nodes as a Cypher `CASE`, so downstream processors (notably `confused_deputy`) can compare auth gradients directly in Cypher. It writes only node properties — no composite edges — so it needs no `source_collector` and is untouched by stale-edge cleanup.
 
 ---
 
@@ -86,6 +103,8 @@ Pattern requires `s1 <> s2` and `t1 <> t2`. The match is intentionally target-sp
 
 Confidence scales with injection patterns: 0.9 when `has_injection_patterns=true`, 0.6 otherwise. Risk weight: 0.4.
 
+**POISONS_CONTEXT (second pass):** the shadows processor runs a second Cypher pass that emits `MCPTool -[POISONS_CONTEXT]-> MCPTool` when the source has `has_injection_patterns=true` and the sink carries a high-blast capability (`shell_access`, `code_execution`, `credential_access`, `email_send`). This deliberately widens the narrow SHADOWS guard (no description-naming requirement) to model context poisoning, but caps fan-out at **20 sinks per source** to prevent a cartesian blow-up. `scripts/perf-check.sh` enforces a ≤200 poisoned-pair-per-agent ceiling (10 source tools × 20 sinks). Confidence: 0.6, risk_weight: 0.4, `source_collector='mcp'`.
+
 ## 4. poisoned_description
 
 **Computes:** `MCPTool -[POISONED_DESCRIPTION]-> MCPTool` (self-loop)
@@ -101,6 +120,12 @@ Confidence: 1.0, risk_weight: 0.8. Self-loop edge -- the finding is about the to
 Flags instruction files marked `is_suspicious=true` by the Config Collector (imperative overrides, exfiltration commands, hidden Unicode).
 
 Confidence: 1.0, risk_weight: 0.7, source_collector: `config`.
+
+## taints
+
+**Computes:** `MCPTool -[TAINTS]-> MCPTool` (cross-server)
+
+Emits a `TAINTS` edge when a tool that ingests untrusted input (it has an `INGESTS_UNTRUSTED` edge, or `source_trust='private'`) shares **≥2 input-schema keys** with a tool on another server. The schema overlap is computed in pure Cypher against the `schema_keys` node property (emitted collector-side — no APOC dependency). The ≥2 threshold avoids matching every `{type, name}` pair. No processor dependencies (reads raw `INGESTS_UNTRUSTED` edges + node properties), but registered before `can_reach` so its edges can influence the reachability walk. Confidence: 0.7, risk_weight: 0.3, `source_collector='mcp'`.
 
 ## 6. can_reach
 
@@ -136,7 +161,17 @@ LiteLLMGateway -[EXPOSES_CREDENTIAL]-> Credential(c2, type IN [apiKey, virtual_k
 
 Emits: `(AgentInstance)-[:CAN_REACH]->(c2)` with evidence including `merge_value_hash`, `via_gateway`, `upstream_provider`. Confidence: 0.95, hops: 5.
 
+The same single query also computes **credential blast radius**: `count(DISTINCT agent)` reaching the merged secret, written as `blast_radius` on both `c1` (the env-var credential) and `c1master` (its value_hash twin). The agents are collected for the count and re-UNWOUND so the CAN_REACH MERGE stays one edge per (agent, upstream-credential). `blast_radius` then amplifies the server credential-handling risk term (see risk-scoring.md).
+
 The `value_hash` is the cross-collector merge primitive -- same secret value regardless of how each collector derives its objectid.
+
+## ifc_violation
+
+**Computes:** `MCPTool -[IFC_VIOLATION]-> MCPTool`
+
+Emits an information-flow-control violation edge when an untrusted-input tool (`INGESTS_UNTRUSTED -> MCPResource`) shares a resource within **3 `HAS_ACCESS_TO` hops** with a sink tool carrying a high-impact capability (`credential_access`, `file_write`, `email_send`). The 1..3 hop cap is the false-positive / performance guard. Depends on `has_access_to`. Confidence: 0.6, risk_weight: 0.3, `source_collector='mcp'`.
+
+> **Cleanup semantics:** `IFC_VIOLATION` carries `source_collector='mcp'`, so it is only swept by stale-edge cleanup when the `mcp` collector re-runs. If an operator runs only `a2a` / `config` scans afterward, IFC edges from a prior `mcp` scan persist (the underlying tools were not re-enumerated). This is acceptable.
 
 ## 8. can_exfiltrate
 
@@ -144,9 +179,9 @@ The `value_hash` is the cross-collector merge primitive -- same secret value reg
 
 Requires both conditions:
 1. Agent CAN_REACH a resource with sensitivity `critical` or `high`
-2. Agent trusts a server with a tool having `email_send`, `network_outbound`, or `file_write` capability
+2. Agent trusts a server with a tool having an outbound capability: `email_send`, `network_outbound`, `file_write`, `auto_fetch_render`, or `allowlisted_proxy`
 
-Pattern ensures the agent has both the data access AND an outbound channel. Confidence: 0.8.
+Pattern ensures the agent has both the data access AND an outbound channel. The `auto_fetch_render` / `allowlisted_proxy` classes broaden the set of covert exfiltration channels (see detection-rules.md for the `auto_fetch_render` host-side caveat). Confidence: 0.8.
 
 ## 9. can_impersonate
 
@@ -176,6 +211,12 @@ WHERE ext.auth_method IS NULL OR ext.auth_method = 'none'
 ```
 
 Requires the external A2A agent has no authentication. The pivot point is host co-location: an A2A agent that delegates to another agent running on the same host as an MCP server. Edge properties include `cross_protocol=true`. Confidence: 0.5.
+
+## confused_deputy
+
+**Computes:** `A2AAgent -[CONFUSED_DEPUTY]-> A2AAgent`
+
+Flags a confused-deputy escalation: a weakly-authenticated agent (`auth_strength >= 80`, i.e. none/apiKey-class) that `DELEGATES_TO` a strongly-authenticated one (`auth_strength <= 30`, i.e. oauth/mtls-class). The low-trust caller effectively borrows the callee's privileges. Depends on the `auth_strength` pre-pass and `can_reach` (ordering). `source_collector='a2a'` — a real collector, so it participates in stale-edge cleanup directly. Confidence: 0.8, risk_weight: 0.3.
 
 ## 11. risk_score
 
@@ -223,3 +264,15 @@ DELETE r
 ```
 
 This prevents stale findings from accumulating while preserving composite edges from other collectors. An MCP-only re-scan deletes old MCP composite edges but leaves A2A and credential-chain edges untouched; a config or network re-scan also cleans credential-chain edges because those findings depend on the refreshed credential inputs.
+
+### INGESTS_UNTRUSTED raw-edge accumulation
+
+`INGESTS_UNTRUSTED` is a **raw** edge (`is_composite=false`), so it is *not* swept by `cleanStaleCompositeEdges` (which gates on `is_composite=true`). It is MERGE-keyed on (source, target), so re-scans rewrite `scan_id` for tools that stay around. The trade-off: a renamed or removed tool whose `INGESTS_UNTRUSTED` edge was emitted in a prior scan will linger, because the old (tool, resource) key is never re-MERGEd. Mitigation is to gate emission on stable, rule-derived `source_trust` (which does not flap for the same tool). A dedicated raw-edge sweeper is intentionally out of scope; if false-positive linger becomes load-bearing, the fix is a separate processor that DELETEs `INGESTS_UNTRUSTED` edges whose source tool no longer carries `source_trust`.
+
+---
+
+## Findings Snapshot Stage (pipeline)
+
+After post-processing completes and before the scan-completion record is written, the ingest pipeline persists a **findings snapshot** to Postgres (`appdb.FindingStore.InsertFindings`). Sequencing matters: `cleanStaleCompositeEdges` runs first, so the Neo4j graph already reflects only the current scan's composite-edge set when the snapshot is taken.
+
+This snapshot is the diffable record of "what was found when". The Neo4j graph itself is **not** diffable across scans — the stale-edge cleanup deletes prior-scan composite edges — so every triage (`/findings/triage`) and diff (`query --diff`) read comes from the Postgres snapshot, which is invariant under the next scan's cleanup. The snapshot write is non-fatal: a Postgres hiccup logs a warning but does not fail the ingest.

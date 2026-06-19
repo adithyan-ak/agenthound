@@ -24,9 +24,9 @@ func TestGet_InvalidID(t *testing.T) {
 
 func TestList_Count(t *testing.T) {
 	queries := List()
-	// 17 v0.1 + 1 v0.2 (litellm-credential-leak) = 18.
-	if len(queries) != 18 {
-		t.Fatalf("expected 18 pre-built queries, got %d", len(queries))
+	// 17 v0.1 + 1 v0.2 (litellm-credential-leak) + 1 (tool-name-collision) = 19.
+	if len(queries) != 19 {
+		t.Fatalf("expected 19 pre-built queries, got %d", len(queries))
 	}
 }
 

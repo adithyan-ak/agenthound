@@ -818,7 +818,7 @@ func TestPipeline_NormalizerWarningsPropagated(t *testing.T) {
 // runner. We pass nil for the unit-testable types we don't have here
 // (Writer, GraphDB, ScanStore) — the constructor is purely structural.
 func TestNewPipeline_ConstructsWithDefaults(t *testing.T) {
-	p := NewPipeline(nil, nil, nil)
+	p := NewPipeline(nil, nil, nil, nil)
 	if p.validator == nil {
 		t.Error("validator should be initialized")
 	}
@@ -848,7 +848,7 @@ func TestNewPipeline_PassesConcreteThrough(t *testing.T) {
 	// only validate the Writer path here. The ScanStore path is
 	// exercised in production by bootstrap.go and indirectly covered
 	// by integration tests.
-	p := NewPipeline(w, nil, nil)
+	p := NewPipeline(w, nil, nil, nil)
 	if p.writer == nil {
 		t.Error("non-nil *graph.Writer should be stored as interface")
 	}

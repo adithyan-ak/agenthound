@@ -1,0 +1,10 @@
+tests:
+  - input: "render_markdown Renders the supplied markdown, including images"
+    should_match: true
+    description: "matches render_markdown keyword"
+  - input: "embed image into the chat response"
+    should_match: true
+    description: "matches embed image keyword"
+  - input: "sum_values adds a list of numbers"
+    should_match: false
+    description: "no auto-fetch-render keywords present"

@@ -5,7 +5,9 @@ import { MiniHexIcon } from "./MiniHexIcon";
 import { TriageControl } from "./TriageControl";
 import { cn } from "@shared/lib/utils";
 import { SEVERITY, SEVERITY_BY_KEY } from "@shared/theme/tokens";
+import { useTriage } from "@entities/finding";
 import type { FindingDetail } from "@entities/finding/model";
+import type { TriageStatus } from "@shared/model/triage";
 
 interface FindingHeaderProps {
   detail: FindingDetail;
@@ -36,6 +38,11 @@ export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingH
   const sev = SEVERITY_BY_KEY[f.severity] ?? SEVERITY.low;
   const color = sev.solid;
   const [copied, setCopied] = useState(false);
+
+  // The detail's finding comes from the graph (no inline triage), so the
+  // dossier control fetches the standalone triage state for this row.
+  const { data: triage } = useTriage(f.id);
+  const triageStatus = (triage?.status as TriageStatus) ?? "new";
 
   const hops = detail.composite_props?.hops;
 
@@ -148,7 +155,7 @@ export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingH
 
           {/* Actions */}
           <div className="flex shrink-0 flex-col items-end gap-2">
-            <TriageControl findingId={f.id} />
+            <TriageControl findingId={f.id} status={triageStatus} />
             <button
               className={consoleBtn}
               onClick={() => navigate(`/explorer?finding=${f.id}`)}

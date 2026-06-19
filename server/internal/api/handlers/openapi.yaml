@@ -296,6 +296,36 @@ components:
           type: array
           items:
             type: string
+        triage:
+          allOf:
+            - $ref: "#/components/schemas/TriageState"
+          nullable: true
+          description: >-
+            Inline triage state for this finding (omitted when no decision
+            has been recorded). Lets the register render the triage control
+            without a per-row round-trip.
+
+    TriageState:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [new, triaging, confirmed, accepted-risk, false-positive]
+        note:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    TriageUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [new, triaging, confirmed, accepted-risk, false-positive]
+        note:
+          type: string
 
     FindingDetail:
       type: object
@@ -842,7 +872,11 @@ paths:
   /analysis/findings:
     get:
       summary: Security findings
-      description: List all composite edges as security findings.
+      description: >-
+        List findings from the latest persisted snapshot (one row per
+        fingerprint), each with inline triage state. Findings triaged as
+        `accepted-risk` or `false-positive` are hidden unless
+        `include_suppressed=true`.
       operationId: getFindings
       tags: [Analysis]
       parameters:
@@ -851,6 +885,12 @@ paths:
           schema:
             type: string
             enum: [critical, high, medium, low]
+        - name: include_suppressed
+          in: query
+          description: When true, include accepted-risk / false-positive findings.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: Findings list
@@ -860,6 +900,66 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Finding"
+
+  /findings/triage/{fingerprint}:
+    get:
+      summary: Get finding triage state
+      description: >-
+        Returns the cross-scan triage decision for a finding fingerprint.
+        Open read. A fingerprint with no recorded decision returns the
+        implicit `new` state.
+      operationId: getTriage
+      tags: [Analysis]
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 16-character hex finding fingerprint
+      responses:
+        "200":
+          description: Triage state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TriageState"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    put:
+      summary: Set finding triage state
+      description: >-
+        Records (or updates) the triage decision for a finding fingerprint.
+        Triage state has no foreign key to findings, so it survives scan
+        deletion and re-detection.
+      operationId: setTriage
+      tags: [Analysis]
+      security:
+        - LocalhostToken: []
+      parameters:
+        - name: fingerprint
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 16-character hex finding fingerprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriageUpdateRequest"
+      responses:
+        "200":
+          description: Updated triage state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TriageState"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /analysis/findings/{id}:
     get:
@@ -886,7 +986,7 @@ paths:
   /analysis/prebuilt:
     get:
       summary: List pre-built queries
-      description: Returns metadata for all 18 pre-built security queries.
+      description: Returns metadata for all 19 pre-built security queries.
       operationId: listPreBuilt
       tags: [Analysis]
       responses:

@@ -19,7 +19,7 @@ func (p *CanExfiltrate) Process(ctx context.Context, db graph.GraphDB, scanID st
 MATCH (a:AgentInstance)-[:CAN_REACH]->(r:MCPResource)
 WHERE r.sensitivity IN ['critical', 'high']
 MATCH (a)-[:TRUSTS_SERVER]->(s:MCPServer)-[:PROVIDES_TOOL]->(outbound:MCPTool)
-WHERE ANY(cap IN outbound.capability_surface WHERE cap IN ['email_send', 'network_outbound', 'file_write'])
+WHERE ANY(cap IN outbound.capability_surface WHERE cap IN ['email_send', 'network_outbound', 'file_write', 'auto_fetch_render', 'allowlisted_proxy'])
       AND NOT EXISTS((a)-[:CAN_EXFILTRATE_VIA]->(outbound))
 MERGE (a)-[e:CAN_EXFILTRATE_VIA]->(outbound)
 SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true, e.source_collector = 'mcp',

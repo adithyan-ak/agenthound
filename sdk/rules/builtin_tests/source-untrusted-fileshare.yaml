@@ -1,0 +1,13 @@
+tests:
+  - input: "read_share Reads a file from the corporate network share"
+    should_match: true
+    description: "matches read_share keyword"
+  - input: "s3_download fetches an object from the upload bucket"
+    should_match: true
+    description: "matches s3_download keyword"
+  - input: "read_file opens a local config file bundled with the server"
+    should_match: false
+    description: "plain local read_file is intentionally not treated as untrusted-fileshare"
+  - input: "rotate_logs compresses old log files"
+    should_match: false
+    description: "no untrusted-fileshare keywords present"

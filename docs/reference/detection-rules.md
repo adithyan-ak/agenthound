@@ -8,12 +8,12 @@ AgentHound surfaces findings through two complementary layers:
 
 | Layer | Where it runs | Count | Storage |
 |---|---|---|---|
-| **YAML rules engine** | Inside collectors at scan time. Drives capability classification, credential extraction, prompt-injection pattern matching, instruction-file poisoning, and resource-sensitivity classification. | **30 builtin rules** | `sdk/rules/builtin/*.yaml`. Inspect with `agenthound rules list`; test with `agenthound rules test`; query the running server via `GET /api/v1/rules`. |
-| **Pre-built graph queries** | Inside `agenthound-server` against the post-processed Neo4j graph. Each query expresses a high-level finding as a Cypher path or pattern. | **18 queries** | `server/internal/analysis/prebuilt/`. Surface as findings via `GET /api/v1/analysis/findings`, runnable via `GET /api/v1/analysis/prebuilt/{id}` or `agenthound-server query --prebuilt <id>`. |
+| **YAML rules engine** | Inside collectors at scan time. Drives capability classification, credential extraction, prompt-injection pattern matching, instruction-file poisoning, source-trust tagging, and resource-sensitivity classification. | **35 builtin rules** | `sdk/rules/builtin/*.yaml`. Inspect with `agenthound rules list`; test with `agenthound rules test`; query the running server via `GET /api/v1/rules`. |
+| **Pre-built graph queries** | Inside `agenthound-server` against the post-processed Neo4j graph. Each query expresses a high-level finding as a Cypher path or pattern. | **19 queries** | `server/internal/analysis/prebuilt/`. Surface as findings via `GET /api/v1/analysis/findings`, runnable via `GET /api/v1/analysis/prebuilt/{id}` or `agenthound-server query --prebuilt <id>`. |
 
-The two layers feed each other: the rules engine emits structured signals (`capability_surface`, `is_exposed`, `has_injection_patterns`, sensitivity classifications) on collected nodes; the post-processors and pre-built queries consume those signals to compute composite edges (`HAS_ACCESS_TO`, `CAN_REACH`, `POISONED_DESCRIPTION`, etc.) and enumerate attack paths.
+The two layers feed each other: the rules engine emits structured signals (`capability_surface`, `is_exposed`, `has_injection_patterns`, `source_trust`, sensitivity classifications) on collected nodes; the post-processors and pre-built queries consume those signals to compute composite edges (`HAS_ACCESS_TO`, `CAN_REACH`, `POISONED_DESCRIPTION`, `TAINTS`, `IFC_VIOLATION`, `CONFUSED_DEPUTY`, `POISONS_CONTEXT`, etc.) and enumerate attack paths.
 
-The 18 detections summarized below are the **pre-built-query** layer. The 30 underlying YAML rules are not enumerated here individually — read them directly in `sdk/rules/builtin/` for the canonical truth.
+The detections summarized below are the **pre-built-query** layer. The 35 underlying YAML rules are not enumerated here individually — read them directly in `sdk/rules/builtin/` for the canonical truth. Composite-edge detections (`TAINTS`, `IFC_VIOLATION`, `CONFUSED_DEPUTY`, `POISONS_CONTEXT`) surface through `GET /api/v1/analysis/findings` rather than a named pre-built query.
 
 ## Detection summary
 
@@ -21,6 +21,7 @@ The 18 detections summarized below are the **pre-built-query** layer. The 30 und
 |-----------|----------|-----------------|---------------|
 | Tool poisoning | high | `poisoned-tools` | MCP05, ASI03 |
 | Tool shadowing | high | `tool-shadowing` | MCP05, ASI03 |
+| Tool name collision | high | `tool-name-collision` | MCP05, ASI03 |
 | Tool description rug pull | high | `rug-pull` | MCP05, MCP09 |
 | Unauthenticated MCP servers | high | `no-auth-servers` | MCP03, ASI04 |
 | Unauthenticated A2A agents | high | `no-auth-a2a` | MCP03, ASI04 |
@@ -61,13 +62,21 @@ MCPTool:dangerous-tool has injection pattern: "ignore all previous instructions"
 
 **Risk:** An attacker controlling a low-trust server can shadow a legitimate tool. When an agent calls the shadowed tool, the malicious server handles the request instead.
 
+## Tool name collision (MCP05, ASI03)
+
+**What:** Tools on different servers share a normalized (trimmed, lower-cased) name.
+
+**How detected:** The `tool-name-collision` pre-built query matches `MCPTool` nodes across distinct servers whose names collide after normalization, with distinct `objectid`s.
+
+**Risk:** A malicious server can register a tool with the same name as a trusted one. Depending on resolution order, the agent may invoke the attacker's tool instead — a name-based variant of tool shadowing.
+
 ## Rug pull detection (MCP05, MCP09)
 
-**What:** A tool's description changes between scans, potentially indicating a supply chain attack.
+**What:** A tool's pinned surface changes between scans, potentially indicating a supply chain attack.
 
-**How detected:** Each tool gets a `description_hash` (SHA-256 of canonical description). On re-scan, the ingest pipeline compares hashes. The `rug-pull` pre-built query finds tools where `description_hash != previous_description_hash`.
+**How detected:** Each tool carries `description_hash` and `input_schema_hash`; each server carries `instructions_hash`. The node MERGE pivots `previous_*_hash` on every scan. The `rug-pull` pre-built query fires when any of the three current hashes differs from its previous value, and returns a `change_kind` discriminator (`description`, `input_schema`, `instructions`, or a comma-joined combination) identifying which surface drifted.
 
-**Risk:** An attacker who gains control of an MCP server package can change tool descriptions to include injection patterns after the initial trust decision was made.
+**Risk:** An attacker who gains control of an MCP server package can change tool descriptions, input schemas, or server instructions to include injection patterns after the initial trust decision was made. Schema and instruction pinning catch rug pulls that leave the description untouched.
 
 ## Unauthenticated servers (MCP03)
 
@@ -105,9 +114,41 @@ MCPTool:dangerous-tool has injection pattern: "ignore all previous instructions"
 
 **What:** An agent can reach sensitive data (databases, credentials, files) AND has an outbound channel (network_outbound, email_send).
 
-**How detected:** The CAN_EXFILTRATE_VIA post-processor combines CAN_REACH edges to sensitive resources with tools that have outbound capability. The pre-built query surfaces complete exfiltration paths.
+**How detected:** The CAN_EXFILTRATE_VIA post-processor combines CAN_REACH edges to sensitive resources with tools that have an outbound capability. The outbound capability set is `email_send`, `network_outbound`, `file_write`, plus two channel classes:
+
+- **`auto_fetch_render`** — tools that return content the host may auto-fetch/render (markdown images, HTML previews). *Caveat:* this detects tools that **return** renderable content, not the host's render policy — host-side rendering behavior is not observable by the collector, so treat it as a candidate channel.
+- **`allowlisted_proxy`** — tools that proxy requests through an allowlisted egress, which can slip exfiltration past naive egress controls.
 
 **Risk:** This is the complete attack chain: access sensitive data, then send it somewhere. Two capabilities that are safe independently become critical when combined.
+
+## Untrusted input sources & taint (MCP05, ASI03)
+
+**What:** Tools that ingest attacker-controllable content (open web, inbound email, external file shares) and the downstream flow of that taint into other tools and sensitive sinks.
+
+**How detected:** The `source-untrusted-web`, `source-untrusted-email`, and `source-untrusted-fileshare` rules tag matching tools with a `source_trust` property. The MCP Collector then emits an `INGESTS_UNTRUSTED` raw edge from each tagged tool to the resources on its server. Two post-processors consume that signal:
+
+- **`TAINTS`** — links an untrusted-input tool to a tool on **another** server when they share ≥2 input-schema keys, modeling data flow between tools with compatible inputs.
+- **`IFC_VIOLATION`** — links an untrusted source to a high-impact sink (`credential_access` / `file_write` / `email_send`) that shares a resource within 3 `HAS_ACCESS_TO` hops, an information-flow-control violation.
+
+Keyword sets are kept deliberately narrow — universal taint destroys signal.
+
+**Risk:** Untrusted content reaching a privileged tool is the core indirect-prompt-injection primitive: an attacker who controls a fetched web page or inbound email can drive a credential- or file-writing tool.
+
+## Confused deputy (ASI06, MCP04)
+
+**What:** A weakly-authenticated A2A agent can drive a strongly-authenticated one through delegation, borrowing its privileges.
+
+**How detected:** The `auth_strength` pre-pass materializes a numeric weakness score onto every node with an `auth_method`. The `confused_deputy` post-processor emits a `CONFUSED_DEPUTY` edge for `DELEGATES_TO` pairs where the caller's `auth_strength` ≥ 80 (none/apiKey-class) and the callee's ≤ 30 (oauth/mtls-class).
+
+**Risk:** The anonymous or low-trust caller effectively escalates to the callee's privilege level — a classic confused-deputy escalation across an agent trust boundary.
+
+## Context poisoning (MCP05, ASI03)
+
+**What:** An injection-bearing tool can poison the shared agent context that drives a high-capability tool, even without naming it.
+
+**How detected:** The shadows processor emits a `POISONS_CONTEXT` edge from any tool with `has_injection_patterns=true` to tools carrying a high-blast capability (`shell_access`, `code_execution`, `credential_access`, `email_send`). Fan-out is capped at 20 sinks per source tool to prevent a cartesian blow-up; `scripts/perf-check.sh` enforces a ≤200 poisoned-pair-per-agent ceiling.
+
+**Risk:** Unlike `SHADOWS` (which requires the poisoner to name its target), context poisoning models the broader case where injected text in one tool's description influences how the agent invokes a dangerous sibling tool.
 
 ## Cross-protocol attack paths (MCP01, ASI01)
 

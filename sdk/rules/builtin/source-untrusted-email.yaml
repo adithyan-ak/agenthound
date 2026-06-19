@@ -1,0 +1,24 @@
+id: source-untrusted-email
+name: Untrusted Email Source
+description: >
+  Flags tools that read inbound email/message content. Inbound mail is a
+  classic prompt-injection delivery channel and is treated as an untrusted
+  input source for taint / information-flow analysis (INGESTS_UNTRUSTED).
+  Keywords are kept narrow on purpose — universal taint kills signal.
+version: 1
+enabled: true
+scope:
+  collector: mcp
+  targets: [tool.combined]
+severity: medium
+owasp: [MCP05, ASI03]
+tags: [source-trust, untrusted-email]
+matcher:
+  type: keyword
+  keywords: [read_email, "read email", fetch_email, get_email, "read inbox", read_inbox, list_emails, fetch_inbox, imap_read]
+  case_insensitive: true
+  match_mode: any
+emit:
+  finding_type: source_trust_classification
+  property_key: source_trust
+  property_value: untrusted_email

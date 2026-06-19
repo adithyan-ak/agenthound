@@ -13,11 +13,10 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { useFindings, SEVERITY_RANK } from "@entities/finding";
+import { useFindings, useSetTriage, SEVERITY_RANK } from "@entities/finding";
 import type { Finding } from "@entities/finding/model";
 import { edgeLabel } from "@entities/edge";
 import {
-  useTriageStore,
   TRIAGE_ORDER,
   TRIAGE_META,
   type TriageStatus,
@@ -90,9 +89,20 @@ export function FindingsListPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
-  const { data: findings, isLoading } = useFindings();
-  const triageMap = useTriageStore((s) => s.status);
-  const setStatus = useTriageStore((s) => s.setStatus);
+  const showSuppressed = params.get("suppressed") === "1";
+  const { data: findings, isLoading } = useFindings(showSuppressed);
+  const setTriage = useSetTriage();
+
+  // Triage status now arrives inline on each finding (server-backed). Derive
+  // the id→status lookup the filter/sort/group paths use from that, so they
+  // stay in sync without a separate store.
+  const triageMap = useMemo(() => {
+    const m: Record<string, TriageStatus> = {};
+    for (const f of findings ?? []) {
+      if (f.triage?.status) m[f.id] = f.triage.status as TriageStatus;
+    }
+    return m;
+  }, [findings]);
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
@@ -321,7 +331,7 @@ export function FindingsListPage() {
   }
 
   function bulkSetStatus(status: TriageStatus) {
-    for (const id of selected) setStatus(id, status);
+    for (const id of selected) setTriage.mutate({ fingerprint: id, status });
   }
 
   function setSortKey(key: SortKey) {
@@ -513,6 +523,19 @@ export function FindingsListPage() {
               </option>
             ))}
           </select>
+          <span className="mx-1 h-5 w-px bg-border/70" />
+          <button
+            onClick={() => patch({ suppressed: showSuppressed ? null : "1" })}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
+              showSuppressed
+                ? "border-primary/60 bg-primary/15 text-primary"
+                : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
+            )}
+            title="Include accepted-risk / false-positive findings"
+          >
+            Show suppressed
+          </button>
         </div>
 
         {/* ---------- Selection / bulk action bar ---------- */}
@@ -879,7 +902,11 @@ function FindingRow({
         </span>
       </td>
       <td className="px-3 py-3 align-middle">
-        <TriageControl findingId={f.id} compact />
+        <TriageControl
+          findingId={f.id}
+          status={(f.triage?.status as TriageStatus) ?? "new"}
+          compact
+        />
       </td>
       <td className="max-w-sm px-3 py-3 align-middle">
         <p className="truncate text-[13px] font-medium text-foreground">{f.title}</p>

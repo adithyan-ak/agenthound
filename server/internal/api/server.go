@@ -37,13 +37,14 @@ type Server struct {
 }
 
 type ServerDeps struct {
-	GraphDB     graph.GraphDB
-	Reader      *graph.Reader
-	PGPool      *pgxpool.Pool
-	Pipeline    *ingest.Pipeline
-	ScanStore   *appdb.ScanStore
-	RulesEngine *rules.Engine
-	CORSOrigins []string
+	GraphDB      graph.GraphDB
+	Reader       *graph.Reader
+	PGPool       *pgxpool.Pool
+	Pipeline     *ingest.Pipeline
+	ScanStore    *appdb.ScanStore
+	FindingStore *appdb.FindingStore
+	RulesEngine  *rules.Engine
+	CORSOrigins  []string
 	// LocalToken gates all mutating endpoints with a Bearer token. The
 	// embedded UI fetches the token from /api/v1/auth/local-token on
 	// load. Required; callers should construct via apimw.NewLocalToken.
@@ -66,9 +67,10 @@ func NewServer(deps ServerDeps) *Server {
 	graphH := handlers.NewGraphHandler(deps.Reader)
 	ingestH := handlers.NewIngestHandler(deps.Pipeline)
 	queryH := handlers.NewQueryHandler(deps.Reader)
-	analysisH := handlers.NewAnalysisHandler(deps.GraphDB)
+	analysisH := handlers.NewAnalysisHandler(deps.GraphDB, deps.FindingStore)
 	scanH := handlers.NewScanHandler(deps.ScanStore, deps.GraphDB)
 	rulesH := handlers.NewRulesHandler(deps.RulesEngine)
+	triageH := handlers.NewTriageHandler(deps.FindingStore)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Open read endpoints. Single-user posture means localhost
@@ -98,6 +100,10 @@ func NewServer(deps ServerDeps) *Server {
 		r.Get("/analysis/prebuilt", analysisH.HandleListPreBuilt)
 		r.Get("/analysis/prebuilt/{id}", analysisH.HandlePreBuilt)
 
+		// Triage read is open (same posture as findings reads); the
+		// mutating PUT is gated below.
+		r.Get("/findings/triage/{fingerprint}", triageH.HandleGet)
+
 		r.Get("/scans", scanH.HandleList)
 		r.Get("/scans/{id}", scanH.HandleGet)
 
@@ -122,6 +128,7 @@ func NewServer(deps ServerDeps) *Server {
 			r.Post("/analysis/shortest-path", analysisH.HandleShortestPath)
 			r.Post("/analysis/all-paths", analysisH.HandleAllPaths)
 			r.Post("/analysis/weighted-path", analysisH.HandleWeightedPath)
+			r.Put("/findings/triage/{fingerprint}", triageH.HandleSet)
 		})
 	})
 

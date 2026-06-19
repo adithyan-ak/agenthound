@@ -149,12 +149,18 @@ ORDER BY skill_count DESC`
 
 const CypherRugPull = `
 MATCH (s:MCPServer)-[:PROVIDES_TOOL]->(t:MCPTool)
-WHERE t.previous_description_hash IS NOT NULL
-  AND t.previous_description_hash <> t.description_hash
+WITH s, t,
+  [x IN [
+    CASE WHEN t.previous_description_hash IS NOT NULL AND t.previous_description_hash <> t.description_hash THEN 'description' END,
+    CASE WHEN t.previous_input_schema_hash IS NOT NULL AND t.previous_input_schema_hash <> t.input_schema_hash THEN 'input_schema' END,
+    CASE WHEN s.previous_instructions_hash IS NOT NULL AND s.previous_instructions_hash <> s.instructions_hash THEN 'instructions' END
+  ] WHERE x IS NOT NULL] AS changes
+WHERE size(changes) > 0
 RETURN t.name AS tool_name,
        s.name AS server_name,
        t.description_hash AS current_hash,
        t.previous_description_hash AS previous_hash,
+       reduce(acc = '', c IN changes | CASE WHEN acc = '' THEN c ELSE acc + ',' + c END) AS change_kind,
        t.objectid AS tool_id,
        s.objectid AS server_id
 ORDER BY s.name, t.name`
@@ -246,3 +252,26 @@ RETURN s.name AS server_name,
        s.objectid AS server_id,
        t.objectid AS tool_id
 ORDER BY s.name, t.name`
+
+// CypherToolNameCollision finds tools on different servers that share a
+// normalized (trimmed, lower-cased) name. A collision lets a malicious
+// server shadow a trusted tool by registering the same name — the agent may
+// invoke the wrong one. Distinct objectids ensure we compare genuinely
+// different tools; s1.objectid < s2.objectid deduplicates the (a,b)/(b,a)
+// pairing and excludes same-server matches.
+const CypherToolNameCollision = `
+MATCH (s1:MCPServer)-[:PROVIDES_TOOL]->(t1:MCPTool)
+MATCH (s2:MCPServer)-[:PROVIDES_TOOL]->(t2:MCPTool)
+WHERE s1.objectid < s2.objectid
+  AND t1.name IS NOT NULL
+  AND t2.name IS NOT NULL
+  AND toLower(trim(t1.name)) = toLower(trim(t2.name))
+  AND t1.objectid <> t2.objectid
+RETURN t1.name AS tool_name,
+       s1.name AS server_a,
+       s2.name AS server_b,
+       t1.objectid AS tool_a_id,
+       t2.objectid AS tool_b_id,
+       s1.objectid AS server_a_id,
+       s2.objectid AS server_b_id
+ORDER BY tool_name`

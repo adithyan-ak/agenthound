@@ -79,10 +79,12 @@ func (c *MCPCollector) enumerateServer(ctx context.Context, spec ServerSpec, sca
 
 	caps := initResult.Capabilities
 
+	var untrustedTools map[string]string
 	if caps != nil && caps.Tools != nil {
 		tools := c.enumerateTools(ctx, session, serverID, scanID)
 		result.Nodes = append(result.Nodes, tools.nodes...)
 		result.Edges = append(result.Edges, tools.edges...)
+		untrustedTools = tools.sourceTrust
 	}
 
 	if caps != nil && caps.Resources != nil {
@@ -100,6 +102,13 @@ func (c *MCPCollector) enumerateServer(ctx context.Context, spec ServerSpec, sca
 		result.Nodes = append(result.Nodes, prompts.nodes...)
 		result.Edges = append(result.Edges, prompts.edges...)
 	}
+
+	// INGESTS_UNTRUSTED join: a tool tagged with an untrusted source_trust
+	// ingests attacker-controllable content, so it taints the resources on
+	// the same server. v1 fans out to every resource on the server; a
+	// future tightening can match by URI scheme.
+	result.Edges = append(result.Edges,
+		buildIngestsUntrustedEdges(result.Nodes, untrustedTools, scanID)...)
 
 	return result
 }
@@ -138,10 +147,12 @@ func (c *MCPCollector) retryWithSSE(ctx context.Context, spec ServerSpec, scanID
 
 	caps := initResult.Capabilities
 
+	var untrustedTools map[string]string
 	if caps != nil && caps.Tools != nil {
 		tools := c.enumerateTools(ctx, session, serverID, scanID)
 		result.Nodes = append(result.Nodes, tools.nodes...)
 		result.Edges = append(result.Edges, tools.edges...)
+		untrustedTools = tools.sourceTrust
 	}
 
 	if caps != nil && caps.Resources != nil {
@@ -160,12 +171,24 @@ func (c *MCPCollector) retryWithSSE(ctx context.Context, spec ServerSpec, scanID
 		result.Edges = append(result.Edges, prompts.edges...)
 	}
 
+	// INGESTS_UNTRUSTED join: a tool tagged with an untrusted source_trust
+	// ingests attacker-controllable content, so it taints the resources on
+	// the same server. v1 fans out to every resource on the server; a
+	// future tightening can match by URI scheme.
+	result.Edges = append(result.Edges,
+		buildIngestsUntrustedEdges(result.Nodes, untrustedTools, scanID)...)
+
 	return result
 }
 
 type enumResult struct {
 	nodes []ingest.Node
 	edges []ingest.Edge
+	// sourceTrust maps an untrusted tool's node ID to its rule-derived
+	// source_trust label (untrusted_web | untrusted_email |
+	// untrusted_fileshare). Populated only by enumerateTools; consumed by
+	// the INGESTS_UNTRUSTED join after resources are enumerated.
+	sourceTrust map[string]string
 }
 
 func (c *MCPCollector) enumerateTools(ctx context.Context, session *mcpsdk.ClientSession, serverID, scanID string) enumResult {
@@ -195,18 +218,30 @@ func (c *MCPCollector) enumerateTools(ctx context.Context, session *mcpsdk.Clien
 		signals := computeToolSignals(tool, allNames, c.engine)
 		toolID := ingest.ComputeNodeID("MCPTool", serverID, tool.Name)
 
+		inputSchemaJSON := marshalJSON(tool.InputSchema)
 		props := map[string]any{
 			"name":                   tool.Name,
 			"description":            tool.Description,
-			"input_schema":           marshalJSON(tool.InputSchema),
+			"input_schema":           inputSchemaJSON,
 			"output_schema":          marshalJSON(tool.OutputSchema),
 			"description_hash":       signals.DescriptionHash,
+			"input_schema_hash":      common.HashSHA256(inputSchemaJSON),
 			"capability_surface":     signals.CapabilitySurface,
 			"has_injection_patterns": signals.HasInjection,
 			"has_cross_references":   signals.HasCrossReferences,
 		}
 		if signals.Annotations != nil {
 			props["annotations"] = signals.Annotations
+		}
+		if keys := inputSchemaKeys(tool.InputSchema); len(keys) > 0 {
+			props["schema_keys"] = keys
+		}
+		if signals.SourceTrust != "" {
+			props["source_trust"] = signals.SourceTrust
+			if result.sourceTrust == nil {
+				result.sourceTrust = make(map[string]string)
+			}
+			result.sourceTrust[toolID] = signals.SourceTrust
 		}
 
 		result.nodes = append(result.nodes, common.NewNode(toolID, []string{"MCPTool"}, props))
@@ -431,6 +466,48 @@ func buildHostNodes(serverID, serverURL, scanID string) hostResult {
 		common.DefaultEdgeProps(scanID)))
 
 	return result
+}
+
+// buildIngestsUntrustedEdges emits INGESTS_UNTRUSTED (MCPTool ->
+// MCPResource) for every untrusted tool against every resource discovered
+// on the same server. The edge is a RAW edge (is_composite=false) keyed on
+// (source, target), so re-scans rewrite scan_id idempotently. v1 is a
+// server-scoped fan-out; resource URI-scheme matching is a future
+// tightening (see docs/architecture/post-processors.md).
+func buildIngestsUntrustedEdges(nodes []ingest.Node, untrustedTools map[string]string, scanID string) []ingest.Edge {
+	if len(untrustedTools) == 0 {
+		return nil
+	}
+	var resourceIDs []string
+	for _, n := range nodes {
+		for _, k := range n.Kinds {
+			if k == "MCPResource" {
+				resourceIDs = append(resourceIDs, n.ID)
+				break
+			}
+		}
+	}
+	if len(resourceIDs) == 0 {
+		return nil
+	}
+
+	// Deterministic ordering so repeated scans emit edges in a stable
+	// order (the graph is MERGE-keyed, but stable output aids testing).
+	toolIDs := make([]string, 0, len(untrustedTools))
+	for id := range untrustedTools {
+		toolIDs = append(toolIDs, id)
+	}
+	sort.Strings(toolIDs)
+
+	var edges []ingest.Edge
+	for _, toolID := range toolIDs {
+		for _, resID := range resourceIDs {
+			props := common.NewEdgeProps(scanID, 0.6, 0.3)
+			props["source_trust"] = untrustedTools[toolID]
+			edges = append(edges, common.NewEdge(toolID, resID, "INGESTS_UNTRUSTED", "MCPTool", "MCPResource", props))
+		}
+	}
+	return edges
 }
 
 func marshalJSON(v any) string {

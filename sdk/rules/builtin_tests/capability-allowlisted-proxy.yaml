@@ -1,0 +1,10 @@
+tests:
+  - input: "proxy_request Forwards an HTTP request through the egress proxy"
+    should_match: true
+    description: "matches proxy_request keyword"
+  - input: "egress_proxy fetch of an external resource"
+    should_match: true
+    description: "matches egress_proxy keyword"
+  - input: "format_date renders a timestamp as a string"
+    should_match: false
+    description: "no allowlisted-proxy keywords present"

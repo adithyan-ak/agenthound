@@ -3,6 +3,7 @@ package processors
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/adithyan-ak/agenthound/server/internal/graph"
@@ -33,19 +34,32 @@ func TestShadows_ProcessSuccess(t *testing.T) {
 	if stats.ProcessorName != "shadows" {
 		t.Errorf("ProcessorName = %q", stats.ProcessorName)
 	}
-	if stats.EdgesCreated != 2 {
-		t.Errorf("EdgesCreated = %d, want 2", stats.EdgesCreated)
+	// Two ExecuteWrite passes now run: SHADOWS, then POISONS_CONTEXT. The
+	// mock returns 2 for each, so EdgesCreated sums to 4.
+	if stats.EdgesCreated != 4 {
+		t.Errorf("EdgesCreated = %d, want 4 (SHADOWS + POISONS_CONTEXT)", stats.EdgesCreated)
 	}
 
 	calls := mock.CallsTo("ExecuteWrite")
-	if len(calls) != 1 {
-		t.Fatalf("ExecuteWrite called %d times, want 1", len(calls))
+	if len(calls) != 2 {
+		t.Fatalf("ExecuteWrite called %d times, want 2 (SHADOWS + POISONS_CONTEXT)", len(calls))
 	}
 	params, _ := calls[0].Args[1].(map[string]any)
 	if params["scan_id"] != "scan-1" {
 		t.Errorf("scan_id = %v, want scan-1", params["scan_id"])
 	}
+
+	shadowsCypher, _ := calls[0].Args[0].(string)
+	if !contains(shadowsCypher, "SHADOWS") {
+		t.Errorf("first pass should emit SHADOWS, got:\n%s", shadowsCypher)
+	}
+	poisonsCypher, _ := calls[1].Args[0].(string)
+	if !contains(poisonsCypher, "POISONS_CONTEXT") {
+		t.Errorf("second pass should emit POISONS_CONTEXT, got:\n%s", poisonsCypher)
+	}
 }
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }
 
 func TestShadows_ProcessError(t *testing.T) {
 	mock := &graph.MockGraphDB{ExecuteWriteError: errors.New("db error")}

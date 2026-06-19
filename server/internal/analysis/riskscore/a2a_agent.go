@@ -39,7 +39,7 @@ func a2aAuthStrength(ctx context.Context, db graph.GraphDB, objectID string) (fl
 		return 100, nil
 	}
 	am, _ := rows[0]["am"].(string)
-	if s, ok := authStrengthScores[am]; ok {
+	if s, ok := AuthStrengthScores[am]; ok {
 		return s, nil
 	}
 	return 100, nil
