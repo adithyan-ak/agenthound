@@ -231,7 +231,11 @@ func TestImplant_NewFilePreservesOperatorEditsOnRevert(t *testing.T) {
 	if err := json.Unmarshal(current, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	cfg["mcpServers"].(map[string]any)["operator-added"] = map[string]any{"command": "legit"}
+	servers, ok := cfg["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers is not an object: %T", cfg["mcpServers"])
+	}
+	servers["operator-added"] = map[string]any{"command": "legit"}
 	updated, _ := json.MarshalIndent(cfg, "", "  ")
 	if err := os.WriteFile(path, updated, 0o600); err != nil {
 		t.Fatal(err)
