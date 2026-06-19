@@ -36,18 +36,19 @@ const (
 )
 
 // PortToKind maps each AI-service default port to its candidate service-kind
-// tag. Port 8000 is shared between vLLM and LangServe; v0.2 has no fingerprinter
-// for either, so the entry is omitted (Target.Meta candidate_kinds will list
-// "vllm" via the fallback below — fingerprinters will try both rules at probe
-// time anyway). Operators can override the port set entirely via --ports.
-var PortToKind = map[int]string{
-	11434: "ollama",
-	8000:  "vllm",
-	6333:  "qdrant",
-	5000:  "mlflow",
-	4000:  "litellm",
-	8888:  "jupyter",
-	3000:  "openwebui",
+// tags. Port 8000 is shared between vLLM and LangServe, so it maps to BOTH
+// kinds; dispatch tries each registered fingerprinter in turn. The two rules
+// are mutually exclusive (vLLM matches the OpenAI list shape at /v1/models;
+// LangServe matches "LangServe" in /openapi.json), so at most one matches.
+// Operators can override the port set entirely via --ports.
+var PortToKind = map[int][]string{
+	11434: {"ollama"},
+	8000:  {"vllm", "langserve"},
+	6333:  {"qdrant"},
+	5000:  {"mlflow"},
+	4000:  {"litellm"},
+	8888:  {"jupyter"},
+	3000:  {"openwebui"},
 }
 
 // dialer is the interface tests substitute to exercise the worker pool
@@ -214,8 +215,8 @@ func hostResultToTarget(host string, openPorts, configuredPorts []int) action.Ta
 
 	var kinds []string
 	for _, p := range sortedOpen {
-		if k, ok := PortToKind[p]; ok {
-			kinds = append(kinds, k)
+		if ks, ok := PortToKind[p]; ok {
+			kinds = append(kinds, ks...)
 		}
 	}
 
