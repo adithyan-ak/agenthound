@@ -1,11 +1,10 @@
 <div align="center">
 
-<img src="docs/readme-assets/agenthound-logo.png" alt="AgentHound logo" width="160">
+<img src="docs/readme-assets/agenthound-banner.png" alt="AgentHound banner" width="100%">
 
-# AgentHound
 
-**Find the attack paths hiding in your AI agent infrastructure.**
-
+**Attack-path discovery for MCP, A2A, and AI-agent infrastructure.**
+---
 BloodHound for MCP servers, A2A agents, AI services, local configs, credentials, tools, prompts, and agent sprawl.
 
 [Docs](https://docs.agenthound.io) ·
