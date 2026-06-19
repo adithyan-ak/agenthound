@@ -1,15 +1,16 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ScanManager } from "@/components/scans/ScanManager";
-import type { Scan } from "@/api/types";
+import { ScanManager } from "@features/scans";
+import type { Scan } from "@entities/scan";
 
-vi.mock("@/api/scans", () => ({
+vi.mock("@entities/scan/api", () => ({
   fetchScans: vi.fn(),
-  fetchScan: vi.fn(),
+  deleteScan: vi.fn(),
+  uploadScan: vi.fn(),
 }));
 
-import { fetchScans } from "@/api/scans";
+import { fetchScans } from "@entities/scan/api";
 
 const mockedFetchScans = vi.mocked(fetchScans);
 
