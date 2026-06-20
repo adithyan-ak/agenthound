@@ -57,6 +57,22 @@ func TestShadows_ProcessSuccess(t *testing.T) {
 	if !contains(poisonsCypher, "POISONS_CONTEXT") {
 		t.Errorf("second pass should emit POISONS_CONTEXT, got:\n%s", poisonsCypher)
 	}
+	// The POISONS_CONTEXT pass must stay AGENT-SCOPED (src and snk co-resident
+	// under one AgentInstance's trusted servers). A regression to two bare
+	// MATCH (:MCPTool) clauses would re-globalize the cross product into a
+	// cross-tenant false-positive cascade — assert the scoping path and the
+	// per-(agent, source) grouping are present. See shadows.go + FEATURE_RESEARCH.md §5.
+	for _, want := range []string{
+		"AgentInstance",
+		"TRUSTS_SERVER",
+		"PROVIDES_TOOL",
+		"WITH a, src",
+		"size(sinks) <= 20",
+	} {
+		if !contains(poisonsCypher, want) {
+			t.Errorf("POISONS_CONTEXT pass missing %q (agent-scope/cap regression), got:\n%s", want, poisonsCypher)
+		}
+	}
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
