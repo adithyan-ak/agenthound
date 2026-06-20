@@ -54,6 +54,7 @@ func TestLooter_HTTPMethods(t *testing.T) {
 		var ok bool
 		for _, a := range allowlist {
 			if a.method == method && strings.Contains(funcLine, a.funcCtx) {
+				t.Logf("allowlisted mutating method %q in %s: %s", method, a.funcCtx, a.why)
 				ok = true
 				break
 			}
