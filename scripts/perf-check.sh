@@ -4,7 +4,8 @@
 # B8 (POISONS_CONTEXT) widens the narrow SHADOWS guard: an injection-bearing
 # tool can poison the shared agent context that drives a high-capability tool.
 # To stop that breadth from exploding into a cartesian product, the shadows
-# processor caps fan-out at 20 sinks per source tool. This script verifies the
+# processor truncates fan-out to 20 sinks per (agent, source) pair (keeping the
+# first 20 by objectid, not dropping over-cap sources). This script verifies the
 # resulting per-agent ceiling holds against a live graph after a scan.
 #
 # The math: per-source cap = 20. An agent with N source tools (injection-

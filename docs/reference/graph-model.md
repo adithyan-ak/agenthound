@@ -119,7 +119,7 @@ This enables queries like `MATCH (n:AIService)` to find all AI infrastructure re
 | `IFC_VIOLATION` | MCPTool | MCPTool | INGESTS_UNTRUSTED + HAS_ACCESS_TO (≤3 hops) | Untrusted source shares a resource with a high-impact sink (credential_access/file_write/email_send) |
 | `CAN_IMPERSONATE` | A2AAgent | A2AAgent | Raw edges | TF-IDF cosine similarity > 0.8 on skill descriptions |
 | `CONFUSED_DEPUTY` | A2AAgent | A2AAgent | auth_strength + can_reach | Weakly-authed agent (`auth_strength` ≥ 80) delegates to a strongly-authed one (≤ 30) |
-| `POISONS_CONTEXT` | MCPTool | MCPTool | Raw edges | Injection-bearing tool can poison context driving a high-capability tool (fan-out capped at 20 sinks/source) |
+| `POISONS_CONTEXT` | MCPTool | MCPTool | Raw edges | Injection-bearing tool can poison context driving a high-capability tool (fan-out truncated to 20 sinks per (agent, source) pair) |
 
 ### Edge Struct (Go SDK)
 

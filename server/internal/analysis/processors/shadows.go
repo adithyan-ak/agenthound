@@ -70,19 +70,30 @@ RETURN count(*) AS written`
 	// pairs-per-agent operator heuristic (10 sources × 20); the per-source
 	// cap itself is regression-gated by
 	// poisons_context_perf_integration_test.go.
+	//
+	// The cap TRUNCATES, it does not suppress: a (agent, source) pair with
+	// >20 eligible sinks keeps the first 20 by objectid (deterministic via
+	// ORDER BY, so the chosen set is stable across runs and stale-edge
+	// cleanup). Dropping the whole over-cap group instead would blind the
+	// detector exactly when a poisoner is co-resident with the MOST
+	// high-capability sinks (the worst case) and would let an attacker
+	// suppress the finding by registering a 21st sink. count(DISTINCT
+	// [src, snk]) reports edges actually MERGEd (one source can be reached
+	// via multiple agents, so the raw row count would over-report).
 	poisonsCypher := `
 MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(:MCPServer)-[:PROVIDES_TOOL]->(src:MCPTool)
 WHERE src.has_injection_patterns = true
 MATCH (a)-[:TRUSTS_SERVER]->(:MCPServer)-[:PROVIDES_TOOL]->(snk:MCPTool)
 WHERE src <> snk
   AND any(cap IN snk.capability_surface WHERE cap IN ['shell_access', 'code_execution', 'credential_access', 'email_send'])
-WITH a, src, collect(DISTINCT snk) AS sinks
-WHERE size(sinks) <= 20
+WITH a, src, snk
+ORDER BY snk.objectid
+WITH a, src, collect(DISTINCT snk)[..20] AS sinks
 UNWIND sinks AS snk
 MERGE (src)-[e:POISONS_CONTEXT]->(snk)
 SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
     e.source_collector = 'mcp', e.confidence = 0.6, e.risk_weight = 0.4
-RETURN count(*) AS written`
+RETURN count(DISTINCT [src, snk]) AS written`
 
 	poisonsN, err := db.ExecuteWrite(ctx, poisonsCypher, map[string]any{"scan_id": scanID})
 	if err != nil {

@@ -20,9 +20,13 @@ import (
 //	UNWIND sinks AS snk ...
 //
 // Two invariants are load-bearing and verified here:
-//   - The cap is an EXCLUSION before UNWIND, not a truncation: a (agent,
-//     source) pair with <= 20 eligible co-resident sinks emits one edge per
-//     sink; a pair with 21+ eligible sinks emits ZERO. We assert both sides.
+//   - The cap TRUNCATES to 20, it does not suppress: a (agent, source) pair
+//     with <= 20 eligible co-resident sinks emits one edge per sink; a pair
+//     with 21+ eligible sinks emits exactly 20 (the first 20 by objectid),
+//     never zero. Silent suppression would blind the detector in its worst
+//     case (a poisoner co-resident with the most high-cap sinks) and hand an
+//     attacker an evasion primitive (add a 21st sink → finding vanishes). We
+//     assert both the at-cap and over-cap sides.
 //   - The query is AGENT-SCOPED: src and snk must be co-resident under one
 //     AgentInstance's trusted servers. The seed builds that full
 //     AgentInstance-[:TRUSTS_SERVER]->MCPServer-[:PROVIDES_TOOL]->MCPTool path;
@@ -125,9 +129,11 @@ func TestIntegrationPoisonsContextPerSourceCap(t *testing.T) {
 		t.Errorf("at-cap source (20 sinks) emitted %d POISONS_CONTEXT edges, want 20", got)
 	}
 
-	// OVER-CAP canary: 21 eligible sinks -> the whole source is excluded ->
-	// ZERO edges. If someone loosens `<= 20`, this flips to 21 and fails loudly.
-	if got := seedSource(t, "test-poisons-overcap", "pc-overcap-src", 21); got != 0 {
-		t.Errorf("over-cap source (21 sinks) emitted %d POISONS_CONTEXT edges, want 0 (per-source cap regression)", got)
+	// OVER-CAP canary: 21 eligible sinks -> TRUNCATED to 20, never zero. If
+	// someone reverts to the suppressing `WHERE size(sinks) <= 20` guard,
+	// this flips to 0 and fails loudly; if the cap is removed entirely it
+	// flips to 21 and also fails. Either way the truncation invariant holds.
+	if got := seedSource(t, "test-poisons-overcap", "pc-overcap-src", 21); got != 20 {
+		t.Errorf("over-cap source (21 sinks) emitted %d POISONS_CONTEXT edges, want 20 (truncate-not-suppress)", got)
 	}
 }
