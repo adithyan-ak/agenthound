@@ -117,7 +117,9 @@ export function FindingHeader({ detail, prevId, nextId, onCopyReport }: FindingH
               </span>
             </span>
 
-            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{f.title}</h1>
+            <h1 className="mt-2 text-[19px] font-semibold leading-snug tracking-tight text-foreground">
+              {f.title}
+            </h1>
 
             {/* Source -> Target */}
             <div className="mt-2.5 flex flex-wrap items-center gap-2 font-mono text-sm">
