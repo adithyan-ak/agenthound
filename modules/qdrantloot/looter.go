@@ -30,6 +30,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
@@ -41,6 +42,13 @@ const (
 	DefaultPort         = 6333
 	DefaultProbeTimeout = 30 * time.Second
 	DefaultMaxItems     = 1000
+
+	// DefaultCollectionConcurrency bounds the per-collection detail
+	// fetches. Qdrant's /collections returns only names, so points_count
+	// requires one GET per collection (an N+1 stall when done serially);
+	// these run in a small worker pool instead. 16 is gentle on a single
+	// host (networkscan uses 50 across many hosts).
+	DefaultCollectionConcurrency = 16
 )
 
 // Looter is the registered module.
@@ -101,21 +109,57 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 
 	sort.Strings(names)
 
+	// Fetch per-collection point counts in a bounded worker pool. Each
+	// worker writes only to its own pre-indexed slot (race-free, no
+	// mutex); the shared result and counters are folded in a single
+	// serial pass after Wait(), iterating the sorted names so output is
+	// deterministic regardless of goroutine completion order. ctx is
+	// threaded into every fetch, so a cancelled context fails the
+	// in-flight and remaining GETs fast (recorded as partial failures),
+	// matching the prior serial behavior.
+	conc := DefaultCollectionConcurrency
+	if conc > len(names) {
+		conc = len(names)
+	}
+
+	points := make([]int64, len(names))
+	detErrs := make([]string, len(names))
+	idxs := make(chan int)
+
+	var wg sync.WaitGroup
+	for w := 0; w < conc; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range idxs {
+				p, detErr := fetchCollectionPoints(ctx, client, baseURL, names[i])
+				if detErr != nil {
+					detErrs[i] = fmt.Sprintf("collections/%s: %v", names[i], detErr)
+					continue
+				}
+				points[i] = p
+			}
+		}()
+	}
+	for i := range names {
+		idxs <- i
+	}
+	close(idxs)
+	wg.Wait()
+
 	var totalPoints int64
-	for _, name := range names {
-		points, detErr := fetchCollectionPoints(ctx, client, baseURL, name)
+	for i := range names {
 		res.Summary.EndpointsProbed++
-		if detErr != nil {
+		if detErrs[i] != "" {
 			slog.Debug("qdrant loot: collection detail failed",
-				"collection", name,
+				"collection", names[i],
 				"engagement_id", opts.EngagementID,
-				"error", detErr)
-			res.PartialErrors = append(res.PartialErrors,
-				fmt.Sprintf("collections/%s: %v", name, detErr))
+				"error", detErrs[i])
+			res.PartialErrors = append(res.PartialErrors, detErrs[i])
 			res.Summary.PartialFailures++
 			continue
 		}
-		totalPoints += points
+		totalPoints += points[i]
 	}
 
 	props := res.IngestData.Graph.Nodes[0].Properties

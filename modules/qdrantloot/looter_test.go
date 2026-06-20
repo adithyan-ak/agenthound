@@ -2,6 +2,7 @@ package qdrantloot
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -131,5 +132,82 @@ func TestLoot_Qdrant_CollectionsListFails(t *testing.T) {
 	}
 	if res.Summary.PartialFailures != 1 {
 		t.Errorf("PartialFailures = %d, want 1", res.Summary.PartialFailures)
+	}
+}
+
+// TestLoot_Qdrant_ManyCollectionsConcurrent exercises the bounded worker
+// pool with more collections than the concurrency bound, where half the
+// per-collection detail probes fail. It asserts the aggregation is
+// correct and order-independent: total_points sums only the good
+// collections, PartialFailures counts the bad ones, and the collections
+// list stays sorted regardless of goroutine completion order. Run under
+// -race, it also guards the disjoint-slot writes against data races.
+func TestLoot_Qdrant_ManyCollectionsConcurrent(t *testing.T) {
+	const n = 50
+	names := make([]string, 0, n)
+	points := make(map[string]int64, n)
+	bad := make(map[string]bool, n)
+	var wantTotal int64
+	wantFailures := 0
+	for i := 0; i < n; i++ {
+		nm := fmt.Sprintf("col-%02d", i)
+		names = append(names, nm)
+		if i%2 == 1 {
+			bad[nm] = true
+			wantFailures++
+		} else {
+			p := int64((i + 1) * 10)
+			points[nm] = p
+			wantTotal += p
+		}
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/collections" {
+			var sb strings.Builder
+			sb.WriteString(`{"result":{"collections":[`)
+			for i, nm := range names {
+				if i > 0 {
+					sb.WriteByte(',')
+				}
+				sb.WriteString(`{"name":"`)
+				sb.WriteString(nm)
+				sb.WriteString(`"}`)
+			}
+			sb.WriteString(`]},"status":"ok"}`)
+			_, _ = w.Write([]byte(sb.String()))
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/collections/")
+		if bad[name] {
+			_, _ = w.Write([]byte(`not-json`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"result":{"points_count":%d},"status":"ok"}`, points[name])
+	}))
+	defer srv.Close()
+
+	l := &Looter{}
+	res, err := l.Loot(context.Background(), action.Target{
+		Kind:    "host",
+		Address: strings.TrimPrefix(srv.URL, "http://"),
+	}, action.LootOptions{})
+	if err != nil {
+		t.Fatalf("Loot: %v", err)
+	}
+	node := res.IngestData.Graph.Nodes[0]
+	if cc, _ := node.Properties["collection_count"].(int); cc != n {
+		t.Errorf("collection_count = %v, want %d", node.Properties["collection_count"], n)
+	}
+	if tp, _ := node.Properties["total_points"].(int64); tp != wantTotal {
+		t.Errorf("total_points = %v, want %d", node.Properties["total_points"], wantTotal)
+	}
+	if res.Summary.PartialFailures != wantFailures {
+		t.Errorf("PartialFailures = %d, want %d", res.Summary.PartialFailures, wantFailures)
+	}
+	got, _ := node.Properties["collections"].([]string)
+	if len(got) != n || got[0] != "col-00" || got[n-1] != "col-49" {
+		t.Errorf("collections not sorted/complete: got %v", got)
 	}
 }
