@@ -66,6 +66,15 @@ func TestAuthStrength_ProcessSuccess(t *testing.T) {
 			t.Errorf("Cypher missing CASE branch %q (AuthStrengthScores drift); query:\n%s", want, cypher)
 		}
 	}
+
+	// Pin the fallback: an unknown or unrecognized auth_method must score
+	// WEAKEST (100). confused_deputy keys the weak caller on auth_strength
+	// >= 80, so flipping this to "ELSE 0" would silently invert the
+	// classification — a node with absent/novel auth would read as strongly
+	// authenticated and never be flagged as the confused deputy.
+	if !contains(cypher, "ELSE 100 END") {
+		t.Errorf("Cypher must render the weakest-class fallback 'ELSE 100 END'; query:\n%s", cypher)
+	}
 }
 
 func TestAuthStrength_ProcessError(t *testing.T) {
