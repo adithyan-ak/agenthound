@@ -28,7 +28,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -74,12 +73,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		maxItems = DefaultMaxItems
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{
 		IngestData: &ingest.IngestData{},
@@ -112,7 +106,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		Properties: masterProps,
 	})
 	res.IngestData.Graph.Edges = append(res.IngestData.Graph.Edges,
-		exposesCredentialEdge(gatewayObjectID, masterID, opts.EngagementID, "master_key", baseURL))
+		ingest.ExposesCredentialEdge(gatewayObjectID, masterID, opts.EngagementID, "master_key", baseURL))
 
 	res.Summary.EndpointsProbed++
 	res.Summary.CredentialsFound++
@@ -124,7 +118,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 	if modelInfoErr != nil {
 		slog.Warn("litellm loot: /model/info failed",
 			"endpoint", modelInfoURL,
-			"key_prefix", redact(masterKey),
+			"key_prefix", common.Redact(masterKey),
 			"engagement_id", opts.EngagementID,
 			"error", modelInfoErr)
 		res.PartialErrors = append(res.PartialErrors, fmt.Sprintf("model/info: %v", modelInfoErr))
@@ -150,7 +144,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 			ID: credID, Kinds: []string{"Credential"}, Properties: props,
 		})
 		res.IngestData.Graph.Edges = append(res.IngestData.Graph.Edges,
-			exposesCredentialEdge(gatewayObjectID, credID, opts.EngagementID, "model_info", uc.Endpoint))
+			ingest.ExposesCredentialEdge(gatewayObjectID, credID, opts.EngagementID, "model_info", uc.Endpoint))
 		res.Summary.CredentialsFound++
 	}
 
@@ -162,7 +156,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 	if keyListErr != nil {
 		slog.Warn("litellm loot: /key/list failed",
 			"endpoint", keyListURL,
-			"key_prefix", redact(masterKey),
+			"key_prefix", common.Redact(masterKey),
 			"engagement_id", opts.EngagementID,
 			"error", keyListErr)
 		res.PartialErrors = append(res.PartialErrors, fmt.Sprintf("key/list: %v", keyListErr))
@@ -189,13 +183,13 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 			ID: credID, Kinds: []string{"Credential"}, Properties: props,
 		})
 		res.IngestData.Graph.Edges = append(res.IngestData.Graph.Edges,
-			exposesCredentialEdge(gatewayObjectID, credID, opts.EngagementID, "key_list", baseURL))
+			ingest.ExposesCredentialEdge(gatewayObjectID, credID, opts.EngagementID, "key_list", baseURL))
 		res.Summary.CredentialsFound++
 	}
 
 	slog.Info("litellm loot complete",
 		"endpoint", baseURL,
-		"key_prefix", redact(masterKey),
+		"key_prefix", common.Redact(masterKey),
 		"engagement_id", opts.EngagementID,
 		"credentials_found", res.Summary.CredentialsFound,
 		"partial_failures", res.Summary.PartialFailures)
@@ -230,7 +224,7 @@ type virtualKey struct {
 // varies. Unknown fields are skipped; missing fields produce no
 // upstreamCred for that entry rather than an error.
 func fetchModelInfo(ctx context.Context, client *http.Client, url, masterKey string, maxItems int) ([]upstreamCred, error) {
-	body, err := getJSON(ctx, client, url, masterKey)
+	body, err := common.GetJSON(ctx, client, url, masterKey, 16<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +273,7 @@ func fetchModelInfo(ctx context.Context, client *http.Client, url, masterKey str
 
 // fetchKeyList issues GET /key/list with the master key.
 func fetchKeyList(ctx context.Context, client *http.Client, url, masterKey string, maxItems int) ([]virtualKey, error) {
-	body, err := getJSON(ctx, client, url, masterKey)
+	body, err := common.GetJSON(ctx, client, url, masterKey, 16<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -333,56 +327,6 @@ func fetchKeyList(ctx context.Context, client *http.Client, url, masterKey strin
 	return out, nil
 }
 
-// getJSON does the GET-and-read dance with master-key auth. Reads up
-// to 16 MiB, then errors. Returns the raw body for the caller to
-// json.Unmarshal — the looter parses leniently and we don't want
-// double-decoding overhead.
-func getJSON(ctx context.Context, client *http.Client, url, masterKey string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+masterKey)
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
-}
-
-// exposesCredentialEdge builds an EXPOSES_CREDENTIAL edge from the
-// LiteLLM gateway to a Credential. EngagementID and the source
-// endpoint are recorded in evidence so the post-processor can include
-// them in the credential-chain finding output.
-func exposesCredentialEdge(gatewayID, credID, engagementID, source, endpoint string) ingest.Edge {
-	props := map[string]any{
-		"confidence":  1.0,
-		"risk_weight": 0.1,
-		"evidence": map[string]any{
-			"endpoint":      endpoint,
-			"source":        source,
-			"engagement_id": engagementID,
-		},
-	}
-	return ingest.Edge{
-		Source:     gatewayID,
-		Target:     credID,
-		Kind:       "EXPOSES_CREDENTIAL",
-		SourceKind: "AIService",
-		TargetKind: "Credential",
-		Properties: props,
-	}
-}
-
 // sanitizeName turns a model_name into a property-safe slug.
 func sanitizeName(s string) string {
 	return strings.ToLower(strings.NewReplacer(" ", "-", "/", "-").Replace(s))
@@ -406,17 +350,6 @@ func extractProvider(e struct {
 		}
 	}
 	return "unknown"
-}
-
-// redact returns the first 8 characters of a secret followed by "..."
-// — used in slog output so master keys never appear in full anywhere
-// the operator can grep them out of a logfile. The 8-char prefix is
-// enough to disambiguate two keys without leaking the secret.
-func redact(secret string) string {
-	if len(secret) <= 8 {
-		return "***"
-	}
-	return secret[:8] + "..."
 }
 
 var _ action.Looter = (*Looter)(nil)

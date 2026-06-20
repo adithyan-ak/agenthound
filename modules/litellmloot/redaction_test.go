@@ -58,22 +58,3 @@ func TestLoot_MasterKeyNeverInLogs(t *testing.T) {
 		t.Errorf("expected redacted prefix %q in logs; got:\n%s", wantPrefix, logs)
 	}
 }
-
-func TestRedact(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"sk-1234567890abcdef", "sk-12345..."},
-		{"sk-ABC", "***"},   // 6 chars ≤ 8 → fully redacted
-		{"", "***"},         // empty → fully redacted
-		{"12345678", "***"}, // exactly 8 → fully redacted
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := redact(tt.input); got != tt.want {
-				t.Errorf("redact(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}

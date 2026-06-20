@@ -39,7 +39,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -102,12 +101,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		apiKey = strings.TrimSpace(opts.Credentials["api_key"])
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{IngestData: &ingest.IngestData{}}
 
@@ -162,7 +156,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		if credErr != nil {
 			slog.Warn("openwebui loot: /openai/config failed",
 				"endpoint", baseURL,
-				"key_prefix", redact(apiKey),
+				"key_prefix", common.Redact(apiKey),
 				"engagement_id", opts.EngagementID,
 				"error", credErr)
 			res.PartialErrors = append(res.PartialErrors, fmt.Sprintf("openai/config: %v", credErr))
@@ -192,7 +186,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 				Properties: cprops,
 			})
 			res.IngestData.Graph.Edges = append(res.IngestData.Graph.Edges,
-				exposesCredentialEdge(openwebuiID, credID, opts.EngagementID, "openai_config", uc.Endpoint))
+				ingest.ExposesCredentialEdge(openwebuiID, credID, opts.EngagementID, "openai_config", uc.Endpoint))
 			res.Summary.CredentialsFound++
 		}
 	}
@@ -223,7 +217,7 @@ type configPosture struct {
 // The ollama backend URL matches the fingerprinter's $.ollama.base_url
 // capture when present.
 func fetchConfig(ctx context.Context, client *http.Client, baseURL string) (configPosture, error) {
-	body, err := getJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/api/config", "")
+	body, err := common.GetJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/api/config", "", 4<<20)
 	if err != nil {
 		return configPosture{}, err
 	}
@@ -271,7 +265,7 @@ type upstreamCred struct {
 // Parsing is defensive: a missing array yields zero credentials, not an
 // error.
 func fetchOpenAIConfig(ctx context.Context, client *http.Client, baseURL, apiKey string, maxItems int) ([]upstreamCred, error) {
-	body, err := getJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/openai/config", apiKey)
+	body, err := common.GetJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/openai/config", apiKey, 4<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -302,65 +296,6 @@ func fetchOpenAIConfig(ctx context.Context, client *http.Client, baseURL, apiKey
 		out = append(out, uc)
 	}
 	return out, nil
-}
-
-// exposesCredentialEdge builds an EXPOSES_CREDENTIAL edge from the
-// OpenWebUIInstance to a Credential. SourceKind is AIService to match the
-// kinds registry's EXPOSES_CREDENTIAL constraint (source must be
-// AIService — see sdk/ingest/kinds.go).
-func exposesCredentialEdge(instanceID, credID, engagementID, source, endpoint string) ingest.Edge {
-	return ingest.Edge{
-		Source:     instanceID,
-		Target:     credID,
-		Kind:       "EXPOSES_CREDENTIAL",
-		SourceKind: "AIService",
-		TargetKind: "Credential",
-		Properties: map[string]any{
-			"confidence":  1.0,
-			"risk_weight": 0.1,
-			"evidence": map[string]any{
-				"endpoint":      endpoint,
-				"source":        source,
-				"engagement_id": engagementID,
-			},
-		},
-	}
-}
-
-// getJSON does the GET-and-read dance. When apiKey is non-empty a Bearer
-// header is attached (authenticated mode). 4 MiB cap matches the config
-// scale of these endpoints.
-func getJSON(ctx context.Context, client *http.Client, url, apiKey string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
-}
-
-// redact returns the first 8 characters of a secret followed by "..." so
-// the operator's API key never appears in full in slog output.
-func redact(secret string) string {
-	if len(secret) <= 8 {
-		return "***"
-	}
-	return secret[:8] + "..."
 }
 
 var _ action.Looter = (*Looter)(nil)

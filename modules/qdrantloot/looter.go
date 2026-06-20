@@ -25,7 +25,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -34,6 +33,7 @@ import (
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
+	"github.com/adithyan-ak/agenthound/sdk/common"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
@@ -65,12 +65,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		maxItems = DefaultMaxItems
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{IngestData: &ingest.IngestData{}}
 
@@ -144,7 +139,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 // is defensive — a missing or empty result yields an empty slice, not an
 // error (an anonymous Qdrant with zero collections is still a finding).
 func fetchCollections(ctx context.Context, client *http.Client, baseURL string, maxItems int) ([]string, error) {
-	body, err := getJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/collections")
+	body, err := common.GetJSON(ctx, client, strings.TrimRight(baseURL, "/")+"/collections", "", 4<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +174,7 @@ func fetchCollections(ctx context.Context, client *http.Client, baseURL string, 
 // count without inflating total_points with fabricated data.
 func fetchCollectionPoints(ctx context.Context, client *http.Client, baseURL, name string) (int64, error) {
 	u := strings.TrimRight(baseURL, "/") + "/collections/" + url.PathEscape(name)
-	body, err := getJSON(ctx, client, u)
+	body, err := common.GetJSON(ctx, client, u, "", 4<<20)
 	if err != nil {
 		return 0, err
 	}
@@ -192,29 +187,6 @@ func fetchCollectionPoints(ctx context.Context, client *http.Client, baseURL, na
 		return 0, fmt.Errorf("decode /collections/%s: %w", name, err)
 	}
 	return parsed.Result.PointsCount, nil
-}
-
-// getJSON does the GET-and-read dance. 4 MiB cap matches the metadata
-// scale of /collections responses — collection lists are small.
-func getJSON(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
 }
 
 var _ action.Looter = (*Looter)(nil)
