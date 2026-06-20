@@ -7,7 +7,10 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", ...defaultTheme.fontFamily.sans],
+        // UNIFIED TERMINAL: default/body text resolves to the same JetBrains
+        // Mono stack as the console labels — one coherent instrument surface,
+        // with no separate Inter body face.
+        sans: ["JetBrains Mono", "Fira Code", ...defaultTheme.fontFamily.mono],
         mono: ["JetBrains Mono", "Fira Code", ...defaultTheme.fontFamily.mono],
       },
       fontSize: {

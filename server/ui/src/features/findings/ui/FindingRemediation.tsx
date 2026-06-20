@@ -20,7 +20,7 @@ export function FindingRemediation({ steps }: FindingRemediationProps) {
               {String(step.step).padStart(2, "0")}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-foreground">{step.title}</div>
+              <div className="text-[13px] font-semibold text-foreground">{step.title}</div>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                 {step.description}
               </p>

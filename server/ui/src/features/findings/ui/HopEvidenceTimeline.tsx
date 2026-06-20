@@ -108,16 +108,16 @@ export function HopEvidenceTimeline({
                 ) : (
                   <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                 )}
-                <span className="w-7 shrink-0 font-mono text-[11px] font-bold tabular-nums text-muted-foreground/70">
+                <span className="w-7 shrink-0 font-mono text-xs font-bold tabular-nums text-muted-foreground/70">
                   [{String(i + 1).padStart(2, "0")}]
                 </span>
                 <span
-                  className="shrink-0 rounded-[2px] border px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em]"
+                  className="shrink-0 rounded-[2px] border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.06em]"
                   style={{ color, borderColor: `${color}55`, backgroundColor: `${color}14` }}
                 >
                   {edge.kind.replace(/_/g, " ")}
                 </span>
-                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                <span className="truncate font-mono text-xs text-muted-foreground">
                   {srcName} <span className="text-primary/50">&rarr;</span> {tgtName}
                 </span>
               </button>
@@ -130,10 +130,10 @@ export function HopEvidenceTimeline({
                         if (key === "last_seen" || key === "scan_id") return null;
                         return (
                           <div key={key} className="flex items-baseline gap-1.5">
-                            <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                            <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
                               {key.replace(/_/g, " ")}
                             </span>
-                            <span className="truncate font-mono text-[10px] text-foreground">
+                            <span className="truncate font-mono text-[11px] text-foreground">
                               {typeof val === "boolean" ? (val ? "yes" : "no") : String(val ?? "\u2014")}
                             </span>
                           </div>
@@ -148,7 +148,7 @@ export function HopEvidenceTimeline({
                       style={{ boxShadow: `inset 2px 0 0 0 ${SEVERITY.critical.solid}` }}
                     >
                       <div
-                        className="mb-1 flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]"
+                        className="mb-1 flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]"
                         style={{ color: SEVERITY.critical.text }}
                       >
                         <span
@@ -157,7 +157,7 @@ export function HopEvidenceTimeline({
                         />
                         {exploit.title}
                       </div>
-                      <p className="text-[11px] leading-relaxed text-foreground/75">{exploit.detail}</p>
+                      <p className="text-[12.5px] leading-relaxed text-foreground/75">{exploit.detail}</p>
                     </div>
                   )}
                 </div>

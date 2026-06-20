@@ -16,7 +16,7 @@ export function FindingImpact({ impact, path }: FindingImpactProps) {
 
   return (
     <WidgetCard title="Impact" icon={Crosshair} accent={SEVERITY.critical.solid}>
-      <p className="text-sm leading-relaxed text-foreground/90">{impact.summary}</p>
+      <p className="text-[13px] leading-relaxed text-foreground/90">{impact.summary}</p>
 
       {path && (
         <div className="mt-3">

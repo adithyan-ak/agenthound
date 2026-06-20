@@ -31,7 +31,7 @@ export function FindingReferences({ finding }: FindingReferencesProps) {
         <div className="mb-4 space-y-1.5">
           {finding.owasp_map.map((tag) => (
             <div key={tag} className="flex items-baseline gap-2 text-xs">
-              <span className="flex-shrink-0 rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-primary/80">
+              <span className="flex-shrink-0 rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.06em] text-primary/80">
                 {tag}
               </span>
               <span className="text-muted-foreground">{OWASP_TITLES[tag] ?? tag}</span>
@@ -64,7 +64,7 @@ export function FindingReferences({ finding }: FindingReferencesProps) {
                     style={{ backgroundColor: color }}
                   />
                   <span
-                    className="w-14 flex-shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.08em]"
+                    className="w-14 flex-shrink-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em]"
                     style={{ color }}
                   >
                     {rf.severity}
