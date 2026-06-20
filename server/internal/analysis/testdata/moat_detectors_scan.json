@@ -1,0 +1,179 @@
+{
+  "meta": {
+    "version": 1,
+    "type": "agenthound-ingest",
+    "collector": "mcp",
+    "collector_version": "0.1.0",
+    "timestamp": "2026-06-19T10:00:00Z",
+    "scan_id": "moat-e2e-fixture"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "moat-srv-a",
+        "kinds": ["MCPServer"],
+        "properties": {
+          "objectid": "moat-srv-a",
+          "name": "server-a",
+          "auth_method": "apiKey"
+        }
+      },
+      {
+        "id": "moat-srv-b",
+        "kinds": ["MCPServer"],
+        "properties": {
+          "objectid": "moat-srv-b",
+          "name": "server-b",
+          "auth_method": "oauth"
+        }
+      },
+      {
+        "id": "moat-src",
+        "kinds": ["MCPTool"],
+        "properties": {
+          "objectid": "moat-src",
+          "name": "untrusted_ingestor",
+          "description": "Ingests external feeds.",
+          "schema_keys": ["query", "table", "filter"],
+          "has_injection_patterns": true,
+          "capability_surface": ["database_access"]
+        }
+      },
+      {
+        "id": "moat-taint-sink",
+        "kinds": ["MCPTool"],
+        "properties": {
+          "objectid": "moat-taint-sink",
+          "name": "taint_sink",
+          "description": "A peer tool on another server.",
+          "schema_keys": ["query", "table", "extra"],
+          "has_injection_patterns": false,
+          "capability_surface": ["database_access"]
+        }
+      },
+      {
+        "id": "moat-sensitive",
+        "kinds": ["MCPTool"],
+        "properties": {
+          "objectid": "moat-sensitive",
+          "name": "credential_reader",
+          "description": "Reads credentials.",
+          "has_injection_patterns": false,
+          "capability_surface": ["credential_access"]
+        }
+      },
+      {
+        "id": "moat-poison-sink",
+        "kinds": ["MCPTool"],
+        "properties": {
+          "objectid": "moat-poison-sink",
+          "name": "shell_runner",
+          "description": "Runs shell commands.",
+          "has_injection_patterns": false,
+          "capability_surface": ["shell_access"]
+        }
+      },
+      {
+        "id": "moat-res",
+        "kinds": ["MCPResource"],
+        "properties": {
+          "objectid": "moat-res",
+          "name": "untrusted-feed",
+          "sensitivity": "high"
+        }
+      },
+      {
+        "id": "moat-agent-weak",
+        "kinds": ["A2AAgent"],
+        "properties": {
+          "objectid": "moat-agent-weak",
+          "name": "anon_agent",
+          "auth_method": "none"
+        }
+      },
+      {
+        "id": "moat-agent-strong",
+        "kinds": ["A2AAgent"],
+        "properties": {
+          "objectid": "moat-agent-strong",
+          "name": "mtls_agent",
+          "auth_method": "mtls"
+        }
+      },
+      {
+        "id": "moat-agent-host",
+        "kinds": ["AgentInstance"],
+        "properties": {
+          "objectid": "moat-agent-host",
+          "name": "host_agent"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "moat-srv-a",
+        "target": "moat-src",
+        "kind": "PROVIDES_TOOL",
+        "source_kind": "MCPServer",
+        "target_kind": "MCPTool",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-srv-a",
+        "target": "moat-sensitive",
+        "kind": "PROVIDES_TOOL",
+        "source_kind": "MCPServer",
+        "target_kind": "MCPTool",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-srv-a",
+        "target": "moat-poison-sink",
+        "kind": "PROVIDES_TOOL",
+        "source_kind": "MCPServer",
+        "target_kind": "MCPTool",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-srv-b",
+        "target": "moat-taint-sink",
+        "kind": "PROVIDES_TOOL",
+        "source_kind": "MCPServer",
+        "target_kind": "MCPTool",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-src",
+        "target": "moat-res",
+        "kind": "INGESTS_UNTRUSTED",
+        "source_kind": "MCPTool",
+        "target_kind": "MCPResource",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-sensitive",
+        "target": "moat-res",
+        "kind": "HAS_ACCESS_TO",
+        "source_kind": "MCPTool",
+        "target_kind": "MCPResource",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-agent-weak",
+        "target": "moat-agent-strong",
+        "kind": "DELEGATES_TO",
+        "source_kind": "A2AAgent",
+        "target_kind": "A2AAgent",
+        "properties": {"is_composite": false}
+      },
+      {
+        "source": "moat-agent-host",
+        "target": "moat-srv-a",
+        "kind": "TRUSTS_SERVER",
+        "source_kind": "AgentInstance",
+        "target_kind": "MCPServer",
+        "properties": {"is_composite": false}
+      }
+    ]
+  }
+}

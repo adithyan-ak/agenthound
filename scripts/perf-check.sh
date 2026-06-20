@@ -14,6 +14,10 @@
 # the fixture is pathological. Tune MAX_PAIRS deliberately if the fleet shape
 # legitimately changes.
 #
+# This script enforces the operator-facing runtime heuristic (per-agent <= 200
+# pairs). The authoritative per-source cap (<= 20 sinks/source) regression gate
+# is the Go integration test poisons_context_perf_integration_test.go.
+#
 # Requires a running graph (Neo4j + Postgres) reachable by agenthound-server.
 # When no server binary or database is available the check SKIPS (exit 0) so
 # it is safe to invoke in environments without a live stack.
