@@ -37,12 +37,10 @@ import {
   SEVERITY,
   SEVERITY_BY_KEY,
   severityColor,
+  XPROTO_ACCENT,
 } from "@shared/theme/tokens";
 
 const SEVERITY_LEVELS = ["critical", "high", "medium", "low"] as const;
-
-// Cross-protocol accent (A2A ↔ MCP). Matches the purple node hue.
-const XPROTO_COLOR = "#A855F7";
 
 type GroupBy =
   | "none"
@@ -536,7 +534,7 @@ export function FindingsListPage() {
             <SevStat
               label="X-Proto"
               count={pad2(counts.xproto)}
-              color={XPROTO_COLOR}
+              color={XPROTO_ACCENT}
               icon={GitBranchPlus}
               active={xproto}
               dim={counts.xproto === 0}
