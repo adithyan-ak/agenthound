@@ -54,24 +54,46 @@ RETURN count(*) AS written`
 
 	// POISONS_CONTEXT is the deliberate widening of the narrow SHADOWS
 	// guard above: an injection-bearing tool can poison the shared agent
-	// context that drives a high-capability tool, even without naming it.
-	// To keep that breadth from exploding into a cartesian product, the
-	// fan-out is capped at 20 sinks per source tool. With the perf-check
-	// ceiling of 200 poisoned pairs per agent, an agent maxes out at 10
-	// source tools * 20 sinks = 200 (see scripts/perf-check.sh).
+	// context that drives a high-capability sibling tool, even without
+	// naming it. Co-residency is scoped to a single AgentInstance — src and
+	// snk must both hang off servers that same agent trusts
+	// (AgentInstance-[:TRUSTS_SERVER]->MCPServer-[:PROVIDES_TOOL]->MCPTool),
+	// per the design in FEATURE_RESEARCH.md §5 and the per-agent counting in
+	// scripts/perf-check.sh. Without that scope the two MATCHes form a global
+	// cross product (every injection tool poisons every high-cap tool
+	// anywhere), a cross-tenant false-positive cascade.
+	//
+	// The fan-out is capped per (agent, source) at 20 sinks. Grouping by
+	// `a, src` (not `src` alone) is load-bearing: keying on src alone would
+	// union the sink sets of every agent that co-resides with the source,
+	// re-globalizing the cap. perf-check.sh enforces the downstream ≤200
+	// pairs-per-agent operator heuristic (10 sources × 20); the per-source
+	// cap itself is regression-gated by
+	// poisons_context_perf_integration_test.go.
+	//
+	// The cap TRUNCATES, it does not suppress: a (agent, source) pair with
+	// >20 eligible sinks keeps the first 20 by objectid (deterministic via
+	// ORDER BY, so the chosen set is stable across runs and stale-edge
+	// cleanup). Dropping the whole over-cap group instead would blind the
+	// detector exactly when a poisoner is co-resident with the MOST
+	// high-capability sinks (the worst case) and would let an attacker
+	// suppress the finding by registering a 21st sink. count(DISTINCT
+	// [src, snk]) reports edges actually MERGEd (one source can be reached
+	// via multiple agents, so the raw row count would over-report).
 	poisonsCypher := `
-MATCH (src:MCPTool)
+MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(:MCPServer)-[:PROVIDES_TOOL]->(src:MCPTool)
 WHERE src.has_injection_patterns = true
-MATCH (snk:MCPTool)
+MATCH (a)-[:TRUSTS_SERVER]->(:MCPServer)-[:PROVIDES_TOOL]->(snk:MCPTool)
 WHERE src <> snk
   AND any(cap IN snk.capability_surface WHERE cap IN ['shell_access', 'code_execution', 'credential_access', 'email_send'])
-WITH src, collect(DISTINCT snk) AS sinks
-WHERE size(sinks) <= 20
+WITH a, src, snk
+ORDER BY snk.objectid
+WITH a, src, collect(DISTINCT snk)[..20] AS sinks
 UNWIND sinks AS snk
 MERGE (src)-[e:POISONS_CONTEXT]->(snk)
 SET e.scan_id = $scan_id, e.last_seen = datetime(), e.is_composite = true,
     e.source_collector = 'mcp', e.confidence = 0.6, e.risk_weight = 0.4
-RETURN count(*) AS written`
+RETURN count(DISTINCT [src, snk]) AS written`
 
 	poisonsN, err := db.ExecuteWrite(ctx, poisonsCypher, map[string]any{"scan_id": scanID})
 	if err != nil {
