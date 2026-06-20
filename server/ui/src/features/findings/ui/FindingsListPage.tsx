@@ -9,8 +9,11 @@ import {
   Copy,
   Check,
   GitBranchPlus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   ShieldAlert,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useFindings, useSetTriage, SEVERITY_RANK } from "@entities/finding";
@@ -27,13 +30,14 @@ import { Skeleton } from "@shared/ui/primitives/skeleton";
 import { MiniHexIcon } from "./MiniHexIcon";
 import { TriageControl } from "./TriageControl";
 import { MeterBar, WidgetCard } from "@shared/ui/widgets";
+import { Sidebar } from "@shared/ui/layout";
 import { cn } from "@shared/lib/utils";
 import {
   ACCENT,
   SEVERITY,
   SEVERITY_BY_KEY,
   severityColor,
-  CHART_THEME,
+  XPROTO_ACCENT,
 } from "@shared/theme/tokens";
 
 const SEVERITY_LEVELS = ["critical", "high", "medium", "low"] as const;
@@ -51,15 +55,16 @@ type GroupBy =
 type SortKey = "severity" | "confidence" | "category" | "triage" | "title";
 type SortDir = "asc" | "desc";
 
+// Short labels — these now render as facet pills in the rail, not a <select>.
 const GROUP_OPTIONS: Array<{ value: GroupBy; label: string }> = [
-  { value: "none", label: "No grouping" },
-  { value: "severity", label: "Group: Severity" },
-  { value: "target", label: "Group: Target" },
-  { value: "source", label: "Group: Source" },
-  { value: "category", label: "Group: Category" },
-  { value: "owasp", label: "Group: OWASP" },
-  { value: "edge_kind", label: "Group: Relationship" },
-  { value: "triage", label: "Group: Triage" },
+  { value: "none", label: "None" },
+  { value: "severity", label: "Severity" },
+  { value: "target", label: "Target" },
+  { value: "source", label: "Source" },
+  { value: "category", label: "Category" },
+  { value: "owasp", label: "OWASP" },
+  { value: "edge_kind", label: "Relationship" },
+  { value: "triage", label: "Triage" },
 ];
 
 const CONF_OPTIONS = [0, 50, 75, 90];
@@ -129,6 +134,7 @@ export function FindingsListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [cursor, setCursor] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
 
   function patch(updates: Record<string, string | null>) {
     const next = new URLSearchParams(params);
@@ -163,6 +169,19 @@ export function FindingsListPage() {
     }
     return c;
   }, [findings]);
+
+  // Per-status totals power the STATUS facet counts in the rail.
+  const triageCounts = useMemo(() => {
+    const c: Record<TriageStatus, number> = {
+      new: 0,
+      triaging: 0,
+      confirmed: 0,
+      "accepted-risk": 0,
+      "false-positive": 0,
+    };
+    for (const f of findings ?? []) c[statusOf(f.id)] += 1;
+    return c;
+  }, [findings, triageMap]);
 
   const filtered = useMemo(() => {
     if (!findings) return [];
@@ -256,6 +275,13 @@ export function FindingsListPage() {
   }, [sorted, groupBy, triageMap]);
 
   const total = findings?.length ?? 0;
+
+  // Number of *secondary* filters active (everything that lives in the rail).
+  const activeFacetCount =
+    (activeTriage.size > 0 ? 1 : 0) +
+    (minConf > 0 ? 1 : 0) +
+    (groupBy !== "none" ? 1 : 0) +
+    (showSuppressed ? 1 : 0);
 
   // Keep the keyboard cursor in range as the result set changes.
   useEffect(() => {
@@ -372,102 +398,150 @@ export function FindingsListPage() {
     );
   }
 
+  // ---------- Main register (loading / empty / table) ----------
+  const mainContent = isLoading ? (
+    <WidgetCard title="Threat Register" icon={ShieldAlert} flush>
+      <div className="space-y-px p-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full rounded-[2px]" />
+        ))}
+      </div>
+    </WidgetCard>
+  ) : ordered.length === 0 ? (
+    <WidgetCard title="Threat Register" icon={ShieldAlert}>
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-[4px] bg-primary/10 ring-1 ring-inset ring-primary/20">
+          <ShieldAlert className="h-6 w-6 text-primary" />
+        </span>
+        <p className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+          {total > 0 ? "No findings match the current filters" : "No findings detected"}
+        </p>
+        {total === 0 && (
+          <button
+            onClick={() => navigate("/scans")}
+            className="font-mono text-xs uppercase tracking-[0.08em] text-primary transition-colors hover:text-primary/80"
+          >
+            ▸ Go to Scans
+          </button>
+        )}
+      </div>
+    </WidgetCard>
+  ) : (
+    <WidgetCard
+      title="Threat Register"
+      icon={ShieldAlert}
+      flush
+      action={
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          Showing {pad2(ordered.length)} <span className="text-muted-foreground/50">/</span> {pad2(total)}
+        </span>
+      }
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-black/20">
+              <th className="w-9 px-3 py-2">
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="check-tac"
+                  aria-label="Select all"
+                />
+              </th>
+              <Th className="w-10 pr-2 text-right">#</Th>
+              <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} />
+              <SortHeader label="Triage" active={sort.key === "triage"} dir={sort.dir} onClick={() => setSortKey("triage")} />
+              <Th>Finding</Th>
+              <Th>Flow</Th>
+              <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} />
+              <Th>OWASP</Th>
+              <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {groups
+              ? groups.map(([label, list]) => (
+                  <GroupSection key={label} groupBy={groupBy} label={label} count={list.length}>
+                    {list.map((f) => renderRow(f))}
+                  </GroupSection>
+                ))
+              : ordered.map((f) => renderRow(f))}
+          </tbody>
+        </table>
+      </div>
+    </WidgetCard>
+  );
+
   return (
     <div className="dashboard-bg min-h-full p-3 sm:p-4 lg:p-5">
       <div className="mx-auto max-w-[1600px] space-y-3">
         {/* ---------- Command header ---------- */}
-        <header className="space-y-3">
-          <div className="min-w-0">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Security Findings <span className="text-primary/60">//</span> Threat Register
-            </p>
-            <h1 className="mt-1.5 flex items-center gap-2.5 font-mono text-2xl font-bold uppercase tracking-[0.04em] text-foreground sm:text-[26px]">
-              <span className="flex h-7 w-7 items-center justify-center rounded-[3px] bg-primary/10 ring-1 ring-inset ring-primary/30">
-                <ShieldAlert className="h-4 w-4 text-primary" />
-              </span>
-              <span className="text-primary">▸</span>
-              Findings
-              <span className="font-mono text-base font-semibold tabular-nums text-muted-foreground">
-                {pad2(total)}
-              </span>
-              <span className="blink-caret text-primary" aria-hidden>
-                _
-              </span>
-            </h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Detected attack paths and exposures across your agent, MCP, and A2A infrastructure.
-            </p>
-          </div>
-
-          {/* SOC register summary strip */}
-          <div className="card-elevated relative flex flex-wrap items-center overflow-hidden rounded-md">
-            <span aria-hidden className="absolute left-0 top-0 h-px w-14 bg-primary/80" />
-            <div className="flex flex-wrap items-center divide-x divide-border/70">
-              <RegisterSeg label="Total" value={pad2(total)} color={CHART_THEME.tooltip.text} />
-              {SEVERITY_LEVELS.map((lvl) => {
-                const n = counts[lvl] ?? 0;
-                return (
-                  <RegisterSeg
-                    key={lvl}
-                    label={SEVERITY[lvl].label}
-                    value={pad2(n)}
-                    color={severityColor(lvl)}
-                    dim={n === 0}
-                  />
-                );
-              })}
-              <RegisterSeg
-                label="X-Proto"
-                value={pad2(counts.xproto)}
-                color={CHART_THEME.tooltip.text}
-                dim={counts.xproto === 0}
-              />
-            </div>
-            <div className="ml-auto flex items-center gap-2 self-stretch border-l border-border/70 px-3.5 py-2">
-              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                Showing
-              </span>
-              <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">
-                {pad2(ordered.length)}
-              </span>
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                / {pad2(total)}
-              </span>
-            </div>
-          </div>
+        <header className="min-w-0">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Security Findings <span className="text-primary/60">//</span> Threat Register
+          </p>
+          <h1 className="mt-1.5 flex items-center gap-2.5 font-mono text-2xl font-bold uppercase tracking-[0.04em] text-foreground sm:text-[26px]">
+            <span className="flex h-7 w-7 items-center justify-center rounded-[3px] bg-primary/10 ring-1 ring-inset ring-primary/30">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+            </span>
+            <span className="text-primary">▸</span>
+            Findings
+            <span className="font-mono text-base font-semibold tabular-nums text-muted-foreground">
+              {pad2(total)}
+            </span>
+            <span className="blink-caret text-primary" aria-hidden>
+              _
+            </span>
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Detected attack paths and exposures across your agent, MCP, and A2A infrastructure.
+          </p>
         </header>
 
-        {/* ---------- Toolbar row 1: severity + cross-protocol + search ---------- */}
+        {/* ---------- Top bar: clickable severity strip + search ---------- */}
         <div className="flex flex-wrap items-center gap-2">
-          <FilterChip
-            active={activeSeverities.size === 0}
-            onClick={() => patch({ sev: null })}
-            color={ACCENT}
-            label="All"
-          />
-          {SEVERITY_LEVELS.map((lvl) => (
-            <FilterChip
-              key={lvl}
-              active={activeSeverities.has(lvl)}
-              onClick={() => toggleCsv("sev", activeSeverities, lvl)}
-              color={severityColor(lvl)}
-              label={SEVERITY[lvl].label}
+          {/* SOC register strip — each segment is the severity / cross-protocol filter */}
+          <div className="card-elevated relative flex flex-wrap items-stretch divide-x divide-border/70 overflow-hidden rounded-md">
+            <span aria-hidden className="absolute left-0 top-0 z-10 h-px w-14 bg-primary/80" />
+            <SevStat
+              label="Total"
+              count={pad2(total)}
+              color={ACCENT}
+              active={activeSeverities.size === 0 && !xproto}
+              onClick={() => patch({ sev: null, xproto: null })}
+              title="Show all severities"
             />
-          ))}
-          <span className="mx-1 h-5 w-px bg-border/70" />
-          <button
-            onClick={() => patch({ xproto: xproto ? null : "1" })}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
-              xproto
-                ? "border-purple-500/60 bg-purple-500/15 text-purple-300"
-                : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
-            )}
-            title="Show only cross-protocol findings (A2A ↔ MCP)"
-          >
-            <GitBranchPlus className="h-3 w-3" />
-            Cross-protocol
-          </button>
+            {SEVERITY_LEVELS.map((lvl) => {
+              const n = counts[lvl] ?? 0;
+              return (
+                <SevStat
+                  key={lvl}
+                  label={SEVERITY[lvl].label}
+                  count={pad2(n)}
+                  color={severityColor(lvl)}
+                  active={activeSeverities.has(lvl)}
+                  dim={n === 0}
+                  onClick={() => toggleCsv("sev", activeSeverities, lvl)}
+                  title={`Filter to ${SEVERITY[lvl].label} severity`}
+                />
+              );
+            })}
+            <SevStat
+              label="X-Proto"
+              count={pad2(counts.xproto)}
+              color={XPROTO_ACCENT}
+              icon={GitBranchPlus}
+              active={xproto}
+              dim={counts.xproto === 0}
+              onClick={() => patch({ xproto: xproto ? null : "1" })}
+              title="Show only cross-protocol findings (A2A ↔ MCP)"
+            />
+          </div>
 
           <div className="relative ml-auto">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -477,70 +551,50 @@ export function FindingsListPage() {
               placeholder="search findings…  (/)"
               value={search}
               onChange={(e) => patch({ q: e.target.value })}
-              className="h-8 w-72 rounded-[3px] border border-border bg-black/30 pl-8 pr-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+              className="h-9 w-72 rounded-[3px] border border-border bg-black/30 pl-8 pr-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
             />
           </div>
         </div>
 
-        {/* ---------- Toolbar row 2: triage + group + confidence ---------- */}
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterChip
-            active={activeTriage.size === 0}
-            onClick={() => patch({ triage: null })}
-            color={ACCENT}
-            label="Any status"
-          />
-          {TRIAGE_ORDER.map((s) => (
-            <FilterChip
-              key={s}
-              active={activeTriage.has(s)}
-              onClick={() => toggleCsv("triage", activeTriage, s)}
-              color={TRIAGE_META[s].color}
-              label={TRIAGE_META[s].label}
-            />
-          ))}
-          <span className="mx-1 h-5 w-px bg-border/70" />
-          <select
-            value={groupBy}
-            onChange={(e) => patch({ group: e.target.value === "none" ? null : e.target.value })}
-            className="h-8 rounded-[3px] border border-border bg-black/30 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-foreground/80 focus-visible:border-primary/50 focus-visible:outline-none"
-          >
-            {GROUP_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={String(minConf)}
-            onChange={(e) => patch({ conf: e.target.value === "0" ? null : e.target.value })}
-            className="h-8 rounded-[3px] border border-border bg-black/30 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-foreground/80 focus-visible:border-primary/50 focus-visible:outline-none"
-            title="Minimum confidence"
-          >
-            {CONF_OPTIONS.map((c) => (
-              <option key={c} value={String(c)}>
-                conf ≥ {c}%
-              </option>
-            ))}
-          </select>
-          <span className="mx-1 h-5 w-px bg-border/70" />
-          <button
-            onClick={() => patch({ suppressed: showSuppressed ? null : "1" })}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
-              showSuppressed
-                ? "border-primary/60 bg-primary/15 text-primary"
-                : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
-            )}
-            title="Include accepted-risk / false-positive findings"
-          >
-            Show suppressed
-          </button>
-        </div>
+        {/* ---------- Facet rail + register ---------- */}
+        <Sidebar
+          className="items-start"
+          sidePosition="left"
+          sideWidth={railOpen ? "14.5rem" : "2.75rem"}
+          contentMin="55%"
+          gap="0.75rem"
+          side={
+            railOpen ? (
+              <FacetRail
+                activeTriage={activeTriage}
+                triageCounts={triageCounts}
+                onToggleTriage={(s) => toggleCsv("triage", activeTriage, s)}
+                onClearTriage={() => patch({ triage: null })}
+                minConf={minConf}
+                onSetConf={(c) => patch({ conf: c === 0 ? null : String(c) })}
+                groupBy={groupBy}
+                onSetGroup={(g) => patch({ group: g === "none" ? null : g })}
+                showSuppressed={showSuppressed}
+                onToggleSuppressed={() => patch({ suppressed: showSuppressed ? null : "1" })}
+                activeCount={activeFacetCount}
+                onReset={() => patch({ triage: null, conf: null, group: null, suppressed: null })}
+                onCollapse={() => setRailOpen(false)}
+              />
+            ) : (
+              <CollapsedRail
+                activeCount={activeFacetCount}
+                onExpand={() => setRailOpen(true)}
+              />
+            )
+          }
+          main={mainContent}
+        />
+      </div>
 
-        {/* ---------- Selection / bulk action bar ---------- */}
-        {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/[0.06] px-3 py-2">
+      {/* ---------- Floating bulk action bar ---------- */}
+      {selected.size > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-primary/40 bg-card/95 px-3 py-2 backdrop-blur-md elev-3">
             <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-primary">
               {pad2(selected.size)} selected
             </span>
@@ -556,161 +610,359 @@ export function FindingsListPage() {
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5" /> Export selected
+                  <Copy className="h-3.5 w-3.5" /> Export
                 </>
               )}
             </button>
             <button
               onClick={() => setSelected(new Set())}
-              className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-foreground"
             >
               <X className="h-3 w-3" /> Clear
             </button>
           </div>
-        )}
-
-        {/* ---------- Register table ---------- */}
-        {isLoading ? (
-          <WidgetCard title="Threat Register" icon={ShieldAlert} flush>
-            <div className="space-y-px p-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full rounded-[2px]" />
-              ))}
-            </div>
-          </WidgetCard>
-        ) : ordered.length === 0 ? (
-          <WidgetCard title="Threat Register" icon={ShieldAlert}>
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-[4px] bg-primary/10 ring-1 ring-inset ring-primary/20">
-                <ShieldAlert className="h-6 w-6 text-primary" />
-              </span>
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                {total > 0 ? "No findings match the current filters" : "No findings detected"}
-              </p>
-              {total === 0 && (
-                <button
-                  onClick={() => navigate("/scans")}
-                  className="font-mono text-xs uppercase tracking-[0.08em] text-primary transition-colors hover:text-primary/80"
-                >
-                  ▸ Go to Scans
-                </button>
-              )}
-            </div>
-          </WidgetCard>
-        ) : (
-          <WidgetCard
-            title="Threat Register"
-            icon={ShieldAlert}
-            flush
-            action={
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                {pad2(ordered.length)} <span className="text-muted-foreground/50">/</span> {pad2(total)}
-              </span>
-            }
-          >
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-border bg-black/20">
-                    <th className="w-9 px-3 py-2">
-                      <input
-                        type="checkbox"
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        checked={allSelected}
-                        onChange={toggleSelectAll}
-                        className="h-3.5 w-3.5 cursor-pointer accent-primary"
-                        aria-label="Select all"
-                      />
-                    </th>
-                    <Th className="w-10 pr-2 text-right">#</Th>
-                    <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} />
-                    <SortHeader label="Triage" active={sort.key === "triage"} dir={sort.dir} onClick={() => setSortKey("triage")} />
-                    <Th>Finding</Th>
-                    <Th>Flow</Th>
-                    <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} />
-                    <Th>OWASP</Th>
-                    <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="text-right" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups
-                    ? groups.map(([label, list]) => (
-                        <GroupSection key={label} groupBy={groupBy} label={label} count={list.length}>
-                          {list.map((f) => renderRow(f))}
-                        </GroupSection>
-                      ))
-                    : ordered.map((f) => renderRow(f))}
-                </tbody>
-              </table>
-            </div>
-          </WidgetCard>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function RegisterSeg({
+// ----------------------------------------------------------------------
+// Clickable severity / cross-protocol summary segment.
+// ----------------------------------------------------------------------
+function SevStat({
   label,
-  value,
+  count,
   color,
+  active,
   dim,
+  icon: Icon,
+  onClick,
+  title,
 }: {
   label: string;
-  value: string;
+  count: string;
   color: string;
+  active: boolean;
   dim?: boolean;
+  icon?: typeof GitBranchPlus;
+  onClick: () => void;
+  title?: string;
 }) {
+  const muted = dim && !active;
   return (
-    <div className="flex items-center gap-2 px-3 py-2">
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={active}
+      className={cn(
+        "relative flex items-center gap-2 px-3 py-2 outline-none transition-colors",
+        "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50",
+        active ? "bg-white/[0.04]" : "hover:bg-white/[0.025]",
+      )}
+      style={active ? { boxShadow: `inset 0 -2px 0 0 ${color}` } : undefined}
+    >
+      {Icon ? (
+        <Icon
+          className="h-3 w-3 shrink-0"
+          style={{ color: muted ? "rgb(var(--mauve-8-raw))" : color }}
+        />
+      ) : (
+        <span
+          className="h-2 w-2 shrink-0 rounded-[1px]"
+          style={{
+            backgroundColor: muted ? "rgb(var(--mauve-8-raw))" : color,
+            boxShadow: active ? `0 0 6px -1px ${color}` : undefined,
+          }}
+        />
+      )}
       <span
-        className="h-2 w-2 shrink-0 rounded-[1px]"
-        style={{
-          backgroundColor: dim ? "rgb(var(--mauve-8-raw))" : color,
-          boxShadow: dim ? undefined : `0 0 6px -1px ${color}`,
-        }}
-      />
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        className={cn(
+          "font-mono text-[10px] uppercase tracking-[0.14em]",
+          active ? "text-foreground/90" : "text-muted-foreground",
+        )}
+      >
         {label}
       </span>
       <span
         className="font-mono text-sm font-bold tabular-nums"
-        style={{ color: dim ? "rgb(var(--mauve-9-raw))" : color }}
+        style={{ color: muted ? "rgb(var(--mauve-9-raw))" : color }}
       >
-        {value}
+        {count}
+      </span>
+    </button>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Left facet rail — secondary filters as faceted-search groups.
+// ----------------------------------------------------------------------
+function FacetRail({
+  activeTriage,
+  triageCounts,
+  onToggleTriage,
+  onClearTriage,
+  minConf,
+  onSetConf,
+  groupBy,
+  onSetGroup,
+  showSuppressed,
+  onToggleSuppressed,
+  activeCount,
+  onReset,
+  onCollapse,
+}: {
+  activeTriage: Set<string>;
+  triageCounts: Record<TriageStatus, number>;
+  onToggleTriage: (s: TriageStatus) => void;
+  onClearTriage: () => void;
+  minConf: number;
+  onSetConf: (c: number) => void;
+  groupBy: GroupBy;
+  onSetGroup: (g: GroupBy) => void;
+  showSuppressed: boolean;
+  onToggleSuppressed: () => void;
+  activeCount: number;
+  onReset: () => void;
+  onCollapse: () => void;
+}) {
+  return (
+    <aside className="card-elevated relative overflow-hidden rounded-md">
+      <span aria-hidden className="absolute left-0 top-0 z-10 h-px w-14 bg-primary/80" />
+      <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-foreground/90">
+            Filters
+          </span>
+          {activeCount > 0 && (
+            <span className="rounded-[2px] bg-primary/15 px-1 font-mono text-[9px] font-semibold tabular-nums text-primary">
+              {activeCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {activeCount > 0 && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/70 transition-colors hover:text-primary"
+            >
+              reset
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Collapse filters"
+            className="flex h-6 w-6 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+          >
+            <PanelLeftClose className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="divide-y divide-border/60">
+        <FacetSection title="Status" onClear={activeTriage.size > 0 ? onClearTriage : undefined}>
+          <div className="space-y-0.5">
+            {TRIAGE_ORDER.map((s) => (
+              <FacetCheck
+                key={s}
+                checked={activeTriage.has(s)}
+                color={TRIAGE_META[s].color}
+                label={TRIAGE_META[s].label}
+                count={triageCounts[s]}
+                onToggle={() => onToggleTriage(s)}
+              />
+            ))}
+          </div>
+        </FacetSection>
+
+        <FacetSection title="Min confidence">
+          <div className="grid grid-cols-4 gap-1">
+            {CONF_OPTIONS.map((c) => (
+              <FacetSeg
+                key={c}
+                active={minConf === c}
+                label={c === 0 ? "ANY" : `${c}`}
+                onClick={() => onSetConf(c)}
+              />
+            ))}
+          </div>
+        </FacetSection>
+
+        <FacetSection title="Group by">
+          <div className="grid grid-cols-2 gap-1">
+            {GROUP_OPTIONS.map((o) => (
+              <FacetSeg
+                key={o.value}
+                active={groupBy === o.value}
+                label={o.label}
+                onClick={() => onSetGroup(o.value)}
+                className="justify-start text-left"
+              />
+            ))}
+          </div>
+        </FacetSection>
+
+        <FacetSection title="Display">
+          <FacetCheck
+            checked={showSuppressed}
+            color={ACCENT}
+            label="Show suppressed"
+            onToggle={onToggleSuppressed}
+          />
+        </FacetSection>
+      </div>
+    </aside>
+  );
+}
+
+function CollapsedRail({
+  activeCount,
+  onExpand,
+}: {
+  activeCount: number;
+  onExpand: () => void;
+}) {
+  return (
+    <div className="card-elevated relative flex flex-col items-center gap-2 rounded-md px-1.5 py-2.5">
+      <span aria-hidden className="absolute left-0 top-0 z-10 h-px w-8 bg-primary/80" />
+      <button
+        type="button"
+        onClick={onExpand}
+        title="Expand filters"
+        className="flex h-7 w-7 items-center justify-center rounded-[3px] border border-border bg-black/30 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+      >
+        <PanelLeftOpen className="h-3.5 w-3.5" />
+      </button>
+      {activeCount > 0 && (
+        <span className="rounded-[2px] bg-primary/15 px-1 py-0.5 font-mono text-[9px] font-semibold tabular-nums text-primary">
+          {activeCount}
+        </span>
+      )}
+      <span
+        className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70"
+        style={{ writingMode: "vertical-rl" }}
+      >
+        Filters
       </span>
     </div>
   );
 }
 
-function FilterChip({
-  active,
-  onClick,
+function FacetSection({
+  title,
+  onClear,
+  children,
+}: {
+  title: string;
+  onClear?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="px-3 py-2.5">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {title}
+        </span>
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/70 transition-colors hover:text-primary"
+          >
+            clear
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function FacetCheck({
+  checked,
   color,
   label,
+  count,
+  onToggle,
 }: {
-  active: boolean;
-  onClick: () => void;
+  checked: boolean;
   color: string;
   label: string;
+  count?: number;
+  onToggle: () => void;
 }) {
   return (
     <button
-      onClick={onClick}
+      type="button"
+      onClick={onToggle}
+      aria-pressed={checked}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[3px] border px-2.5 py-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] transition-colors",
-        active
-          ? "border-transparent text-foreground"
-          : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
+        "flex w-full items-center gap-2 rounded-[3px] px-1.5 py-1 text-left transition-colors",
+        checked ? "bg-white/[0.04]" : "hover:bg-white/[0.025]",
       )}
-      style={active ? { backgroundColor: `${color}1A`, boxShadow: `inset 0 0 0 1px ${color}66` } : undefined}
     >
       <span
-        className="h-2 w-2 rounded-[1px]"
-        style={{ backgroundColor: active ? color : "rgb(var(--mauve-8-raw))" }}
+        className={cn(
+          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+          checked ? "border-primary bg-primary" : "border-border bg-black/30",
+        )}
+      >
+        {checked && <Check className="h-2.5 w-2.5 text-black" strokeWidth={3} />}
+      </span>
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-[1px]"
+        style={{ backgroundColor: color }}
       />
+      <span
+        className={cn(
+          "flex-1 truncate font-mono text-[11px] tracking-[0.02em]",
+          checked ? "text-foreground" : "text-foreground/70",
+        )}
+      >
+        {label}
+      </span>
+      {typeof count === "number" && (
+        <span
+          className={cn(
+            "font-mono text-[10px] tabular-nums",
+            checked ? "text-primary" : "text-muted-foreground/70",
+          )}
+        >
+          {pad2(count)}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function FacetSeg({
+  active,
+  label,
+  onClick,
+  className,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "truncate rounded-[3px] border px-2 py-1 text-center font-mono text-[10px] tracking-[0.04em] transition-colors",
+        active
+          ? "border-primary/60 bg-primary/15 text-primary"
+          : "border-border bg-black/30 text-muted-foreground hover:border-mauve-7 hover:text-foreground",
+        className,
+      )}
+    >
       {label}
     </button>
   );
@@ -818,6 +1070,7 @@ function BulkStatusMenu({ onPick }: { onPick: (s: TriageStatus) => void }) {
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="start"
+          side="top"
           sideOffset={6}
           className="z-50 min-w-[170px] rounded-md border border-border bg-card/95 p-1 backdrop-blur-md elev-3"
         >
@@ -877,7 +1130,7 @@ function FindingRow({
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          className="h-3.5 w-3.5 cursor-pointer accent-primary"
+          className="check-tac"
           aria-label={`Select ${f.title}`}
         />
       </td>

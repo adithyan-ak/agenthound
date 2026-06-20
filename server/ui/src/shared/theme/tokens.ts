@@ -53,6 +53,11 @@ export type NodeKind = keyof typeof NODE_KIND_COLORS;
 export const NODE_KIND_COLORS_BY_KEY: Record<string, string | undefined> =
   NODE_KIND_COLORS;
 
+// Cross-protocol accent (A2A ↔ MCP) — reuses the A2A agent purple so the
+// X-Proto stat and any cross-protocol chrome track the node palette instead
+// of duplicating the hue.
+export const XPROTO_ACCENT = NODE_KIND_COLORS.A2AAgent;
+
 // Severity system — solid color, muted bg, text, border, icon
 export interface SeverityStyle {
   solid: string;
