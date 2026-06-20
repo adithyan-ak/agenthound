@@ -2,7 +2,10 @@ package analysis
 
 // ATLASTechniques is the single source of truth for the MITRE ATLAS techniques
 // AgentHound maps findings to. IDs and titles are verbatim from MITRE ATLAS
-// v4.5.0 (MITRE renamed several "ML"→"AI"; titles below are the current names).
+// v5.5.0 (2026-03-30) — the release that introduced AML.T0110, the newest
+// technique referenced here (AML.T0086 arrived in v5.0.0; the agentic-AI
+// techniques did not exist in any v4.x release). MITRE renamed several
+// "ML"→"AI"; titles below are the current names.
 var ATLASTechniques = map[string]string{
 	"AML.T0051": "LLM Prompt Injection",
 	"AML.T0110": "AI Agent Tool Poisoning",
