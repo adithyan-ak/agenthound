@@ -451,7 +451,7 @@ export function FindingsListPage() {
                   }}
                   checked={allSelected}
                   onChange={toggleSelectAll}
-                  className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                  className="check-tac"
                   aria-label="Select all"
                 />
               </th>
@@ -1132,7 +1132,7 @@ function FindingRow({
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          className="h-3.5 w-3.5 cursor-pointer accent-primary"
+          className="check-tac"
           aria-label={`Select ${f.title}`}
         />
       </td>

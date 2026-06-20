@@ -363,6 +363,53 @@
   .elev-3 {
     box-shadow: 0 4px 8px rgb(0 0 0 / 0.26), 0 12px 28px rgb(0 0 0 / 0.28);
   }
+
+  /* Themed native checkbox — native accent-color only tints the CHECKED
+     fill, leaving the unchecked box browser-white (clashes with the carbon
+     surface). We strip the native look and draw all three states in-theme:
+     unchecked = dark box + subtle mauve border, checked = amber phosphor
+     fill + dark tick, indeterminate = amber + dark dash. */
+  .check-tac {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-grid;
+    place-content: center;
+    height: 0.875rem;
+    width: 0.875rem;
+    border-radius: 3px;
+    border: 1px solid rgb(var(--mauve-7-raw));
+    background-color: rgb(0 0 0 / 0.40);
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+  .check-tac:hover {
+    border-color: rgb(var(--mauve-8-raw));
+  }
+  .check-tac:checked,
+  .check-tac:indeterminate {
+    border-color: rgb(var(--phosphor-raw));
+    background-color: rgb(var(--phosphor-raw));
+  }
+  .check-tac:checked::after {
+    content: "";
+    width: 0.3rem;
+    height: 0.55rem;
+    margin-top: -1px;
+    border: solid rgb(var(--mauve-1-raw));
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .check-tac:indeterminate::after {
+    content: "";
+    width: 0.5rem;
+    height: 2px;
+    border-radius: 1px;
+    background-color: rgb(var(--mauve-1-raw));
+  }
+  .check-tac:focus-visible {
+    outline: 2px solid rgb(var(--phosphor-raw));
+    outline-offset: 2px;
+  }
 }
 
 /* ----------------------------------------------------------------------
