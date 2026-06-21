@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
+	"github.com/adithyan-ak/agenthound/sdk/common"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
@@ -45,12 +46,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		timeout = DefaultProbeTimeout
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{IngestData: &ingest.IngestData{}}
 
@@ -106,7 +102,7 @@ type experiment struct {
 }
 
 func fetchExperiments(ctx context.Context, client *http.Client, baseURL string) ([]experiment, error) {
-	body, err := getJSON(ctx, client, baseURL+"/api/2.0/mlflow/experiments/search")
+	body, err := common.GetJSON(ctx, client, baseURL+"/api/2.0/mlflow/experiments/search", "", 4<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -141,27 +137,6 @@ func fetchRuns(ctx context.Context, client *http.Client, baseURL, experimentID s
 		return nil, fmt.Errorf("decode runs: %w", err)
 	}
 	return parsed.Runs, nil
-}
-
-func getJSON(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
 }
 
 func postJSON(ctx context.Context, client *http.Client, url string, payload []byte) ([]byte, error) {

@@ -14,7 +14,7 @@ import (
 
 // TestLoot_MasterKeyNeverInLogs is a hard regression guard: the FULL
 // master key MUST NEVER appear in slog output across any code path of
-// the looter. The redact() helper trims to an 8-char prefix; this test
+// the looter. common.Redact trims to an 8-char prefix; this test
 // captures every slog write into a buffer and greps for the full
 // secret.
 //
@@ -52,28 +52,9 @@ func TestLoot_MasterKeyNeverInLogs(t *testing.T) {
 	if strings.Contains(logs, sneakyMasterKey) {
 		t.Errorf("FULL master key leaked into slog output:\n%s", logs)
 	}
-	// Sanity: the redacted prefix should appear, proving redact() ran.
+	// Sanity: the redacted prefix should appear, proving common.Redact ran.
 	wantPrefix := sneakyMasterKey[:8] + "..."
 	if !strings.Contains(logs, wantPrefix) {
 		t.Errorf("expected redacted prefix %q in logs; got:\n%s", wantPrefix, logs)
-	}
-}
-
-func TestRedact(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"sk-1234567890abcdef", "sk-12345..."},
-		{"sk-ABC", "***"},   // 6 chars ≤ 8 → fully redacted
-		{"", "***"},         // empty → fully redacted
-		{"12345678", "***"}, // exactly 8 → fully redacted
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			if got := redact(tt.input); got != tt.want {
-				t.Errorf("redact(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
 	}
 }

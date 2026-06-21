@@ -29,12 +29,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
+	"github.com/adithyan-ak/agenthound/sdk/common"
 	"github.com/adithyan-ak/agenthound/sdk/ingest"
 )
 
@@ -60,12 +60,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		maxItems = DefaultMaxItems
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{IngestData: &ingest.IngestData{}}
 
@@ -159,7 +154,7 @@ type session struct {
 }
 
 func fetchSessions(ctx context.Context, client *http.Client, baseURL string) ([]session, error) {
-	body, err := getJSON(ctx, client, baseURL+"/api/sessions")
+	body, err := common.GetJSON(ctx, client, baseURL+"/api/sessions", "", 4<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +174,7 @@ type contentsEntry struct {
 
 func fetchContents(ctx context.Context, client *http.Client, baseURL, path string, maxItems int) ([]contentsEntry, error) {
 	u := baseURL + "/api/contents/" + path
-	body, err := getJSON(ctx, client, u)
+	body, err := common.GetJSON(ctx, client, u, "", 4<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -199,27 +194,6 @@ func fetchContents(ctx context.Context, client *http.Client, baseURL, path strin
 		}
 	}
 	return out, nil
-}
-
-func getJSON(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
 }
 
 var _ action.Looter = (*Looter)(nil)

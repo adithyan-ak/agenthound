@@ -110,12 +110,7 @@ func (l *Looter) Loot(ctx context.Context, t action.Target, opts action.LootOpti
 		return nil, errors.New("ollama loot: --include-weights requires --weights-dir <path>")
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := common.NoRedirectClient(timeout)
 
 	res := &action.LootResult{IngestData: &ingest.IngestData{}}
 
@@ -261,7 +256,7 @@ type tagEntry struct {
 }
 
 func fetchTags(ctx context.Context, client *http.Client, url string, maxItems int) ([]tagEntry, error) {
-	body, err := getJSON(ctx, client, url)
+	body, err := common.GetJSON(ctx, client, url, "", 1<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -431,29 +426,6 @@ func providesModelEdge(ollamaID, modelID, engagementID, digest string) ingest.Ed
 			},
 		},
 	}
-}
-
-// getJSON does the GET-and-read dance. 1 MiB cap matches the
-// fingerprint engine's body cap; /api/tags responses are tiny.
-func getJSON(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return body, nil
 }
 
 func sanitizeFilename(s string) string {
