@@ -434,7 +434,7 @@ export function FindingsListPage() {
         <table className="w-full table-fixed border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-black/20">
-              <th className="w-12 px-2 py-2 text-right">
+              <th className="w-12 px-2 py-2 text-center">
                 <input
                   type="checkbox"
                   ref={(el) => {
@@ -446,11 +446,11 @@ export function FindingsListPage() {
                   aria-label="Select all"
                 />
               </th>
-              <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} className="w-[108px]" />
-              <Th>Finding</Th>
-              <Th className="w-[280px]">Flow</Th>
-              <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} className="w-[172px]" />
-              <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="w-[108px] text-right" />
+              <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} className="w-[108px] text-center" />
+              <Th className="text-center">Finding</Th>
+              <Th className="w-[280px] text-center">Flow</Th>
+              <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} className="w-[172px] text-center" />
+              <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="w-[80px] text-center" />
             </tr>
           </thead>
           <tbody>
@@ -959,13 +959,17 @@ function FacetSeg({
 }
 
 function Th({ children, className }: { children: ReactNode; className?: string }) {
-  const rightAlign = className?.includes("text-right");
+  const align = className?.includes("text-right")
+    ? "justify-end"
+    : className?.includes("text-center")
+      ? "justify-center"
+      : "justify-start";
   return (
     <th className={cn("px-3 py-2 align-middle", className)}>
       <span
         className={cn(
           "flex h-4 items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
-          rightAlign && "justify-end",
+          align,
         )}
       >
         {children}
@@ -988,6 +992,12 @@ function SortHeader({
   className?: string;
 }) {
   const rightAlign = className?.includes("text-right");
+  const centerAlign = className?.includes("text-center");
+  const justify = rightAlign
+    ? "justify-end"
+    : centerAlign
+      ? "justify-center"
+      : "justify-start";
   return (
     <th className={cn("px-3 py-2 align-middle", className)}>
       <button
@@ -995,6 +1005,7 @@ function SortHeader({
         className={cn(
           "flex h-4 w-full items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
           active ? "text-primary" : "text-muted-foreground hover:text-foreground",
+          justify,
           rightAlign && "flex-row-reverse",
         )}
       >
@@ -1143,7 +1154,7 @@ function RowSelector({
 function ConfidencePips({ value }: { value: number }) {
   const v = Math.max(0, Math.min(100, value));
   return (
-    <span className="block text-right font-mono text-[13px] tabular-nums leading-none text-foreground">
+    <span className="block text-center font-mono text-[13px] tabular-nums leading-none text-foreground">
       {v}
       <span className="ml-0.5 text-[10px] text-muted-foreground/70">%</span>
     </span>
