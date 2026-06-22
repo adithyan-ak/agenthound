@@ -1140,7 +1140,7 @@ function RowSelector({
   );
 }
 
-function ConfidencePips({ value }: { value: number; color: string }) {
+function ConfidencePips({ value }: { value: number }) {
   const v = Math.max(0, Math.min(100, value));
   return (
     <span className="block text-right font-mono text-[13px] tabular-nums leading-none text-foreground">
@@ -1244,7 +1244,7 @@ function FindingRow({
         )}
       </td>
       <td className="px-2 py-3 align-middle">
-        <ConfidencePips value={conf} color={color} />
+        <ConfidencePips value={conf} />
       </td>
     </tr>
   );
