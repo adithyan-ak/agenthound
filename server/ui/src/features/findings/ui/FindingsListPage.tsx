@@ -28,8 +28,7 @@ import { buildFindingsTableMarkdown } from "../lib/copy-report";
 import { isEditableTarget } from "@shared/lib";
 import { Skeleton } from "@shared/ui/primitives/skeleton";
 import { MiniHexIcon } from "./MiniHexIcon";
-import { TriageControl } from "./TriageControl";
-import { MeterBar, WidgetCard } from "@shared/ui/widgets";
+import { WidgetCard } from "@shared/ui/widgets";
 import { Sidebar } from "@shared/ui/layout";
 import { cn } from "@shared/lib/utils";
 import {
@@ -52,7 +51,7 @@ type GroupBy =
   | "edge_kind"
   | "triage";
 
-type SortKey = "severity" | "confidence" | "category" | "triage" | "title";
+type SortKey = "severity" | "confidence" | "category" | "title";
 type SortDir = "asc" | "desc";
 
 // Short labels — these now render as facet pills in the rail, not a <select>.
@@ -86,7 +85,6 @@ const DEFAULT_DIR: Record<SortKey, SortDir> = {
   severity: "asc",
   confidence: "desc",
   category: "asc",
-  triage: "asc",
   title: "asc",
 };
 
@@ -221,11 +219,6 @@ export function FindingsListPage() {
           break;
         case "title":
           r = a.title.localeCompare(b.title);
-          break;
-        case "triage":
-          r =
-            TRIAGE_ORDER.indexOf(statusOf(a.id)) -
-            TRIAGE_ORDER.indexOf(statusOf(b.id));
           break;
       }
       if (r === 0) r = b.confidence - a.confidence;
@@ -437,11 +430,11 @@ export function FindingsListPage() {
         </span>
       }
     >
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+      <div>
+        <table className="w-full table-fixed border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-black/20">
-              <th className="w-9 px-3 py-2">
+              <th className="w-12 px-2 py-2 text-right">
                 <input
                   type="checkbox"
                   ref={(el) => {
@@ -453,14 +446,11 @@ export function FindingsListPage() {
                   aria-label="Select all"
                 />
               </th>
-              <Th className="w-10 pr-2 text-right">#</Th>
-              <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} />
-              <SortHeader label="Triage" active={sort.key === "triage"} dir={sort.dir} onClick={() => setSortKey("triage")} />
+              <SortHeader label="Severity" active={sort.key === "severity"} dir={sort.dir} onClick={() => setSortKey("severity")} className="w-[108px]" />
               <Th>Finding</Th>
-              <Th>Flow</Th>
-              <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} />
-              <Th>OWASP</Th>
-              <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="text-right" />
+              <Th className="w-[280px]">Flow</Th>
+              <SortHeader label="Category" active={sort.key === "category"} dir={sort.dir} onClick={() => setSortKey("category")} className="w-[172px]" />
+              <SortHeader label="Confidence" active={sort.key === "confidence"} dir={sort.dir} onClick={() => setSortKey("confidence")} className="w-[108px] text-right" />
             </tr>
           </thead>
           <tbody>
@@ -560,8 +550,8 @@ export function FindingsListPage() {
         <Sidebar
           className="items-start"
           sidePosition="left"
-          sideWidth={railOpen ? "14.5rem" : "2.75rem"}
-          contentMin="55%"
+          sideWidth={railOpen ? "11.5rem" : "2.75rem"}
+          contentMin="70%"
           gap="0.75rem"
           side={
             railOpen ? (
@@ -969,14 +959,17 @@ function FacetSeg({
 }
 
 function Th({ children, className }: { children: ReactNode; className?: string }) {
+  const rightAlign = className?.includes("text-right");
   return (
-    <th
-      className={cn(
-        "px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
-        className,
-      )}
-    >
-      {children}
+    <th className={cn("px-3 py-2 align-middle", className)}>
+      <span
+        className={cn(
+          "flex h-4 items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
+          rightAlign && "justify-end",
+        )}
+      >
+        {children}
+      </span>
     </th>
   );
 }
@@ -994,14 +987,15 @@ function SortHeader({
   onClick: () => void;
   className?: string;
 }) {
+  const rightAlign = className?.includes("text-right");
   return (
-    <th className={cn("px-3 py-2", className)}>
+    <th className={cn("px-3 py-2 align-middle", className)}>
       <button
         onClick={onClick}
         className={cn(
-          "inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
+          "flex h-4 w-full items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
           active ? "text-primary" : "text-muted-foreground hover:text-foreground",
-          className?.includes("text-right") && "flex-row-reverse",
+          rightAlign && "flex-row-reverse",
         )}
       >
         {label}
@@ -1045,7 +1039,7 @@ function GroupSection({
   return (
     <>
       <tr className="border-b border-border/60 bg-black/30">
-        <td colSpan={9} className="px-3 py-1.5" style={{ boxShadow: `inset 2px 0 0 0 ${color}` }}>
+        <td colSpan={6} className="px-3 py-1.5" style={{ boxShadow: `inset 2px 0 0 0 ${color}` }}>
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
             {display}
           </span>
@@ -1093,6 +1087,69 @@ function BulkStatusMenu({ onPick }: { onPick: (s: TriageStatus) => void }) {
   );
 }
 
+// Combined index / checkbox cell. Default state shows the row number;
+// hovering the row or selecting it swaps in the checkbox affordance, with the
+// selected state showing a filled tick.
+function RowSelector({
+  index,
+  selected,
+  onToggle,
+  title,
+}: {
+  index: number;
+  selected: boolean;
+  onToggle: () => void;
+  title: string;
+}) {
+  return (
+    <label
+      className="relative flex h-6 w-8 cursor-pointer items-center justify-center"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggle}
+        className="peer sr-only"
+        aria-label={`Select ${title}`}
+      />
+      {/* Number — visible by default; hidden on row-hover or when selected */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-0 flex items-center justify-center font-mono text-[10px] tabular-nums text-muted-foreground/60 transition-opacity",
+          "group-hover:opacity-0",
+          selected && "opacity-0",
+        )}
+      >
+        {pad2(index + 1)}
+      </span>
+      {/* Box — fades in on row-hover or when selected */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border transition-opacity",
+          selected
+            ? "border-primary bg-primary opacity-100"
+            : "border-border bg-black/30 opacity-0 group-hover:opacity-100 peer-focus-visible:opacity-100",
+        )}
+      >
+        {selected && <Check className="h-2.5 w-2.5 text-black" strokeWidth={3} />}
+      </span>
+    </label>
+  );
+}
+
+function ConfidencePips({ value }: { value: number; color: string }) {
+  const v = Math.max(0, Math.min(100, value));
+  return (
+    <span className="block text-right font-mono text-[13px] tabular-nums leading-none text-foreground">
+      {v}
+      <span className="ml-0.5 text-[10px] text-muted-foreground/70">%</span>
+    </span>
+  );
+}
+
 function FindingRow({
   index,
   finding: f,
@@ -1120,27 +1177,23 @@ function FindingRow({
       ref={rowRef}
       onClick={onClick}
       className={cn(
-        "cursor-pointer border-b border-border/60 transition-colors last:border-0",
+        "group cursor-pointer border-b border-border/60 transition-colors last:border-0",
         highlighted ? "bg-primary/[0.07]" : "hover:bg-white/[0.03]",
         selected && "bg-primary/[0.05]",
       )}
     >
-      <td className="px-3 py-3 align-middle" onClick={(e) => e.stopPropagation()}>
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          className="check-tac"
-          aria-label={`Select ${f.title}`}
+      <td
+        className="px-2 py-3 align-middle"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <RowSelector
+          index={index}
+          selected={selected}
+          onToggle={onToggleSelect}
+          title={f.title}
         />
       </td>
-      <td
-        className="px-3 py-3 text-right align-middle font-mono text-[10px] tabular-nums text-muted-foreground/60"
-        style={{ boxShadow: `inset 2px 0 0 0 ${color}` }}
-      >
-        {pad2(index + 1)}
-      </td>
-      <td className="px-3 py-3 align-middle">
+      <td className="px-2 py-3 align-middle">
         <span className="inline-flex items-center gap-1.5">
           <span
             className="h-2.5 w-2.5 rounded-[1px]"
@@ -1154,24 +1207,17 @@ function FindingRow({
           </span>
         </span>
       </td>
-      <td className="px-3 py-3 align-middle">
-        <TriageControl
-          findingId={f.id}
-          status={(f.triage?.status as TriageStatus) ?? "new"}
-          compact
-        />
-      </td>
-      <td className="max-w-sm px-3 py-3 align-middle">
+      <td className="px-2 py-3 align-middle">
         <p className="truncate text-[13px] font-medium text-foreground">{f.title}</p>
-        <p className="truncate text-xs text-muted-foreground">{f.description}</p>
+        <p className="truncate text-[12px] text-muted-foreground">{f.description}</p>
       </td>
-      <td className="px-3 py-3 align-middle">
+      <td className="px-2 py-3 align-middle">
         <div className="flex items-center gap-1.5 font-mono text-[11px]">
           <MiniHexIcon kind={f.source_kind} />
-          <span className="max-w-[100px] truncate text-foreground/80">{f.source_name}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground/80">{f.source_name}</span>
           <ArrowRight className="h-3 w-3 shrink-0 text-primary/50" />
           <MiniHexIcon kind={f.target_kind} />
-          <span className="max-w-[100px] truncate text-foreground/80">{f.target_name}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground/80">{f.target_name}</span>
           {crossProtocol && (
             <span
               className="ml-1 rounded-[2px] bg-purple-500/15 px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.06em] text-purple-300"
@@ -1182,28 +1228,23 @@ function FindingRow({
           )}
         </div>
       </td>
-      <td className="px-3 py-3 align-middle">
-        <span className="font-mono text-[11px] text-muted-foreground">{f.category}</span>
+      <td className="px-2 py-3 align-middle">
+        <p className="truncate text-[12px] text-foreground/80">{f.category}</p>
+        {(f.owasp_map?.length ?? 0) > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {(f.owasp_map ?? []).map((tag) => (
+              <span
+                key={tag}
+                className="rounded-[2px] border border-border bg-black/40 px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted-foreground"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </td>
-      <td className="px-3 py-3 align-middle">
-        <div className="flex flex-wrap gap-1">
-          {(f.owasp_map ?? []).map((tag) => (
-            <span
-              key={tag}
-              className="rounded-[2px] border border-border bg-black/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-muted-foreground"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      </td>
-      <td className="px-3 py-3 align-middle">
-        <div className="flex items-center justify-end gap-2">
-          <MeterBar value={conf} max={100} color={color} height={4} className="w-14" />
-          <span className="w-9 text-right font-mono text-[11px] font-semibold tabular-nums text-foreground">
-            {conf}%
-          </span>
-        </div>
+      <td className="px-2 py-3 align-middle">
+        <ConfidencePips value={conf} color={color} />
       </td>
     </tr>
   );
