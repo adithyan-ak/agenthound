@@ -6,76 +6,58 @@ Get AgentHound running the full offensive chain (scan, discover, loot, poison, r
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | Build from source |
-| Docker + Compose | v2+ | Infrastructure (Neo4j, Postgres, server) |
-| Neo4j | 4.4+ Community | Graph database (provided via Docker) |
-| PostgreSQL | 16+ | Scan history (provided via Docker) |
+| Docker + Compose | v2+ | Runs the analysis server stack (Neo4j + Postgres + UI) |
 
-You also need at least one MCP client configured (Claude Desktop, Cursor, VS Code, etc.) for the config scan to find anything interesting.
+The collector is a single static binary (no Go needed). The server runs from a pre-built image (no source checkout, no `make build`). You also need at least one MCP client configured (Claude Desktop, Cursor, VS Code, etc.) for the config scan to find anything interesting.
 
-## 1. Install
+For contributor / source-build paths see [Installation](./install.md).
 
-Three options — pick one.
-
-**From source (recommended for development):**
+## 1. Start the Analysis Server
 
 ```bash
-git clone https://github.com/adithyan-ak/agenthound.git
-cd agenthound
-make build
-# Binaries: bin/agenthound (collector) and bin/agenthound-server (analysis)
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml \
+  | docker compose -f - -p agenthound up -d
 ```
 
-**Via `go install`:**
+Pulls `neo4j:4.4-community`, `postgres:16-alpine`, and `ghcr.io/adithyan-ak/agenthound-server:latest`. Neo4j initializes on first boot — ~30-60s. Confirm health:
 
 ```bash
-go install github.com/adithyan-ak/agenthound/collector/cmd/agenthound@latest
-go install github.com/adithyan-ak/agenthound/server/cmd/agenthound-server@latest
+docker compose -p agenthound ps
 ```
 
-**Docker only (no local Go required):**
+The server binds `127.0.0.1:8080`. No application-layer auth; mutating endpoints are gated by an `Origin` allowlist (`OriginGuard`) — browser CSRF is rejected, non-browser callers (curl, the agenthound CLI, cron) pass through. Protect with VPN/SSH tunnel if you need remote access.
+
+## 2. Install the Collector
 
 ```bash
-git clone https://github.com/adithyan-ak/agenthound.git
-cd agenthound
-docker compose -f docker/docker-compose.yml up -d --build
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
 ```
 
-## 2. Start the Analysis Server
-
-The server needs Neo4j and Postgres. Docker Compose handles both:
+Verifies checksums (and cosign signature when cosign is on `$PATH`), installs to `~/.local/bin/agenthound`. Confirm:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+agenthound --version
 ```
 
-Wait for all services to report healthy:
+## 3. Run Your First Scan and Ingest
+
+The config scan is offline and safe. It parses all 12 supported MCP client config formats on the local machine and reports trust relationships, credentials, and instruction files. Stream straight into the running server in one pipe:
 
 ```bash
-docker compose -f docker/docker-compose.yml ps
+agenthound scan --config --output - \
+  | curl --data-binary @- -H "Content-Type: application/json" \
+         http://127.0.0.1:8080/api/v1/ingest
 ```
 
-This starts Neo4j (bolt://localhost:7687), PostgreSQL (localhost:5432), and the AgentHound server on `127.0.0.1:8080`. The server binds loopback-only; there is no application-layer auth. Protect with VPN/SSH tunnel if you need remote access.
-
-## 3. Run Your First Scan (Config Discovery)
-
-The config scan is offline and safe. It parses all 12 supported MCP client config formats on the local machine and reports trust relationships, credentials, and instruction files:
+Or write to disk and ingest in two steps:
 
 ```bash
 agenthound scan --config
+curl --data-binary @scan-*.json -H "Content-Type: application/json" \
+  http://127.0.0.1:8080/api/v1/ingest
 ```
 
-Output lands at `./scan-<scan_id>.json` in the current directory. Ingest it into the graph:
-
-```bash
-agenthound-server ingest scan-*.json
-```
-
-Or pipe directly without writing to disk:
-
-```bash
-agenthound scan --config --output - | agenthound-server ingest -
-```
+Drag-drop a `scan-*.json` into the UI's Scan Manager also works — same endpoint.
 
 ## 4. Run a Network Scan
 
