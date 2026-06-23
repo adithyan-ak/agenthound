@@ -16,10 +16,10 @@ For contributor / source-build paths see [Installation](./install.md).
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml \
-  | docker compose -f - -p agenthound up -d
+  | docker compose -f - -p agenthound up -d --wait
 ```
 
-Pulls `neo4j:4.4-community`, `postgres:16-alpine`, and `ghcr.io/adithyan-ak/agenthound-server:latest`. Neo4j initializes on first boot — ~30-60s. Confirm health:
+Pulls `neo4j:4.4-community`, `postgres:16-alpine`, and `ghcr.io/adithyan-ak/agenthound-server:latest`, then blocks until every healthcheck (Neo4j, Postgres, and the AgentHound server itself) reports healthy — first boot is ~30-60s while Neo4j initializes. To inspect state manually:
 
 ```bash
 docker compose -p agenthound ps
@@ -50,11 +50,14 @@ agenthound scan --config --output - \
          http://127.0.0.1:8080/api/v1/ingest
 ```
 
-Or write to disk and ingest in two steps:
+Or write to disk and ingest in two steps. The collector prints the
+exact filename (`./scan-<scan_id>.json`); use that, not a glob, since
+later scans accumulate alongside it:
 
 ```bash
-agenthound scan --config
-curl --data-binary @scan-*.json -H "Content-Type: application/json" \
+agenthound scan --config                     # prints ./scan-<scan_id>.json
+curl --data-binary @./scan-<scan_id>.json \
+  -H "Content-Type: application/json" \
   http://127.0.0.1:8080/api/v1/ingest
 ```
 
@@ -91,10 +94,13 @@ agenthound discover 10.0.0.0/24 --mcp          # MCP only (ports 3000,8000,8080,
 agenthound discover 10.0.0.0/24 --a2a          # A2A only (ports 80,443,3000,8080)
 ```
 
-Ingest the result the same way:
+Ingest the result the same way (stream form, or curl the file the
+collector wrote):
 
 ```bash
-agenthound-server ingest discover-*.json
+agenthound discover 10.0.0.0/24 --output - \
+  | curl --data-binary @- -H "Content-Type: application/json" \
+         http://127.0.0.1:8080/api/v1/ingest
 ```
 
 ## 6. Loot a Service
@@ -118,10 +124,13 @@ agenthound loot 172.30.0.10:11434 --type ollama \
     --output loot-ollama.json
 ```
 
-Ingest the loot envelope to surface credential-chain findings in the graph:
+Ingest the loot envelope to surface credential-chain findings in the
+graph (point curl at the file the collector wrote):
 
 ```bash
-agenthound-server ingest loot-ollama.json
+curl --data-binary @./loot-ollama.json \
+  -H "Content-Type: application/json" \
+  http://127.0.0.1:8080/api/v1/ingest
 ```
 
 ## 7. Explore Findings
@@ -134,27 +143,25 @@ agenthound-server ingest loot-ollama.json
 - **Query Library** -- 19 pre-built security queries mapped to OWASP MCP/Agentic Top 10
 - **Scan Manager** -- history, drag-drop import
 
-**CLI queries:**
+**HTTP queries (no extra install):**
 
 ```bash
-# All findings
-agenthound-server query --findings
-
-# Critical findings only
-agenthound-server query --findings --severity critical
-
 # Pre-built query (agents with shell access)
-agenthound-server query --prebuilt agents-shell-access
+curl http://127.0.0.1:8080/api/v1/analysis/prebuilt/agents-shell-access
 
 # Cross-protocol paths (MCP-to-A2A boundary traversal)
-agenthound-server query --prebuilt cross-protocol-paths
+curl http://127.0.0.1:8080/api/v1/analysis/prebuilt/cross-protocol-paths
 
-# Credential chain (LiteLLM master key reuse)
-agenthound-server query --prebuilt credential-chain
+# Findings (filter by severity)
+curl 'http://127.0.0.1:8080/api/v1/analysis/findings?severity=critical'
 
-# Raw Cypher
-agenthound-server query "MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s) RETURN a.name, s.name"
+# Raw Cypher (OriginGuard admits no-Origin callers)
+curl -H "Content-Type: application/json" \
+  --data '{"cypher":"MATCH (a:AgentInstance)-[:TRUSTS_SERVER]->(s) RETURN a.name, s.name"}' \
+  http://127.0.0.1:8080/api/v1/query
 ```
+
+If you have `agenthound-server` installed locally (Homebrew / `go install` / source build), the equivalent CLI is `agenthound-server query --findings` / `--prebuilt <id>` / raw Cypher as a positional arg — see [CLI reference](../reference/cli.md).
 
 ## 8. Poison and Revert (Advanced -- Destructive)
 

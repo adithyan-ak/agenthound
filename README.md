@@ -107,9 +107,11 @@ See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and
 Prerequisites: Docker + Compose v2. No Go, no Node.js, no `git clone` — the server runs from a pre-built image and the collector is a single static binary.
 
 ```bash
-# 1. Start the analysis server (Neo4j + Postgres + UI, binds 127.0.0.1:8080)
+# 1. Start the analysis server (Neo4j + Postgres + UI, binds 127.0.0.1:8080).
+#    --wait blocks until the healthcheck reports ready, so step 3 below
+#    can pipe in immediately without racing the server.
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml \
-  | docker compose -f - -p agenthound up -d
+  | docker compose -f - -p agenthound up -d --wait
 
 # 2. Install the collector (single static binary, ~9 MiB → ~/.local/bin)
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
@@ -130,7 +132,7 @@ No tokens, no logins, no drag-drop. The server admits non-browser callers (curl,
 <summary><strong>Other install and ingest options</strong></summary>
 
 ```bash
-# Drag-drop a scan file into the UI's Scan Manager (zero CLI)
+# Drag-drop a scan file into the UI's Scan Manager (zero-CLI ingest)
 agenthound scan --config
 open http://127.0.0.1:8080   # then drop scan-*.json into the Scan Manager
 
