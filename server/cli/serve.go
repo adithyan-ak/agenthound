@@ -3,14 +3,15 @@ package cli
 import (
 	"context"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/rules"
 	"github.com/adithyan-ak/agenthound/server/internal/api"
-	apimw "github.com/adithyan-ak/agenthound/server/internal/api/middleware"
 	"github.com/spf13/cobra"
 )
 
@@ -32,14 +33,12 @@ var serveCmd = &cobra.Command{
 			slog.Warn("failed to load rules engine, rules API will return empty", "error", err)
 		}
 
-		// LocalToken gates all mutating endpoints. Generated on first
-		// run, persisted at ~/.agenthound/server.token (override with
-		// AGENTHOUND_TOKEN_PATH). The UI fetches it from
-		// /api/v1/auth/local-token.
-		localToken, err := apimw.NewLocalToken("")
-		if err != nil {
-			return err
-		}
+		// Warn loudly if the bind address isn't loopback. The server has
+		// no application-layer auth; OriginGuard's CSRF protection
+		// assumes the only callers reaching loopback are the operator.
+		// Binding 0.0.0.0 exposes mutating endpoints to anyone who can
+		// spoof an Origin header (trivial for a LAN attacker).
+		warnIfNonLoopbackBind(cfg.Bind)
 
 		server := api.NewServer(api.ServerDeps{
 			GraphDB:      infra.GraphDB,
@@ -50,7 +49,6 @@ var serveCmd = &cobra.Command{
 			FindingStore: infra.FindingStore,
 			RulesEngine:  rulesEngine,
 			CORSOrigins:  cfg.CORSOrigins,
-			LocalToken:   localToken,
 		})
 
 		errCh := make(chan error, 1)
@@ -75,4 +73,25 @@ var serveCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
+}
+
+// warnIfNonLoopbackBind emits a warning when the configured bind host
+// is not in 127.0.0.0/8 (or the literal "localhost"). Loopback binds
+// are the only deployment the threat model defends; remote access
+// should go through VPN / SSH tunnel / reverse proxy with mTLS.
+func warnIfNonLoopbackBind(bind string) {
+	host, _, err := net.SplitHostPort(bind)
+	if err != nil {
+		return // invalid bind is handled elsewhere
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "localhost" || host == "" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	slog.Warn("non-loopback bind: OriginGuard alone is insufficient against LAN attackers",
+		"bind", bind,
+		"guidance", "place behind VPN, SSH tunnel, or reverse proxy with mTLS")
 }

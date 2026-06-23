@@ -104,45 +104,52 @@ See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and
 
 ## Quick Start
 
-Prerequisites: Docker + Compose v2. For source builds, also install Go 1.25+ and Node.js 20+.
+Prerequisites: Docker + Compose v2. No Go, no Node.js, no `git clone` — the server runs from a pre-built image and the collector is a single static binary.
 
 ```bash
-# Start the local analysis stack
-git clone https://github.com/adithyan-ak/agenthound.git
-cd agenthound
-docker compose -f docker/docker-compose.yml up -d --build
+# 1. Start the analysis server (Neo4j + Postgres + UI, binds 127.0.0.1:8080)
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml \
+  | docker compose -f - -p agenthound up -d
 
-# Build both binaries
-make build
+# 2. Install the collector (single static binary, ~9 MiB)
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
 
-# Run a read-only local config scan, ingest it, and open the graph
-bin/agenthound scan --config
-bin/agenthound-server ingest scan-*.json
+# 3. Scan and stream straight into the running server
+agenthound scan --config --output - \
+  | curl --data-binary @- -H "Content-Type: application/json" \
+         http://127.0.0.1:8080/api/v1/ingest
+
+# 4. Open the UI
 open http://127.0.0.1:8080
 ```
 
-The UI runs at [`http://127.0.0.1:8080`](http://127.0.0.1:8080).
+No tokens, no logins, no drag-drop. The server admits non-browser callers (curl, the agenthound CLI, cron) and rejects cross-origin POSTs from your browser. Single-user, localhost-only — see [security model](docs/operator/security.md).
 
 <details>
 <summary><strong>Other install and ingest options</strong></summary>
 
 ```bash
-# Stream a scan directly into the server
-bin/agenthound scan --config --output - | bin/agenthound-server ingest -
+# Drag-drop a scan file into the UI's Scan Manager (zero CLI)
+agenthound scan --config
+open http://127.0.0.1:8080   # then drop scan-*.json into the Scan Manager
+
+# Build from source (requires Go 1.25+ and Node.js 20+)
+git clone https://github.com/adithyan-ak/agenthound.git && cd agenthound
+docker compose -f docker/docker-compose.yml up -d --build   # builds server image locally
+make build                                                  # bin/agenthound + bin/agenthound-server
 
 # Install the collector with Go
 go install github.com/adithyan-ak/agenthound/collector/cmd/agenthound@latest
 
-# Install and start the server with Go
+# Install and start the server with Go (skips Docker entirely; you supply Neo4j + Postgres)
 go install github.com/adithyan-ak/agenthound/server/cmd/agenthound-server@latest
 agenthound-server serve
 
-# Install from a pinned release tag.
-# The installer verifies checksums and uses cosign when available.
+# Pin install.sh to a release tag (verifies checksums; uses cosign when available)
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v<VERSION>/install.sh | sh
 ```
 
-See the full [installation guide](https://docs.agenthound.io/getting-started/install/) for release binaries, verification, Docker images, and source builds.
+See the full [installation guide](https://docs.agenthound.io/getting-started/install/) for Homebrew, release binaries, signature verification, and source builds.
 
 </details>
 
