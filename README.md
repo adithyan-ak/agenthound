@@ -51,56 +51,50 @@ Which agents can read sensitive data and send it outbound?
 
 That is the BloodHound idea applied to AI-agent infrastructure.
 
-## Path Primitives
-
-AgentHound does not just list findings. It creates graph edges you can chain, query, and report:
-
-- **`CAN_REACH`**: an agent can traverse trust, credential, host, or protocol relationships to reach a target.
-- **`CAN_EXECUTE`**: an agent can reach a tool capable of command, database, network, or code execution.
-- **`CAN_EXFILTRATE_VIA`**: an agent can read sensitive data and send it through an outbound channel.
-- **`CAN_IMPERSONATE`**: an agent or identity can act as another trust principal.
-- **`SHADOWS`**: a tool mimics a trusted tool closely enough to hijack expected behavior.
-- **`POISONED_DESCRIPTION` / `POISONED_INSTRUCTIONS`**: tool or instruction text contains model-steering content.
-
-These edges turn AI-agent infrastructure into something you can pathfind instead of manually reason about.
-
-## Example Path
+## How It Works
 
 ```mermaid
 flowchart LR
-  Agent["AgentInstance<br/>claude-desktop"]
-  Notes["MCPServer<br/>internal-notes"]
-  Cred["Credential<br/>value_hash: a3f9..."]
-  Gateway["LiteLLMGateway<br/>prod"]
-  Providers["LLM providers<br/>OpenAI / Anthropic / Bedrock"]
+ subgraph Field["Field / scanned environment"]
+ Config["Local configs"]
+ MCP["MCP servers"]
+ A2A["A2A agents"]
+ Services["AI services"]
+ Collector["agenthound collector"]
+ end
 
-  Agent -- TRUSTS_SERVER --> Notes
-  Notes -- HAS_ENV_VAR --> Cred
-  Gateway -- EXPOSES_CREDENTIAL --> Cred
-  Agent -- CAN_REACH --> Gateway
-  Gateway -- PROVIDES_MODEL --> Providers
+ subgraph Operator["Operator workstation"]
+ JSON["Scan JSON"]
+ Ingest["Ingest"]
+ Neo4j[("Neo4j")]
+ Postgres[("PostgreSQL")]
+ Analyze["Post-processors<br/>Risk scoring"]
+ API["REST API"]
+ UI["Graph UI"]
+ end
+
+ Config --> Collector
+ MCP --> Collector
+ A2A --> Collector
+ Services --> Collector
+ Collector --> JSON
+ JSON --> Ingest
+ Ingest --> Neo4j
+ Ingest --> Postgres
+ Neo4j --> Analyze
+ Analyze --> API
+ Analyze --> UI
 ```
 
-No single config file declares this path. AgentHound computes it once collector output lands in the same graph.
+The collector stays small and portable: no Neo4j driver, no PostgreSQL client, no UI, and no server dependencies. It writes JSON and exits. The server owns ingestion, deduplication, graph writes, post-processing, query APIs, and visualization.
 
-## What AgentHound Finds
+AgentHound's graph model includes agents, MCP servers, tools, resources, prompts, credentials, hosts, config files, instruction files, A2A agents, AI-service nodes, and model nodes. Composite edges such as `CAN_REACH`, `CAN_EXECUTE`, `CAN_EXFILTRATE_VIA`, `CAN_IMPERSONATE`, `SHADOWS`, `POISONED_DESCRIPTION`, and `POISONED_INSTRUCTIONS` are computed after ingest.
 
-AgentHound's detections are built around the questions security teams ask when they need to understand reachability, blast radius, and pathing risk.
+Read the full schema in the [graph model reference](https://docs.agenthound.io/reference/graph-model/).
 
-| Finding | What it means | Security question |
-|---|---|---|
-| **Credential-chain paths** | The same secret appears in multiple contexts, letting trust cross service boundaries. | Which reused credential gives an agent access it never explicitly had? |
-| **Reachability** | Agents, MCP servers, tools, resources, prompts, A2A skills, and AI services are joined into one graph. | What can this agent actually reach if trust edges are followed? |
-| **Execution paths** | An agent can reach shell-like, database, network, or other high-impact tools. | Which agents have a path to command execution, data-plane control, or production impact? |
-| **Exfiltration paths** | An agent can read sensitive data and also reach an outbound channel. | Where can sensitive data leave the environment? |
-| **Cross-protocol pivots** | MCP, A2A, host context, and AI-service infrastructure combine into one reachable path. | Can one agent protocol become a bridge into another trust domain? |
-| **Tool poisoning** | Tool descriptions, prompts, or instruction files contain suspicious model-steering content. | Which tools or instructions could influence model behavior in unsafe ways? |
-| **Tool shadowing** | A lookalike tool mimics a trusted capability or name. | Which tool could intercept or hijack an expected action? |
-| **Rug pulls** | A tool's description changed between scans. | What changed since the last known-good graph, and did it create a new risk path? |
-| **Unauthenticated servers or agents** | MCP servers or A2A agents are reachable without expected authentication. | Which exposed agent surfaces need immediate review? |
-| **Risk hotspots** | Nodes and paths are prioritized with risk scores and prebuilt graph queries. | Where should investigation or remediation start first? |
-
-See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and [Risk Scoring](https://docs.agenthound.io/reference/risk-scoring/) for the full catalog.
+<p align="center">
+  <img src="docs/readme-assets/agenthound-dashboard.png" alt="AgentHound graph explorer dashboard" width="900">
+</p>
 
 ## Quick Start
 
@@ -166,50 +160,91 @@ See the full [installation guide](https://docs.agenthound.io/getting-started/ins
 
 </details>
 
-## How It Works
+## Recon to Report
+
+One binary runs the whole attack-path lifecycle. Every stage emits the same ingest envelope, so results land in the same graph. Active verbs (`loot`, `poison`, `implant`) require an interactive `AUTHORIZED` confirmation; `poison` and `implant` are dry-run until `--commit` and are undone by `agenthound revert` — see [Responsible Use & Security Posture](#responsible-use--security-posture).
+
+**1. Recon** — find the surface:
+
+```bash
+agenthound scan 10.0.0.0/24
+agenthound discover 10.0.0.0/24 --mcp
+```
+
+**2. Loot** — pull latent credentials, read-only (GET/HEAD):
+
+```bash
+agenthound loot 172.30.0.20:4000 --type litellm --master-key sk-... --engagement-id RTV --output -
+```
+
+Looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`.
+
+**3. Exploit** — sanctioned, reversible offensive actions:
+
+```bash
+agenthound poison 10.0.0.30:8080 --type mcp.tool.description --target-id support_lookup --inject "Ignore prior instructions." --engagement-id RTV --commit
+agenthound revert RTV
+```
+
+**4. Analyze** — pathfind and gate:
+
+```bash
+agenthound-server query --prebuilt credential-chain
+agenthound-server query --findings --fail-on critical
+```
+
+See the full [CLI reference](https://docs.agenthound.io/reference/cli/) for every verb, flag, and module.
+
+## What AgentHound Finds
+
+AgentHound's detections are built around the questions security teams ask when they need to understand reachability, blast radius, and pathing risk.
+
+| Finding | What it means | Security question |
+|---|---|---|
+| **Credential-chain paths** | The same secret appears in multiple contexts, letting trust cross service boundaries. | Which reused credential gives an agent access it never explicitly had? |
+| **Reachability** | Agents, MCP servers, tools, resources, prompts, A2A skills, and AI services are joined into one graph. | What can this agent actually reach if trust edges are followed? |
+| **Execution paths** | An agent can reach shell-like, database, network, or other high-impact tools. | Which agents have a path to command execution, data-plane control, or production impact? |
+| **Exfiltration paths** | An agent can read sensitive data and also reach an outbound channel. | Where can sensitive data leave the environment? |
+| **Cross-protocol pivots** | MCP, A2A, host context, and AI-service infrastructure combine into one reachable path. | Can one agent protocol become a bridge into another trust domain? |
+| **Tool poisoning** | Tool descriptions, prompts, or instruction files contain suspicious model-steering content. | Which tools or instructions could influence model behavior in unsafe ways? |
+| **Tool shadowing** | A lookalike tool mimics a trusted capability or name. | Which tool could intercept or hijack an expected action? |
+| **Rug pulls** | A tool's description changed between scans. | What changed since the last known-good graph, and did it create a new risk path? |
+| **Unauthenticated servers or agents** | MCP servers or A2A agents are reachable without expected authentication. | Which exposed agent surfaces need immediate review? |
+| **Risk hotspots** | Nodes and paths are prioritized with risk scores and prebuilt graph queries. | Where should investigation or remediation start first? |
+
+See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and [Risk Scoring](https://docs.agenthound.io/reference/risk-scoring/) for the full catalog.
+
+## Path Primitives
+
+AgentHound does not just list findings. It creates graph edges you can chain, query, and report:
+
+- **`CAN_REACH`**: an agent can traverse trust, credential, host, or protocol relationships to reach a target.
+- **`CAN_EXECUTE`**: an agent can reach a tool capable of command, database, network, or code execution.
+- **`CAN_EXFILTRATE_VIA`**: an agent can read sensitive data and send it through an outbound channel.
+- **`CAN_IMPERSONATE`**: an agent or identity can act as another trust principal.
+- **`SHADOWS`**: a tool mimics a trusted tool closely enough to hijack expected behavior.
+- **`POISONED_DESCRIPTION` / `POISONED_INSTRUCTIONS`**: tool or instruction text contains model-steering content.
+
+These edges turn AI-agent infrastructure into something you can pathfind instead of manually reason about.
+
+## Example Path
 
 ```mermaid
 flowchart LR
- subgraph Field["Field / scanned environment"]
- Config["Local configs"]
- MCP["MCP servers"]
- A2A["A2A agents"]
- Services["AI services"]
- Collector["agenthound collector"]
- end
+  Agent["AgentInstance<br/>claude-desktop"]
+  Notes["MCPServer<br/>internal-notes"]
+  Cred["Credential<br/>value_hash: a3f9..."]
+  Gateway["LiteLLMGateway<br/>prod"]
+  Providers["LLM providers<br/>OpenAI / Anthropic / Bedrock"]
 
- subgraph Operator["Operator workstation"]
- JSON["Scan JSON"]
- Ingest["Ingest"]
- Neo4j[("Neo4j")]
- Postgres[("PostgreSQL")]
- Analyze["Post-processors<br/>Risk scoring"]
- API["REST API"]
- UI["Graph UI"]
- end
-
- Config --> Collector
- MCP --> Collector
- A2A --> Collector
- Services --> Collector
- Collector --> JSON
- JSON --> Ingest
- Ingest --> Neo4j
- Ingest --> Postgres
- Neo4j --> Analyze
- Analyze --> API
- Analyze --> UI
+  Agent -- TRUSTS_SERVER --> Notes
+  Notes -- HAS_ENV_VAR --> Cred
+  Gateway -- EXPOSES_CREDENTIAL --> Cred
+  Agent -- CAN_REACH --> Gateway
+  Gateway -- PROVIDES_MODEL --> Providers
 ```
 
-The collector stays small and portable: no Neo4j driver, no PostgreSQL client, no UI, and no server dependencies. It writes JSON and exits. The server owns ingestion, deduplication, graph writes, post-processing, query APIs, and visualization.
-
-AgentHound's graph model includes agents, MCP servers, tools, resources, prompts, credentials, hosts, config files, instruction files, A2A agents, AI-service nodes, and model nodes. Composite edges such as `CAN_REACH`, `CAN_EXECUTE`, `CAN_EXFILTRATE_VIA`, `CAN_IMPERSONATE`, `SHADOWS`, `POISONED_DESCRIPTION`, and `POISONED_INSTRUCTIONS` are computed after ingest.
-
-Read the full schema in the [graph model reference](https://docs.agenthound.io/reference/graph-model/).
-
-<p align="center">
-  <img src="docs/readme-assets/agenthound-dashboard.png" alt="AgentHound graph explorer dashboard" width="900">
-</p>
+No single config file declares this path. AgentHound computes it once collector output lands in the same graph.
 
 ## Where It Fits
 
