@@ -60,6 +60,7 @@ brews:
   - repository:
       owner: adithyan-ak
       name: homebrew-agenthound
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     ids: [agenthound]
     name: agenthound
     description: "AgentHound — lean field collector for AI agent infrastructure"
@@ -72,6 +73,7 @@ brews:
   - repository:
       owner: adithyan-ak
       name: homebrew-agenthound
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     ids: [agenthound-server]
     name: agenthound-server
     description: "AgentHound — single-user server (Neo4j-backed graph + UI)"
