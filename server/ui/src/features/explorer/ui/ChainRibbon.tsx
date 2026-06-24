@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertOctagon, ArrowRight, ExternalLink, Shield } from "lucide-react";
+import { AlertOctagon, ArrowRight, ExternalLink } from "lucide-react";
 import { useExplorerGraph } from "@features/explorer/model/useExplorerGraph";
 import { useExplorerStore } from "@features/explorer/model/store";
 import {
   extractCriticalChains,
   type CriticalChain,
 } from "@features/explorer/model/critical-chains";
-import { SEVERITY, SIGNAL_OK } from "@shared/theme/tokens";
+import { SEVERITY } from "@shared/theme/tokens";
 import { cn } from "@shared/lib/utils";
 
 export function ChainRibbon() {
@@ -25,25 +25,9 @@ export function ChainRibbon() {
 
   if (activeLens !== "critical") return null;
 
-  if (chains.length === 0) {
-    return (
-      <div
-        className={cn(
-          "pointer-events-auto absolute bottom-9 left-1/2 z-20 -translate-x-1/2",
-          "overflow-hidden rounded-md border border-border bg-card/95 px-5 py-3 backdrop-blur-md elev-2",
-        )}
-        style={{ boxShadow: `inset 2px 0 0 0 ${SIGNAL_OK}` }}
-      >
-        <div
-          className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.06em]"
-          style={{ color: SIGNAL_OK }}
-        >
-          <Shield className="h-4 w-4" strokeWidth={2.25} />
-          <span>No critical attack paths detected in this scan.</span>
-        </div>
-      </div>
-    );
-  }
+  // A clean critical scan is rendered by the canvas' uniform empty-state
+  // overlay; the ribbon only appears when there are chains to list.
+  if (chains.length === 0) return null;
 
   return (
     <div
