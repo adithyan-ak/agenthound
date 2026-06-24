@@ -67,10 +67,18 @@ function LensPill({ lens, active, onClick }: LensPillProps) {
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <div className={pillClasses} style={pillStyle}>
         {isFiltered && (
-          <span
-            aria-hidden
-            title="Filtered — sub-presets differ from default"
-            className="pointer-events-none absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-card"
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSubPresets(lens.id, DEFAULT_SUB_PRESETS[lens.id] ?? []);
+            }}
+            title={`Filtered: showing ${subPresets.length} of ${lens.subPresets.length} relationship types. Click to reset to default.`}
+            aria-label={`${lens.label} relationships filtered — click to reset to default`}
+            className={cn(
+              "absolute -right-1 -top-1 z-10 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-card",
+              "transition-transform duration-150 hover:scale-125 focus-visible:scale-125 focus-visible:outline-none",
+            )}
           />
         )}
         <button onClick={onClick} className="flex items-center gap-1.5">

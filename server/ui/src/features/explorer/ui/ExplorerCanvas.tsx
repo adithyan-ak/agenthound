@@ -24,10 +24,13 @@ import type {
 } from "@features/explorer/model/graph";
 import type { ExplorerRawData } from "@features/explorer/model/useExplorerGraph";
 import { useEscapeKey } from "@shared/lib/useEscapeKey";
+import { ACCENT } from "@shared/theme/tokens";
+import { Hexagon } from "lucide-react";
 import { HexNode } from "./nodes/HexNode";
 import { OrphanClusterNode } from "./nodes/OrphanClusterNode";
 import { LensEdge } from "./edges/LensEdge";
 import { SelfLoopEdge } from "./edges/SelfLoopEdge";
+import { ExplorerEmptyState, getLensEmptyCopy } from "./ExplorerEmptyState";
 
 const nodeTypes = {
   hex: HexNode,
@@ -288,17 +291,14 @@ export function ExplorerCanvas({
 
   if (!isLoading && data && data.nodes.length === 0 && data.edges.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-explorer-canvas">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="text-4xl text-primary/60">&#x2B22;</div>
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
-            No graph data yet
-          </p>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            Run a scan or ingest collector output to populate the graph.
-          </p>
-        </div>
-      </div>
+      <ExplorerEmptyState
+        fill
+        icon={Hexagon}
+        accent={ACCENT}
+        eyebrow="No graph data"
+        title="Nothing ingested yet"
+        hint="Run a scan or ingest collector output to populate the graph."
+      />
     );
   }
 
@@ -313,40 +313,58 @@ export function ExplorerCanvas({
     );
   }
 
+  // The active lens filtered the graph down to nothing visible (a clean scan
+  // for the finding-driven lenses). Float a uniform, theme-matched verdict over
+  // the canvas — the dotted backdrop and any ghosted context still read behind
+  // it. Blast Radius never lands here: it shows every node until one is picked.
+  const lensEmpty =
+    built.metrics.visibleNodeCount === 0 &&
+    built.metrics.visibleEdgeCount === 0;
+  const emptyCopy = getLensEmptyCopy(activeLens);
+
   return (
-    <ReactFlow
-      nodes={displayNodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeClick={onNodeClick}
-      onEdgeClick={onEdgeClick}
-      onEdgeMouseMove={onEdgeMouseMove}
-      onEdgeMouseLeave={onEdgeMouseLeave}
-      onNodeContextMenu={onNodeContextMenu}
-      onPaneClick={onPaneClick}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      fitView
-      minZoom={0.08}
-      maxZoom={2.2}
-      proOptions={{ hideAttribution: true }}
-      defaultEdgeOptions={{ type: "lens" }}
-      onlyRenderVisibleElements
-      nodesDraggable={false}
-      nodesConnectable={false}
-    >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={20}
-        size={1.4}
-        color="hsl(215 25% 17%)"
-      />
-      <Controls
-        position="bottom-right"
-        showInteractive={false}
-        className="!overflow-hidden !rounded-md !border !border-border !bg-card !shadow-lg [&_.react-flow__controls-button]:!border-border [&_.react-flow__controls-button]:!bg-card [&_.react-flow__controls-button]:!fill-mauve-11 [&_.react-flow__controls-button:hover]:!bg-white/[0.06] [&_.react-flow__controls-button:hover]:!fill-foreground"
-      />
-    </ReactFlow>
+    <>
+      <ReactFlow
+        nodes={displayNodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
+        onEdgeMouseMove={onEdgeMouseMove}
+        onEdgeMouseLeave={onEdgeMouseLeave}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneClick={onPaneClick}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        minZoom={0.08}
+        maxZoom={2.2}
+        proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{ type: "lens" }}
+        onlyRenderVisibleElements
+        nodesDraggable={false}
+        nodesConnectable={false}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={20}
+          size={1.4}
+          color="hsl(215 25% 17%)"
+        />
+        <Controls
+          position="bottom-right"
+          showInteractive={false}
+          className="!overflow-hidden !rounded-md !border !border-border !bg-card !shadow-lg [&_.react-flow__controls-button]:!border-border [&_.react-flow__controls-button]:!bg-card [&_.react-flow__controls-button]:!fill-mauve-11 [&_.react-flow__controls-button:hover]:!bg-white/[0.06] [&_.react-flow__controls-button:hover]:!fill-foreground"
+        />
+      </ReactFlow>
+      {lensEmpty && (
+        <ExplorerEmptyState
+          eyebrow={emptyCopy.eyebrow}
+          title={emptyCopy.title}
+          hint={emptyCopy.hint}
+        />
+      )}
+    </>
   );
 }
