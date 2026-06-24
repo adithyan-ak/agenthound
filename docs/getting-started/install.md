@@ -87,7 +87,7 @@ Every release artifact is signed with cosign (keyless, GitHub Actions OIDC). Ver
 ```bash
 cosign verify-blob \
     --bundle agenthound_0.6.0_checksums.txt.sigstore.json \
-    --certificate-identity-regexp 'https://github.com/adithyan-ak/agenthound/.*' \
+    --certificate-identity-regexp 'https://github.com/adithyan-ak/AgentHound/.*' \
     --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
     agenthound_0.6.0_checksums.txt
 ```
