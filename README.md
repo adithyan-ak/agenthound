@@ -106,23 +106,33 @@ See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and
 
 Prerequisites: Docker + Compose v2. No Go, no Node.js, no `git clone` — the server runs from a pre-built image and the collector is a single static binary.
 
+**1. Start the analysis server** (Neo4j + Postgres + UI, binds `127.0.0.1:8080`). `--wait` blocks until the healthcheck is green, so step 3 can't race it:
+
 ```bash
-# 1. Start the analysis server (Neo4j + Postgres + UI, binds 127.0.0.1:8080).
-#    --wait blocks until the healthcheck reports ready, so step 3 below
-#    can pipe in immediately without racing the server.
-curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml \
-  | docker compose -f - -p agenthound up -d --wait
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/docker/docker-compose.public.yml | docker compose -f - -p agenthound up -d --wait
+```
 
-# 2. Install the collector (single static binary, ~9 MiB → ~/.local/bin)
+**2. Install the collector** (single static binary, ~9 MiB → `~/.local/bin`):
+
+```bash
 curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/main/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"     # add to ~/.zshrc or ~/.bashrc to persist
+```
 
-# 3. Scan and stream straight into the running server
-agenthound scan --config --output - \
-  | curl --data-binary @- -H "Content-Type: application/json" \
-         http://127.0.0.1:8080/api/v1/ingest
+Add it to your `PATH` for this session (persist by appending to `~/.zshrc` or `~/.bashrc`; fish users run `fish_add_path ~/.local/bin` instead):
 
-# 4. Open the UI
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+**3. Scan and stream straight into the running server:**
+
+```bash
+agenthound scan --config --output - | curl --data-binary @- -H "Content-Type: application/json" http://127.0.0.1:8080/api/v1/ingest
+```
+
+**4. Open the UI** at `http://127.0.0.1:8080` (`open` on macOS, `xdg-open` on Linux):
+
+```bash
 open http://127.0.0.1:8080
 ```
 
