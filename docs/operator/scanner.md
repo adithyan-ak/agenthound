@@ -72,6 +72,8 @@ Anything other than the literal string `AUTHORIZED` aborts with a non-zero exit.
 
 CIDRs larger than `/16` (IPv4) or `/112` (IPv6) require `--allow-large-cidr`. A typo like `10.0.0.0/8` (16 million hosts) without the override returns an explicit error explaining the cap. With the flag, the scanner enumerates without further prompting — the operator has already explicitly opted in.
 
+An **absolute host ceiling of 1,048,576** (exactly an IPv4 `/12` or IPv6 `/108`) applies *even with* `--allow-large-cidr`: the override raises the prefix gate but cannot request an unbounded enumeration. Specs above the ceiling — including a standard IPv6 `/64` or `0.0.0.0/0` — are refused outright before any allocation, because the host list is materialized in memory. Split very large ranges into chunks at or below the ceiling.
+
 ### 3. `--authorization-file` watermark
 
 Pass the path to a written-authorization document and the scanner records the path and the file's SHA-256 in the scan-output JSON's top-level `meta.extra.authorization` block:

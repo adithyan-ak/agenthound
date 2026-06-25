@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Network scanner hardening
+
+Fixes from a focused review of the network-level `scan` / `discover` path:
+
+- **`discover` MCP nodes now merge with the `mcp` / `config` collectors.** Protocol discovery preserves the matched JSON-RPC path (`/` vs `/mcp`) and derives the `:MCPServer` node ID via `ingest.ComputeMCPServerID` (the full, trailing-slash-normalized URL) instead of hashing a path-less base URL. Previously a server found by `discover` got a different deterministic ID than the same server from a config/MCP scan, producing duplicate `:MCPServer` nodes at the documented merge point. A root (`/`) match canonicalizes to the path-less `host:port` form; `/mcp` is preserved.
+- **Absolute host ceiling on CIDR expansion.** A hard cap of 1,048,576 hosts (exactly IPv4 `/12`, IPv6 `/108`) now applies *even with* `--allow-large-cidr`, so an override can no longer request an unbounded enumeration — a standard IPv6 `/64` or `0.0.0.0/0` previously walked toward OOM. Oversized specs are refused before any allocation.
+- **Network-mode probe timeout honors the intended 3s default.** The shared `--timeout` flag (120s, tuned for the legacy per-server MCP/A2A collectors) no longer silently overrides the per-TCP-connect-probe timeout; network mode falls back to `networkscan`'s 3s default unless `--timeout` is set explicitly.
+- **Targets files reject nested includes.** A `@file` / `file://` line *inside* a targets file is refused, preventing a self-referential or cyclic file from recursing through expansion until it exhausts memory / file descriptors.
+- Corrected a misleading comment on the `AUTHORIZED` prompt (it always prompts when `--allow-public-targets` is set and is fail-closed; it never skipped private specs as the comment claimed).
+
 ## v0.6.1
 
 Patch release. Repairs the release pipeline, hardens the collector installer, and polishes the Explorer UI.

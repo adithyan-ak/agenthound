@@ -243,14 +243,22 @@ func (s *Scanner) probeOne(ctx context.Context, host string, port int, protocol 
 	baseURL := fmt.Sprintf("%s://%s:%d", scheme, host, port)
 	switch protocol {
 	case "mcp":
-		if s.probeMCP(ctx, baseURL) {
+		if matchedPath, ok := s.probeMCP(ctx, baseURL); ok {
+			// Preserve the matched path so the emitted MCPServer endpoint
+			// (and thus its deterministic ID) matches what the mcp/config
+			// collectors hash via ingest.ComputeMCPServerID. Trim a lone
+			// trailing slash so a root ("/") match canonicalizes to the
+			// path-less host:port form those collectors use for a bare URL;
+			// "/mcp" is left intact. We only probe "/" and "/mcp", so the
+			// trim can never strip a real sub-path.
+			endpoint := strings.TrimSuffix(strings.TrimRight(baseURL, "/")+matchedPath, "/")
 			return action.Target{
 				Kind:    "host",
 				Address: fmt.Sprintf("%s:%d", host, port),
 				Meta: map[string]string{
 					"protocol": "mcp",
 					"scheme":   scheme,
-					"url":      baseURL,
+					"url":      endpoint,
 				},
 			}, true
 		}
@@ -274,9 +282,10 @@ func (s *Scanner) probeOne(ctx context.Context, host string, port int, protocol 
 }
 
 // probeMCP POSTs a JSON-RPC initialize at "/" and at "/mcp" (the two
-// most-common path conventions) and returns true on a canonical
-// {"jsonrpc":"2.0","id":1,"result":{...}} response shape.
-func (s *Scanner) probeMCP(ctx context.Context, baseURL string) bool {
+// most-common path conventions) and, on a canonical
+// {"jsonrpc":"2.0","id":1,"result":{...}} response shape, returns the
+// matched path and true. Returns ("", false) when no path matches.
+func (s *Scanner) probeMCP(ctx context.Context, baseURL string) (string, bool) {
 	payload, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -322,10 +331,10 @@ func (s *Scanner) probeMCP(ctx context.Context, baseURL string) bool {
 		}
 		if parsed.JSONRPC == "2.0" && parsed.Result != nil &&
 			(parsed.Result.ServerInfo != nil || parsed.Result.Capabilities != nil) {
-			return true
+			return path, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // probeA2A GETs /.well-known/agent-card.json and (on 404) the legacy
@@ -372,7 +381,11 @@ func EmitDiscoveryNodes(targets []action.Target) ingest.GraphData {
 	for _, t := range targets {
 		switch t.Meta["protocol"] {
 		case "mcp":
-			id := ingest.ComputeNodeID("MCPServer", "http", t.Meta["url"])
+			// Use the canonical MCPServer ID helper (full path-bearing URL)
+			// so protoscan-discovered servers merge with the mcp/config
+			// collectors at the documented merge point. t.Meta["url"] already
+			// carries the matched, trailing-slash-trimmed endpoint.
+			id := ingest.ComputeMCPServerID("http", t.Meta["url"])
 			out.Nodes = append(out.Nodes, ingest.Node{
 				ID:    id,
 				Kinds: []string{"MCPServer"},

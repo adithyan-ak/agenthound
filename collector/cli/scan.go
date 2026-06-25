@@ -247,6 +247,19 @@ func resolveScanConcurrency(scanConcurrency int, scanConcurrencyChanged bool, cf
 	return scanConcurrency
 }
 
+// resolveProbeTimeout picks the per-TCP-probe timeout for network mode. The
+// shared --timeout flag defaults to 120s, which is tuned for the legacy
+// per-server MCP/A2A HTTP collectors, NOT a per-connect probe. Applying it
+// verbatim would make networkscan's intended 3s default unreachable and stall
+// sweeps for minutes against drop-policy ports. So an explicit --timeout wins;
+// otherwise we fall back to networkscan.DefaultProbeTimeout.
+func resolveProbeTimeout(timeout time.Duration, timeoutChanged bool) time.Duration {
+	if timeoutChanged {
+		return timeout
+	}
+	return networkscan.DefaultProbeTimeout
+}
+
 // collectAll runs each enabled collector and merges its output. It returns
 // the merged envelope plus the count of enabled collectors and how many of
 // them failed, so the caller can decide the exit code (total failure → non-
@@ -399,9 +412,13 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	quiet := quietEnabled(cmd)
 
-	// AUTHORIZED prompt — required when --allow-public-targets is set, before
-	// any network IO. Skipped when the spec is a private/loopback host
-	// because the public guard wouldn't block it anyway.
+	// AUTHORIZED prompt — required whenever --allow-public-targets is set,
+	// before any network IO. This keys solely on the flag, NOT on the spec:
+	// it always prompts when the flag is present, even for a private/loopback
+	// spec. The prompt is a deliberate fail-closed speed-bump (empty/EOF stdin
+	// aborts); the real gate is Expand refusing public targets unless the flag
+	// is set. For non-interactive automation, do not pass --allow-public-targets
+	// for private scans — its only purpose is to authorize public IP space.
 	if allowPublic {
 		if err := requireAuthorizedPrompt(spec, cmd.OutOrStderr(), cmd.InOrStdin()); err != nil {
 			return err
@@ -453,9 +470,7 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 			AllowLargeCIDR:     allowLarge,
 			AllowPublicTargets: allowPublic,
 		}
-		if timeout > 0 {
-			ns.Timeout = timeout
-		}
+		ns.Timeout = resolveProbeTimeout(timeout, cmd.Flags().Changed("timeout"))
 		ns.Progress = reporter.update
 	}
 

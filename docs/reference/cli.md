@@ -84,7 +84,7 @@ At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain
 | `--ports` | `11434,8000,6333,5000,4000,8888,3000` | Override the default AI-service port set. |
 | `--network-scan-concurrency` | `256` | Max parallel TCP connect probes. |
 | `--allow-public-targets` | `false` | Allow scanning non-RFC1918 IPs. Requires interactive `AUTHORIZED` prompt. |
-| `--allow-large-cidr` | `false` | Allow CIDRs larger than /16 (IPv4) or /112 (IPv6). |
+| `--allow-large-cidr` | `false` | Allow CIDRs larger than /16 (IPv4) or /112 (IPv6), up to an absolute ceiling of 1,048,576 hosts (exactly /12 IPv4, /108 IPv6) that applies even with this flag. |
 | `--authorization-file` | | Path to a written-authorization document. Path + SHA-256 recorded in scan watermark. |
 | `--verbose` | `false` | List every discovered host (open ports + candidate kinds). Default is a one-line summary. |
 
@@ -97,7 +97,7 @@ By default network-mode `scan` prints a one-line summary (`N host(s) with at lea
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--scan-concurrency` | `5` | Max parallel connections (local mode). When not set explicitly, falls back to the root `--concurrency` / `AGENTHOUND_CONCURRENCY` value if that is positive. |
-| `--timeout` | `120s` | Timeout per server/agent. |
+| `--timeout` | `120s` | Timeout per server/agent (local MCP/A2A mode). In **network mode** this is the per-TCP-connect-probe timeout; when not set explicitly there it defaults to `3s`, not `120s`. |
 | `--insecure` | `false` | Skip TLS verification (both MCP and A2A). |
 | `--scan-output` | | Explicit output path (overrides `--output`). |
 
@@ -136,7 +136,7 @@ agenthound discover <cidr|host|@file> [flags]
 | `--timeout` | `5s` | Per-probe HTTP timeout. |
 | `--insecure` | `false` | Skip TLS verification on HTTPS probes. |
 | `--allow-public-targets` | `false` | Allow probing public IPs (requires `AUTHORIZED` prompt). |
-| `--allow-large-cidr` | `false` | Allow CIDRs larger than /16. |
+| `--allow-large-cidr` | `false` | Allow CIDRs larger than /16, up to the absolute 1,048,576-host ceiling (applies even with this flag). |
 | `--authorization-file` | | Written-authorization doc; recorded in watermark. |
 | `--scan-output` | | Output path (defaults to `./discover-<scan_id>.json`). |
 | `--verbose` | `false` | List every discovered endpoint (protocol + URL). Default is a one-line summary. |

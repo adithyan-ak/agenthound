@@ -3,6 +3,7 @@ package protoscan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -149,6 +150,74 @@ func TestEmitDiscoveryNodes_MCP(t *testing.T) {
 	if got, _ := n.Properties["discovered_via"].(string); got != "protoscan" {
 		t.Errorf("discovered_via = %q, want protoscan", got)
 	}
+}
+
+// mcpStubAtPath answers the JSON-RPC initialize ONLY at wantPath (404
+// elsewhere), so a test can control which path protoscan matches. The shared
+// mcpStub answers on both "/" and "/mcp", which would always match "/" first.
+func mcpStubAtPath(t *testing.T, wantPath string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == wantPath {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(initializeOK))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+}
+
+// TestEmitDiscoveryNodes_MCPMergesWithCollectorID is the Fix #1 regression: a
+// protoscan-discovered MCP server MUST get the same deterministic node ID the
+// mcp/config collectors compute via ingest.ComputeMCPServerID, so the nodes
+// merge at the documented cross-collector merge point. Before the fix,
+// EmitDiscoveryNodes hashed a path-less base URL via raw ComputeNodeID, so a
+// server at /mcp never merged. Covers both the root ("/") and "/mcp" match
+// cases — root must canonicalize to the path-less host:port form (trailing
+// slash trimmed) that the collectors use for a bare URL.
+func TestEmitDiscoveryNodes_MCPMergesWithCollectorID(t *testing.T) {
+	t.Run("root path canonicalizes to path-less id", func(t *testing.T) {
+		srv := mcpStubAtPath(t, "/")
+		defer srv.Close()
+		port := portOf(t, srv)
+		s := &Scanner{Mode: ModeMCP, MCPPorts: []int{port}}
+		targets, err := s.Scan(context.Background(), "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		g := EmitDiscoveryNodes(targets)
+		if len(g.Nodes) != 1 {
+			t.Fatalf("got %d nodes, want 1", len(g.Nodes))
+		}
+		bareURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+		want := ingest.ComputeMCPServerID("http", bareURL)
+		if g.Nodes[0].ID != want {
+			t.Errorf("root MCP node ID = %s, want %s (must merge with a bare-URL config/mcp node)", g.Nodes[0].ID, want)
+		}
+		if ep, _ := g.Nodes[0].Properties["endpoint"].(string); ep != bareURL {
+			t.Errorf("endpoint = %q, want path-less %q", ep, bareURL)
+		}
+	})
+
+	t.Run("/mcp path preserved in id", func(t *testing.T) {
+		srv := mcpStubAtPath(t, "/mcp")
+		defer srv.Close()
+		port := portOf(t, srv)
+		s := &Scanner{Mode: ModeMCP, MCPPorts: []int{port}}
+		targets, err := s.Scan(context.Background(), "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		g := EmitDiscoveryNodes(targets)
+		if len(g.Nodes) != 1 {
+			t.Fatalf("got %d nodes, want 1", len(g.Nodes))
+		}
+		mcpURL := fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+		want := ingest.ComputeMCPServerID("http", mcpURL)
+		if g.Nodes[0].ID != want {
+			t.Errorf("/mcp MCP node ID = %s, want %s (must merge with a /mcp config/mcp node)", g.Nodes[0].ID, want)
+		}
+	})
 }
 
 func TestEmitDiscoveryNodes_A2AUsesBaseURLID(t *testing.T) {

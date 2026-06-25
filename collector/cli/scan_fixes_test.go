@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/modules/networkscan"
 	"github.com/adithyan-ak/agenthound/sdk/action"
@@ -227,6 +228,47 @@ func TestResolveScanConcurrency(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("resolveScanConcurrency(%d, %v, %d) = %d, want %d",
 					tt.scanConcurrency, tt.changed, tt.cfgConcurrency, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestResolveProbeTimeout is the Fix #3 regression: network mode must fall back
+// to networkscan.DefaultProbeTimeout (3s) when --timeout is unchanged, rather
+// than inheriting the shared flag's 120s default (tuned for the legacy
+// per-server MCP/A2A collectors). An explicit --timeout always wins.
+func TestResolveProbeTimeout(t *testing.T) {
+	if got := resolveProbeTimeout(120*time.Second, false); got != networkscan.DefaultProbeTimeout {
+		t.Errorf("unchanged --timeout: got %v, want %v (networkscan default)", got, networkscan.DefaultProbeTimeout)
+	}
+	if got := resolveProbeTimeout(10*time.Second, true); got != 10*time.Second {
+		t.Errorf("explicit --timeout: got %v, want 10s", got)
+	}
+}
+
+// TestRequireAuthorizedPrompt locks in the fail-closed behavior referenced by
+// the (Fix #5) corrected comment: only an exact "AUTHORIZED" proceeds; empty/
+// EOF stdin and any other input abort. It also documents that the prompt is
+// spec-independent (it always runs when invoked, never skipping for a private
+// spec) — matching the code, not the old misleading comment.
+func TestRequireAuthorizedPrompt(t *testing.T) {
+	cases := []struct {
+		name    string
+		stdin   string
+		wantErr bool
+	}{
+		{"eof empty aborts", "", true},
+		{"wrong word aborts", "yes\n", true},
+		{"lowercase aborts", "authorized\n", true},
+		{"exact proceeds", "AUTHORIZED\n", false},
+		{"exact without newline proceeds", "AUTHORIZED", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var out strings.Builder
+			err := requireAuthorizedPrompt("10.0.0.0/24", &out, strings.NewReader(c.stdin))
+			if (err != nil) != c.wantErr {
+				t.Errorf("stdin=%q err=%v, wantErr=%v", c.stdin, err, c.wantErr)
 			}
 		})
 	}
