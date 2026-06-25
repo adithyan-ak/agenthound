@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.6.1
+
+Patch release. Repairs the release pipeline, hardens the collector installer, and polishes the Explorer UI.
+
+### Release pipeline
+
+- Homebrew tap publishing now authenticates with a dedicated `HOMEBREW_TAP_GITHUB_TOKEN`. The v0.6.0 release run pushed every other artifact (binaries, Docker images + manifests, cosign signatures, SBOMs, checksums, GitHub release) but failed at the final GoReleaser step: the `agenthound` / `agenthound-server` formula push to `adithyan-ak/homebrew-agenthound` returned `404` under the default `GITHUB_TOKEN`, which has no write access to the separate tap repo.
+
+### Install
+
+- `install.sh` resolves the latest release via the `github.com/<repo>/releases/latest` redirect instead of `api.github.com`. The REST API is rate-limited to 60 requests/hour per IP for anonymous callers — permanently exhausted behind shared / corporate NAT egress — which `403`'d the installer. The redirect path carries no such budget. (#58)
+- Corrected the cosign certificate-identity case to match the canonical `adithyan-ak/AgentHound` slug the release workflow signs under, so keyless signature verification no longer rejects a valid signature. (#58)
+
+### UI
+
+- Uniform Explorer empty states across the canvas, and fixed a phantom lens-filter indicator dot. (#59)
+
+### Documentation
+
+- README Quick Start rewritten into per-step copy-paste blocks (one command per fenced block); added a "Recon to Report" CLI lifecycle showcase and reordered sections so the tool is runnable sooner. (#60)
+
 ## v0.6.0
 
 The "moat detectors + read-only loot expansion" milestone. Triples the read-only Looter surface (Qdrant, Open WebUI, MLflow), adds four taint- and identity-aware post-processors with their composite edges, persists findings to Postgres for triage and cross-scan diff, crosswalks detections to MITRE ATLAS, and rebuilds the dashboard on the Obsidian Terminal theme. Also ships the OriginGuard CSRF rework that retires the on-disk bearer token, plus a zero-toolchain Docker install path.
