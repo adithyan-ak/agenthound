@@ -49,12 +49,15 @@ make demo-down   # stop the lab containers
 make demo-reset  # remove lab/server volumes and generated demo output
 ```
 
+Run `make demo-prep` while online before a stage rehearsal. It pulls the image-only database/operator services and builds the local server, lab, and collector images so `make demo` does not need to pull large images mid-demo.
+
 ## Run steps manually
 
 The static `172.30.0.x` targets are reachable from inside Docker, not directly from macOS. Use the collector runner for manual narration:
 
 ```bash
 RUNNER='docker compose -f docker/demo/docker-compose.yml --profile tools run --rm -T collector-runner'
+DEMO_URL='http://127.0.0.1:8080' # or the fallback URL printed by make demo
 mkdir -p docker/demo/out/home
 printf '%s\n' 172.30.0.10 172.30.0.20 172.30.0.30 172.30.0.40 172.30.0.50 172.30.0.60 172.30.0.70 172.30.0.80 > docker/demo/out/lab-hosts.txt
 ```
@@ -64,7 +67,7 @@ Ingest every output from the host:
 ```bash
 curl -fsS -H 'Content-Type: application/json' \
     --data-binary @docker/demo/out/<file>.json \
-    http://127.0.0.1:8080/api/v1/ingest
+    "$DEMO_URL/api/v1/ingest"
 ```
 
 ### 0. Config Scan

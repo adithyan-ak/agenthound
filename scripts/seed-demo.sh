@@ -50,6 +50,7 @@ fi
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/home"
+chmod 0777 "$OUT_DIR" "$OUT_DIR/home"
 
 port_available() {
     python3 - "$1" <<'PY'
@@ -71,6 +72,17 @@ choose_server_endpoint() {
         export AGENTHOUND_DEMO_BIND
         SERVER_URL="${AGENTHOUND_DEMO_SERVER_URL:-http://127.0.0.1:${AGENTHOUND_DEMO_BIND##*:}}"
         return
+    fi
+
+    if [[ "$KEEP" -eq 1 ]]; then
+        local existing_bind
+        existing_bind="$("${SERVER_COMPOSE_CMD[@]}" port agenthound 8080 2>/dev/null || true)"
+        existing_bind="${existing_bind%%$'\n'*}"
+        if [[ -n "$existing_bind" ]]; then
+            export AGENTHOUND_DEMO_BIND="$existing_bind"
+            SERVER_URL="${AGENTHOUND_DEMO_SERVER_URL:-http://127.0.0.1:${existing_bind##*:}}"
+            return
+        fi
     fi
 
     local port

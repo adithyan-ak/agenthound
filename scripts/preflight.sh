@@ -204,11 +204,8 @@ case "$TARGET" in
     check_server_running
     ;;
   demo)
-    # `make demo` needs Docker + Compose for the lab containers. The
-    # seeder uses `agenthound-server ingest` (CLI path → Bootstrap →
-    # Neo4j+Postgres), NOT the HTTP API; database reachability is
-    # caught by the binary's runtime preflight at ingest time, so we
-    # don't double-check it here.
+    # `make demo` starts Docker Compose stacks, then uses curl + python3
+    # to health-check, ingest through the HTTP API, and validate findings.
     check_docker
     check_docker_compose
     check_curl

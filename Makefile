@@ -87,6 +87,8 @@ demo: preflight-demo
 	@bash scripts/seed-demo.sh
 
 demo-prep: preflight-demo
+	docker compose -f docker/docker-compose.yml -f docker/demo/docker-compose.server-demo.yml pull graph-db app-db
+	docker compose -f docker/demo/docker-compose.yml pull operator
 	docker compose -f docker/docker-compose.yml -f docker/demo/docker-compose.server-demo.yml build
 	docker compose -f docker/demo/docker-compose.yml --profile tools build
 
