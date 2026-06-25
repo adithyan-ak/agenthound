@@ -67,9 +67,10 @@ const (
 	MaxConcurrency = 4096
 )
 
-// Scanner discovers MCP servers and A2A agents on a network. It conforms
-// to action.Scanner with action.Discover; the registered modules
-// (mcp.discover, a2a.discover) wrap a configured Scanner per mode.
+// Scanner discovers MCP servers and A2A agents on a network. It conforms to
+// action.Scanner (see the compile-time assertion at the bottom of this file)
+// and is constructed directly by the `discover` CLI (collector/cli/discover.go)
+// per mode — it is not registered in sdk/module.
 type Scanner struct {
 	Mode        Mode
 	MCPPorts    []int
