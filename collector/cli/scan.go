@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -247,6 +248,19 @@ func resolveScanConcurrency(scanConcurrency int, scanConcurrencyChanged bool, cf
 	return scanConcurrency
 }
 
+// resolveProbeTimeout picks the per-TCP-probe timeout for network mode. The
+// shared --timeout flag defaults to 120s, which is tuned for the legacy
+// per-server MCP/A2A HTTP collectors, NOT a per-connect probe. Applying it
+// verbatim would make networkscan's intended 3s default unreachable and stall
+// sweeps for minutes against drop-policy ports. So an explicit --timeout wins;
+// otherwise we fall back to networkscan.DefaultProbeTimeout.
+func resolveProbeTimeout(timeout time.Duration, timeoutChanged bool) time.Duration {
+	if timeoutChanged {
+		return timeout
+	}
+	return networkscan.DefaultProbeTimeout
+}
+
 // collectAll runs each enabled collector and merges its output. It returns
 // the merged envelope plus the count of enabled collectors and how many of
 // them failed, so the caller can decide the exit code (total failure → non-
@@ -399,9 +413,13 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	quiet := quietEnabled(cmd)
 
-	// AUTHORIZED prompt — required when --allow-public-targets is set, before
-	// any network IO. Skipped when the spec is a private/loopback host
-	// because the public guard wouldn't block it anyway.
+	// AUTHORIZED prompt — required whenever --allow-public-targets is set,
+	// before any network IO. This keys solely on the flag, NOT on the spec:
+	// it always prompts when the flag is present, even for a private/loopback
+	// spec. The prompt is a deliberate fail-closed speed-bump (empty/EOF stdin
+	// aborts); the real gate is Expand refusing public targets unless the flag
+	// is set. For non-interactive automation, do not pass --allow-public-targets
+	// for private scans — its only purpose is to authorize public IP space.
 	if allowPublic {
 		if err := requireAuthorizedPrompt(spec, cmd.OutOrStderr(), cmd.InOrStdin()); err != nil {
 			return err
@@ -453,13 +471,12 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 			AllowLargeCIDR:     allowLarge,
 			AllowPublicTargets: allowPublic,
 		}
-		if timeout > 0 {
-			ns.Timeout = timeout
-		}
+		ns.Timeout = resolveProbeTimeout(timeout, cmd.Flags().Changed("timeout"))
 		ns.Progress = reporter.update
 	}
 
-	ctx := context.Background()
+	ctx, stop := signalContext()
+	defer stop()
 	if !quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[scan] expanding targets: %s\n", spec)
 	}
@@ -496,7 +513,17 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	// Jupyter, LangServe, OpenWebUI in v0.2 — fingerprinters land in
 	// v0.3/v0.4) emit no node; this is intentional per design F.
 	envelope := buildNetworkScanEnvelope(spec, targets, authzFile, authzHash, allowPublic)
-	dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope, quiet)
+	// On cancellation (Ctrl-C), every fingerprint probe would immediately fail
+	// against the dead context, so skip dispatch and write the partial
+	// port-sweep envelope instead of spinning through guaranteed-failing probes.
+	if ctx.Err() != nil {
+		if !quiet {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+				"[scan] interrupted; skipping fingerprint dispatch and writing partial results\n")
+		}
+	} else {
+		dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope, quiet)
+	}
 
 	if output == "" {
 		output = fmt.Sprintf("scan-%s.json", envelope.Meta.ScanID)
@@ -638,7 +665,11 @@ func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []actio
 				result, err := fp.Fingerprint(ctx, action.Target{
 					Kind:    "host",
 					Address: fmt.Sprintf("%s:%s", host, portStr),
-					Meta:    t.Meta,
+					// Pass a per-probe copy so a fingerprinter that mutates Meta
+					// cannot cross-contaminate sibling probes or the recorded
+					// target. maps.Clone(nil) is nil, which fingerprinters
+					// already tolerate.
+					Meta: maps.Clone(t.Meta),
 				})
 				if err != nil {
 					slog.Debug("fingerprint error", "kind", kind, "host", host, "port", portStr, "error", err)
@@ -685,7 +716,14 @@ func countFingerprintProbes(targets []action.Target) int {
 				continue
 			}
 			for _, kind := range kinds {
-				if _, ok := module.GetByTarget(kind, action.Fingerprint); ok {
+				mod, ok := module.GetByTarget(kind, action.Fingerprint)
+				if !ok {
+					continue
+				}
+				// Mirror dispatchFingerprints exactly: a module registered for
+				// the Fingerprint action that does not implement Fingerprinter
+				// is skipped there, so it must not inflate the count here.
+				if _, ok := mod.(action.Fingerprinter); ok {
 					total++
 				}
 			}

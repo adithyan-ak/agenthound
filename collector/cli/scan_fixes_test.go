@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adithyan-ak/agenthound/modules/networkscan"
 	"github.com/adithyan-ak/agenthound/sdk/action"
@@ -229,6 +230,110 @@ func TestResolveScanConcurrency(t *testing.T) {
 					tt.scanConcurrency, tt.changed, tt.cfgConcurrency, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestResolveProbeTimeout is the Fix #3 regression: network mode must fall back
+// to networkscan.DefaultProbeTimeout (3s) when --timeout is unchanged, rather
+// than inheriting the shared flag's 120s default (tuned for the legacy
+// per-server MCP/A2A collectors). An explicit --timeout always wins.
+func TestResolveProbeTimeout(t *testing.T) {
+	if got := resolveProbeTimeout(120*time.Second, false); got != networkscan.DefaultProbeTimeout {
+		t.Errorf("unchanged --timeout: got %v, want %v (networkscan default)", got, networkscan.DefaultProbeTimeout)
+	}
+	if got := resolveProbeTimeout(10*time.Second, true); got != 10*time.Second {
+		t.Errorf("explicit --timeout: got %v, want 10s", got)
+	}
+}
+
+// TestRequireAuthorizedPrompt locks in the fail-closed behavior referenced by
+// the (Fix #5) corrected comment: only an exact "AUTHORIZED" proceeds; empty/
+// EOF stdin and any other input abort. It also documents that the prompt is
+// spec-independent (it always runs when invoked, never skipping for a private
+// spec) — matching the code, not the old misleading comment.
+func TestRequireAuthorizedPrompt(t *testing.T) {
+	cases := []struct {
+		name    string
+		stdin   string
+		wantErr bool
+	}{
+		{"eof empty aborts", "", true},
+		{"wrong word aborts", "yes\n", true},
+		{"lowercase aborts", "authorized\n", true},
+		{"exact proceeds", "AUTHORIZED\n", false},
+		{"exact without newline proceeds", "AUTHORIZED", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var out strings.Builder
+			err := requireAuthorizedPrompt("10.0.0.0/24", &out, strings.NewReader(c.stdin))
+			if (err != nil) != c.wantErr {
+				t.Errorf("stdin=%q err=%v, wantErr=%v", c.stdin, err, c.wantErr)
+			}
+		})
+	}
+}
+
+// nonFingerprinterModule is registered for action.Fingerprint but does NOT
+// implement action.Fingerprinter (no Fingerprint method) — a misregistration
+// the count/dispatch paths must both skip.
+type nonFingerprinterModule struct{ kind string }
+
+func (m *nonFingerprinterModule) ID() string            { return "nonfp." + m.kind }
+func (m *nonFingerprinterModule) Action() action.Action { return action.Fingerprint }
+func (m *nonFingerprinterModule) Target() string        { return m.kind }
+func (m *nonFingerprinterModule) Description() string   { return "not a fingerprinter" }
+func (m *nonFingerprinterModule) Version() string       { return "0.0.0" }
+func (m *nonFingerprinterModule) IsDestructive() bool   { return false }
+
+// TestCountFingerprintProbes_RequiresFingerprinter is the A3 regression: the
+// progress denominator must apply the same action.Fingerprinter type assertion
+// dispatchFingerprints does, so a module registered for Fingerprint that does
+// not implement the interface is not counted.
+func TestCountFingerprintProbes_RequiresFingerprinter(t *testing.T) {
+	m := &nonFingerprinterModule{kind: "ollama"} // port 11434 -> "ollama"
+	module.Register(m)
+	defer deregisterModule(t, m.ID())
+
+	targets := []action.Target{{
+		Kind:    "host",
+		Address: "10.0.0.1",
+		Meta:    map[string]string{"open_ports": "11434", "candidate_kinds": "ollama"},
+	}}
+	if got := countFingerprintProbes(targets); got != 0 {
+		t.Errorf("countFingerprintProbes = %d, want 0 (module is not a Fingerprinter)", got)
+	}
+}
+
+// metaMutatingFingerprinter writes to the Target's Meta during Fingerprint.
+type metaMutatingFingerprinter struct{ kind string }
+
+func (m *metaMutatingFingerprinter) ID() string            { return "mutfp." + m.kind }
+func (m *metaMutatingFingerprinter) Action() action.Action { return action.Fingerprint }
+func (m *metaMutatingFingerprinter) Target() string        { return m.kind }
+func (m *metaMutatingFingerprinter) Description() string   { return "meta-mutating fingerprinter" }
+func (m *metaMutatingFingerprinter) Version() string       { return "0.0.0" }
+func (m *metaMutatingFingerprinter) IsDestructive() bool   { return false }
+func (m *metaMutatingFingerprinter) Fingerprint(_ context.Context, t action.Target) (*action.FingerprintResult, error) {
+	t.Meta["mutated"] = "yes" // would corrupt sibling probes if Meta were shared
+	return &action.FingerprintResult{Matched: false}, nil
+}
+
+// TestDispatchFingerprints_MetaCopyIsolatesProbes is the A4 regression: each
+// fingerprinter must receive its own copy of Meta, so a mutation cannot leak
+// back into the shared target map (or sibling probes).
+func TestDispatchFingerprints_MetaCopyIsolatesProbes(t *testing.T) {
+	fp := &metaMutatingFingerprinter{kind: "ollama"}
+	module.Register(fp)
+	defer deregisterModule(t, fp.ID())
+
+	orig := map[string]string{"open_ports": "11434", "candidate_kinds": "ollama"}
+	targets := []action.Target{{Kind: "host", Address: "10.0.0.1", Meta: orig}}
+
+	dispatchFingerprints(context.Background(), io.Discard, targets, &ingest.IngestData{}, true)
+
+	if _, leaked := orig["mutated"]; leaked {
+		t.Errorf("fingerprinter mutation leaked into the shared target Meta: %v", orig)
 	}
 }
 

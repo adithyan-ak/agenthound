@@ -188,6 +188,73 @@ func TestExpand_CIDR(t *testing.T) {
 	})
 }
 
+// TestExpand_HardCeiling is the Fix #2 regression: an absolute host ceiling
+// applies even with AllowLargeCIDR, so an override cannot request an unbounded
+// enumeration (a standard IPv6 /64, or IPv4 0.0.0.0/0, would otherwise OOM).
+func TestExpand_HardCeiling(t *testing.T) {
+	// Oversized ranges are refused BEFORE enumeration (fast), even with both
+	// override flags set.
+	for _, spec := range []string{"10.0.0.0/8", "0.0.0.0/0", "fc00::/64", "10.0.0.0/11"} {
+		_, err := Expand(spec, ExpandOptions{AllowLargeCIDR: true, AllowPublicTargets: true})
+		if !errors.Is(err, ErrTooManyHosts) {
+			t.Errorf("Expand(%q, large+public) err = %v, want ErrTooManyHosts", spec, err)
+		}
+	}
+
+	// Exactly at the cap (/12 == 1<<20) is allowed with the flag — proves the
+	// boundary uses strict '>' (no off-by-one).
+	got, err := Expand("10.0.0.0/12", ExpandOptions{AllowLargeCIDR: true})
+	if err != nil {
+		t.Fatalf("Expand(/12, large) err = %v, want nil (== cap)", err)
+	}
+	if len(got) != MaxHostsHardCap {
+		t.Errorf("Expand(/12) count = %d, want %d", len(got), MaxHostsHardCap)
+	}
+}
+
+// TestExpand_NestedFileRejected is the Fix #4 regression: a targets file that
+// references another @file / file:// is rejected (returns quickly) instead of
+// recursing through Expand unbounded on a self-referential or cyclic file.
+func TestExpand_NestedFileRejected(t *testing.T) {
+	dir := t.TempDir()
+	self := filepath.Join(dir, "self.txt")
+	if err := os.WriteFile(self, []byte("@"+self+"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := Expand("@"+self, ExpandOptions{}); !errors.Is(err, ErrNestedTargetsFile) {
+		t.Errorf("self-referential @file err = %v, want ErrNestedTargetsFile", err)
+	}
+
+	nested := filepath.Join(dir, "nested.txt")
+	if err := os.WriteFile(nested, []byte("file://"+self+"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := Expand("@"+nested, ExpandOptions{}); !errors.Is(err, ErrNestedTargetsFile) {
+		t.Errorf("nested file:// err = %v, want ErrNestedTargetsFile", err)
+	}
+}
+
+// TestExpand_TargetsFileDedupes is the A1 regression: overlapping CIDRs /
+// repeated entries in a targets file collapse to a unique, order-preserving
+// host set (no duplicate Targets, no redundant probes).
+func TestExpand_TargetsFileDedupes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dups.txt")
+	// /30 listed twice + a single host that overlaps the /30.
+	content := "10.0.0.0/30\n10.0.0.0/30\n10.0.0.1\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := Expand("@"+path, ExpandOptions{})
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	want := []string{"10.0.0.0", "10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	if !sliceEqual(got, want) {
+		t.Errorf("got %v, want %v (deduped, first-seen order)", got, want)
+	}
+}
+
 func TestExpand_TargetsFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "targets.txt")

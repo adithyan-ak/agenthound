@@ -24,14 +24,13 @@
 package protoscan
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -62,11 +61,16 @@ var (
 const (
 	DefaultConcurrency  = 50
 	DefaultProbeTimeout = 5 * time.Second
+
+	// MaxConcurrency caps the worker pool so an absurd concurrency value can't
+	// spawn a runaway number of goroutines / HTTP connections.
+	MaxConcurrency = 4096
 )
 
-// Scanner discovers MCP servers and A2A agents on a network. It conforms
-// to action.Scanner with action.Discover; the registered modules
-// (mcp.discover, a2a.discover) wrap a configured Scanner per mode.
+// Scanner discovers MCP servers and A2A agents on a network. It conforms to
+// action.Scanner (see the compile-time assertion at the bottom of this file)
+// and is constructed directly by the `discover` CLI (collector/cli/discover.go)
+// per mode — it is not registered in sdk/module.
 type Scanner struct {
 	Mode        Mode
 	MCPPorts    []int
@@ -109,6 +113,9 @@ func (s *Scanner) Scan(ctx context.Context, spec string) ([]action.Target, error
 	}
 	if s.Concurrency <= 0 {
 		s.Concurrency = DefaultConcurrency
+	}
+	if s.Concurrency > MaxConcurrency {
+		s.Concurrency = MaxConcurrency
 	}
 	if s.Timeout <= 0 {
 		s.Timeout = DefaultProbeTimeout
@@ -243,14 +250,22 @@ func (s *Scanner) probeOne(ctx context.Context, host string, port int, protocol 
 	baseURL := fmt.Sprintf("%s://%s:%d", scheme, host, port)
 	switch protocol {
 	case "mcp":
-		if s.probeMCP(ctx, baseURL) {
+		if matchedPath, ok := s.probeMCP(ctx, baseURL); ok {
+			// Preserve the matched path so the emitted MCPServer endpoint
+			// (and thus its deterministic ID) matches what the mcp/config
+			// collectors hash via ingest.ComputeMCPServerID. Trim a lone
+			// trailing slash so a root ("/") match canonicalizes to the
+			// path-less host:port form those collectors use for a bare URL;
+			// "/mcp" is left intact. We only probe "/" and "/mcp", so the
+			// trim can never strip a real sub-path.
+			endpoint := strings.TrimSuffix(strings.TrimRight(baseURL, "/")+matchedPath, "/")
 			return action.Target{
 				Kind:    "host",
 				Address: fmt.Sprintf("%s:%d", host, port),
 				Meta: map[string]string{
 					"protocol": "mcp",
 					"scheme":   scheme,
-					"url":      baseURL,
+					"url":      endpoint,
 				},
 			}, true
 		}
@@ -274,9 +289,10 @@ func (s *Scanner) probeOne(ctx context.Context, host string, port int, protocol 
 }
 
 // probeMCP POSTs a JSON-RPC initialize at "/" and at "/mcp" (the two
-// most-common path conventions) and returns true on a canonical
-// {"jsonrpc":"2.0","id":1,"result":{...}} response shape.
-func (s *Scanner) probeMCP(ctx context.Context, baseURL string) bool {
+// most-common path conventions) and, on a canonical
+// {"jsonrpc":"2.0","id":1,"result":{...}} response shape, returns the
+// matched path and true. Returns ("", false) when no path matches.
+func (s *Scanner) probeMCP(ctx context.Context, baseURL string) (string, bool) {
 	payload, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -297,15 +313,24 @@ func (s *Scanner) probeMCP(ctx context.Context, baseURL string) bool {
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		// Streamable HTTP MCP servers require BOTH media types in Accept and
+		// may 406 otherwise; advertise both so spec-strict servers respond.
+		req.Header.Set("Accept", "application/json, text/event-stream")
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		ctype := resp.Header.Get("Content-Type")
 		_ = resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			continue
+		}
+		// A Streamable HTTP server may frame the initialize response as a single
+		// SSE event (Content-Type: text/event-stream) rather than raw JSON;
+		// pull the data payload out so the shape match works for both forms.
+		if strings.Contains(ctype, "text/event-stream") {
+			body = extractSSEData(body)
 		}
 		// Lenient JSON-RPC initialize response shape.
 		var parsed struct {
@@ -322,10 +347,35 @@ func (s *Scanner) probeMCP(ctx context.Context, baseURL string) bool {
 		}
 		if parsed.JSONRPC == "2.0" && parsed.Result != nil &&
 			(parsed.Result.ServerInfo != nil || parsed.Result.Capabilities != nil) {
-			return true
+			return path, true
 		}
 	}
-	return false
+	return "", false
+}
+
+// extractSSEData concatenates the `data:` field values from an SSE event
+// stream body into a single byte slice. MCP's Streamable HTTP transport may
+// frame the JSON-RPC initialize response as one SSE event; we only need the
+// data payload to shape-match it. Returns the raw body unchanged if it
+// contains no data lines (so a non-SSE body still flows to json.Unmarshal,
+// which will then fail cleanly).
+func extractSSEData(body []byte) []byte {
+	var buf bytes.Buffer
+	sc := bufio.NewScanner(bytes.NewReader(body))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	found := false
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		found = true
+		buf.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+	}
+	if !found {
+		return body
+	}
+	return buf.Bytes()
 }
 
 // probeA2A GETs /.well-known/agent-card.json and (on 404) the legacy
@@ -372,7 +422,11 @@ func EmitDiscoveryNodes(targets []action.Target) ingest.GraphData {
 	for _, t := range targets {
 		switch t.Meta["protocol"] {
 		case "mcp":
-			id := ingest.ComputeNodeID("MCPServer", "http", t.Meta["url"])
+			// Use the canonical MCPServer ID helper (full path-bearing URL)
+			// so protoscan-discovered servers merge with the mcp/config
+			// collectors at the documented merge point. t.Meta["url"] already
+			// carries the matched, trailing-slash-trimmed endpoint.
+			id := ingest.ComputeMCPServerID("http", t.Meta["url"])
 			out.Nodes = append(out.Nodes, ingest.Node{
 				ID:    id,
 				Kinds: []string{"MCPServer"},
@@ -407,11 +461,4 @@ func EmitDiscoveryNodes(targets []action.Target) ingest.GraphData {
 	return out
 }
 
-var (
-	_ action.Scanner = (*Scanner)(nil)
-
-	ErrUnsupportedMode = errors.New("protoscan: unsupported mode")
-)
-
-// init/log placeholder so unused imports stay clean.
-var _ = slog.Debug
+var _ action.Scanner = (*Scanner)(nil)

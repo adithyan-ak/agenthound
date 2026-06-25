@@ -236,6 +236,7 @@ net/textproto
 net/url
 os
 os/exec
+os/signal
 os/user
 path
 path/filepath

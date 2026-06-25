@@ -25,16 +25,27 @@ const (
 	MaxIPv6PrefixLen = 112
 )
 
+// MaxHostsHardCap is an absolute ceiling on the number of hosts a single
+// spec may expand to — enforced EVEN WITH --allow-large-cidr. The
+// AllowLargeCIDR override raises the prefix-bits gate but must not grant an
+// unbounded enumeration: a standard IPv6 /64 (or IPv4 0.0.0.0/0) would
+// otherwise materialize an astronomically large slice and exhaust memory.
+// 1<<20 (1,048,576) admits legitimate lab ranges up to an IPv4 /12 or IPv6
+// /108 while refusing anything larger.
+const MaxHostsHardCap = 1 << 20
+
 // ExpandError categorises why a target was rejected. Callers can match on
 // the sentinel to distinguish operator error (e.g. forgot a flag) from
 // hostile inputs (e.g. trying to scan multicast).
 var (
-	ErrLargeCIDR        = errors.New("CIDR is larger than the safe cap; pass --allow-large-cidr to override")
-	ErrPublicTarget     = errors.New("public IP space refused; pass --allow-public-targets and complete the AUTHORIZED prompt")
-	ErrLinkLocal        = errors.New("link-local addresses cannot be scanned (cannot route off-host)")
-	ErrMulticast        = errors.New("multicast addresses are not unicast scanning targets")
-	ErrInvalidCIDR      = errors.New("invalid CIDR / host / target spec")
-	ErrTargetsFileEmpty = errors.New("targets file contains no valid entries")
+	ErrLargeCIDR         = errors.New("CIDR is larger than the safe cap; pass --allow-large-cidr to override")
+	ErrTooManyHosts      = errors.New("target set exceeds the absolute host cap; narrow the range (the cap applies even with --allow-large-cidr)")
+	ErrPublicTarget      = errors.New("public IP space refused; pass --allow-public-targets and complete the AUTHORIZED prompt")
+	ErrLinkLocal         = errors.New("link-local addresses cannot be scanned (cannot route off-host)")
+	ErrMulticast         = errors.New("multicast addresses are not unicast scanning targets")
+	ErrInvalidCIDR       = errors.New("invalid CIDR / host / target spec")
+	ErrTargetsFileEmpty  = errors.New("targets file contains no valid entries")
+	ErrNestedTargetsFile = errors.New("targets file may not reference another @file / file:// (nested includes are not allowed)")
 )
 
 // ExpandOptions controls the safety gates on target expansion. The default
@@ -113,6 +124,15 @@ func expandCIDR(spec string, opts ExpandOptions) ([]string, error) {
 			ErrLargeCIDR, spec, bits, maxLen)
 	}
 
+	// Absolute host-count ceiling — applies even when AllowLargeCIDR bypassed
+	// the bits gate above, so an override can never request an unbounded
+	// enumeration. exp is the host-bit count; uint64(1)<<exp wraps to 0 for
+	// exp >= 64, so the short-circuit guard must run first.
+	if exp := prefix.Addr().BitLen() - bits; exp >= 64 || uint64(1)<<exp > MaxHostsHardCap {
+		return nil, fmt.Errorf("%w: %s (prefix /%d exceeds the %d-host hard cap)",
+			ErrTooManyHosts, spec, bits, MaxHostsHardCap)
+	}
+
 	// Pre-flight check on the network address.
 	netAddr := prefix.Addr().String()
 	netInfo := common.ClassifyHost(netAddr)
@@ -173,6 +193,14 @@ func expandFile(path string, opts ExpandOptions) ([]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		// Reject nested file includes. A targets file lists hosts and CIDRs,
+		// not other @file / file:// references. Without this guard a
+		// self-referential or cyclic targets file recurses through Expand
+		// unbounded (accumulating open fds + a 64 KiB scanner buffer per
+		// level) until the process exhausts memory or file descriptors.
+		if strings.HasPrefix(line, "@") || strings.HasPrefix(line, "file://") {
+			return nil, fmt.Errorf("%w: %q in %s", ErrNestedTargetsFile, line, path)
+		}
 		hosts, err := Expand(line, opts)
 		if err != nil {
 			return nil, fmt.Errorf("targets file %s: %w", path, err)
@@ -185,5 +213,24 @@ func expandFile(path string, opts ExpandOptions) ([]string, error) {
 	if len(out) == 0 {
 		return nil, ErrTargetsFileEmpty
 	}
-	return out, nil
+	// Overlapping CIDRs or repeated entries across lines can list the same
+	// host more than once; collapse to a unique, order-preserving set so the
+	// scanner does not emit duplicate Targets or re-probe the same host:port.
+	return dedupeHosts(out), nil
+}
+
+// dedupeHosts removes duplicate host strings, preserving first-seen order.
+// The targets-file path is the only spec source that can produce duplicates:
+// a single CIDR enumerates uniquely and a single host/IP is one entry.
+func dedupeHosts(hosts []string) []string {
+	seen := make(map[string]struct{}, len(hosts))
+	out := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	return out
 }

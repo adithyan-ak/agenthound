@@ -34,6 +34,12 @@ var DefaultPorts = []int{
 const (
 	DefaultConcurrency  = 50
 	DefaultProbeTimeout = 3 * time.Second
+
+	// MaxConcurrency caps the worker pool. It bounds the goroutine count and,
+	// critically, the tasks-channel size (concurrency*2): without it an absurd
+	// --network-scan-concurrency overflows that multiply to a negative int on
+	// 32-bit (make(chan) panics) or allocates an enormous buffer on 64-bit.
+	MaxConcurrency = 4096
 )
 
 // PortToKind maps each AI-service default port to its candidate service-kind
@@ -125,6 +131,9 @@ func (s *Scanner) Scan(ctx context.Context, cidr string) ([]action.Target, error
 	concurrency := s.Concurrency
 	if concurrency <= 0 {
 		concurrency = DefaultConcurrency
+	}
+	if concurrency > MaxConcurrency {
+		concurrency = MaxConcurrency
 	}
 
 	timeout := s.Timeout

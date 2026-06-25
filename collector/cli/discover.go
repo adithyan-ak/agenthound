@@ -132,7 +132,8 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 	reporter := newProgressReporter(cmd.OutOrStderr(), "[discover] probing "+spec, quiet)
 	scanner.Progress = reporter.update
 
-	ctx := context.Background()
+	ctx, stop := signalContext()
+	defer stop()
 	if !quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[discover] expanding targets: %s\n", spec)
 	}

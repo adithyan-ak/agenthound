@@ -3,10 +3,12 @@ package protoscan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -151,6 +153,74 @@ func TestEmitDiscoveryNodes_MCP(t *testing.T) {
 	}
 }
 
+// mcpStubAtPath answers the JSON-RPC initialize ONLY at wantPath (404
+// elsewhere), so a test can control which path protoscan matches. The shared
+// mcpStub answers on both "/" and "/mcp", which would always match "/" first.
+func mcpStubAtPath(t *testing.T, wantPath string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == wantPath {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(initializeOK))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+}
+
+// TestEmitDiscoveryNodes_MCPMergesWithCollectorID is the Fix #1 regression: a
+// protoscan-discovered MCP server MUST get the same deterministic node ID the
+// mcp/config collectors compute via ingest.ComputeMCPServerID, so the nodes
+// merge at the documented cross-collector merge point. Before the fix,
+// EmitDiscoveryNodes hashed a path-less base URL via raw ComputeNodeID, so a
+// server at /mcp never merged. Covers both the root ("/") and "/mcp" match
+// cases — root must canonicalize to the path-less host:port form (trailing
+// slash trimmed) that the collectors use for a bare URL.
+func TestEmitDiscoveryNodes_MCPMergesWithCollectorID(t *testing.T) {
+	t.Run("root path canonicalizes to path-less id", func(t *testing.T) {
+		srv := mcpStubAtPath(t, "/")
+		defer srv.Close()
+		port := portOf(t, srv)
+		s := &Scanner{Mode: ModeMCP, MCPPorts: []int{port}}
+		targets, err := s.Scan(context.Background(), "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		g := EmitDiscoveryNodes(targets)
+		if len(g.Nodes) != 1 {
+			t.Fatalf("got %d nodes, want 1", len(g.Nodes))
+		}
+		bareURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+		want := ingest.ComputeMCPServerID("http", bareURL)
+		if g.Nodes[0].ID != want {
+			t.Errorf("root MCP node ID = %s, want %s (must merge with a bare-URL config/mcp node)", g.Nodes[0].ID, want)
+		}
+		if ep, _ := g.Nodes[0].Properties["endpoint"].(string); ep != bareURL {
+			t.Errorf("endpoint = %q, want path-less %q", ep, bareURL)
+		}
+	})
+
+	t.Run("/mcp path preserved in id", func(t *testing.T) {
+		srv := mcpStubAtPath(t, "/mcp")
+		defer srv.Close()
+		port := portOf(t, srv)
+		s := &Scanner{Mode: ModeMCP, MCPPorts: []int{port}}
+		targets, err := s.Scan(context.Background(), "127.0.0.1")
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		g := EmitDiscoveryNodes(targets)
+		if len(g.Nodes) != 1 {
+			t.Fatalf("got %d nodes, want 1", len(g.Nodes))
+		}
+		mcpURL := fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+		want := ingest.ComputeMCPServerID("http", mcpURL)
+		if g.Nodes[0].ID != want {
+			t.Errorf("/mcp MCP node ID = %s, want %s (must merge with a /mcp config/mcp node)", g.Nodes[0].ID, want)
+		}
+	})
+}
+
 func TestEmitDiscoveryNodes_A2AUsesBaseURLID(t *testing.T) {
 	targets := []action.Target{{
 		Kind:    "host",
@@ -265,6 +335,88 @@ func TestScan_ProgressReported(t *testing.T) {
 	last := calls[len(calls)-1]
 	if last[0] != 1 || last[1] != 1 {
 		t.Errorf("final progress = [%d %d], want [1 1]", last[0], last[1])
+	}
+}
+
+// TestScan_ConcurrencyClamped is the A2 regression: an absurd Concurrency is
+// clamped to MaxConcurrency, so the scan can't spawn a runaway goroutine /
+// connection count. Completes normally and the receiver is clamped.
+func TestScan_ConcurrencyClamped(t *testing.T) {
+	srv := mcpStub(t)
+	defer srv.Close()
+	s := &Scanner{
+		Mode:        ModeMCP,
+		MCPPorts:    []int{portOf(t, srv)},
+		Concurrency: 1 << 30,
+		Timeout:     time.Second,
+	}
+	if _, err := s.Scan(context.Background(), "127.0.0.1"); err != nil {
+		t.Fatalf("Scan with huge Concurrency err = %v", err)
+	}
+	if s.Concurrency != MaxConcurrency {
+		t.Errorf("Concurrency = %d, want clamped to %d", s.Concurrency, MaxConcurrency)
+	}
+}
+
+// TestProbeMCP_RequiresDualAccept is part of the O1 fix: a Streamable-HTTP MCP
+// server may 406 unless the client advertises both application/json AND
+// text/event-stream. The probe must now send both and still match.
+func TestProbeMCP_RequiresDualAccept(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			w.WriteHeader(406)
+			return
+		}
+		if r.Method == "POST" && (r.URL.Path == "/" || r.URL.Path == "/mcp") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(initializeOK))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	s := &Scanner{Mode: ModeMCP, MCPPorts: []int{portOf(t, srv)}}
+	targets, err := s.Scan(context.Background(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 MCP target (server requires dual Accept), got %d", len(targets))
+	}
+}
+
+// TestProbeMCP_SSEFramedResponse is part of the O1 fix: a Streamable-HTTP MCP
+// server may frame the initialize response as an SSE event (Content-Type:
+// text/event-stream) rather than raw JSON. The probe must extract the data
+// payload and still shape-match.
+func TestProbeMCP_SSEFramedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && (r.URL.Path == "/" || r.URL.Path == "/mcp") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("event: message\ndata: " + initializeOK + "\n\n"))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	s := &Scanner{Mode: ModeMCP, MCPPorts: []int{portOf(t, srv)}}
+	targets, err := s.Scan(context.Background(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 MCP target from SSE-framed initialize, got %d", len(targets))
+	}
+}
+
+// TestExtractSSEData covers the O1 SSE-payload extractor directly, including
+// the non-SSE passthrough branch.
+func TestExtractSSEData(t *testing.T) {
+	if got := string(extractSSEData([]byte("event: message\ndata: {\"a\":1}\n\n"))); got != `{"a":1}` {
+		t.Errorf("single data line = %q, want %q", got, `{"a":1}`)
+	}
+	if got := string(extractSSEData([]byte(`{"plain":true}`))); got != `{"plain":true}` {
+		t.Errorf("non-SSE body should pass through unchanged, got %q", got)
 	}
 }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Network scanner hardening
+
+Fixes from a focused review of the network-level `scan` / `discover` path:
+
+- **`discover` MCP nodes now merge with the `mcp` / `config` collectors.** Protocol discovery preserves the matched JSON-RPC path (`/` vs `/mcp`) and derives the `:MCPServer` node ID via `ingest.ComputeMCPServerID` (the full, trailing-slash-normalized URL) instead of hashing a path-less base URL. Previously a server found by `discover` got a different deterministic ID than the same server from a config/MCP scan, producing duplicate `:MCPServer` nodes at the documented merge point. A root (`/`) match canonicalizes to the path-less `host:port` form; `/mcp` is preserved.
+- **Absolute host ceiling on CIDR expansion.** A hard cap of 1,048,576 hosts (exactly IPv4 `/12`, IPv6 `/108`) now applies *even with* `--allow-large-cidr`, so an override can no longer request an unbounded enumeration — a standard IPv6 `/64` or `0.0.0.0/0` previously walked toward OOM. Oversized specs are refused before any allocation.
+- **Network-mode probe timeout honors the intended 3s default.** The shared `--timeout` flag (120s, tuned for the legacy per-server MCP/A2A collectors) no longer silently overrides the per-TCP-connect-probe timeout; network mode falls back to `networkscan`'s 3s default unless `--timeout` is set explicitly.
+- **Targets files reject nested includes.** A `@file` / `file://` line *inside* a targets file is refused, preventing a self-referential or cyclic file from recursing through expansion until it exhausts memory / file descriptors.
+- Corrected a misleading comment on the `AUTHORIZED` prompt (it always prompts when `--allow-public-targets` is set and is fail-closed; it never skipped private specs as the comment claimed).
+
+Robustness and cleanup from the same review:
+
+- **Ctrl-C now flushes partial results for `scan` / `discover`.** Both verbs wire SIGINT/SIGTERM into the scan context (`signal.NotifyContext`), so an interrupted sweep cancels the worker pool and writes the partial envelope to `--output` instead of dying mid-write. `scan` skips the fingerprint phase on interrupt; `discover` emits the endpoints found so far.
+- **Overlapping/duplicate targets-file entries are de-duplicated** (order-preserving), eliminating duplicate `Target`s and redundant probes/fingerprint requests.
+- **Worker-pool concurrency is clamped** (`MaxConcurrency = 4096`) in both scanners, preventing an absurd `--network-scan-concurrency` from overflowing the tasks-channel size on 32-bit or allocating a runaway buffer / goroutine count.
+- **MCP discovery handles Streamable HTTP**: the probe sends `Accept: application/json, text/event-stream` (some servers `406` otherwise) and parses an SSE-framed `initialize` response, improving recall without affecting precision.
+- **Nested `@file` / `file://` includes inside a targets file are rejected** (`ErrNestedTargetsFile`), closing a self-referential/cyclic recursion that could exhaust memory / file descriptors.
+- Removed dead code: the unused `protoscan` discover registrations (`mcp.discover` / `a2a.discover`, never dispatched — `discover` constructs its scanner directly) and an unused error/`slog` shim. The fingerprint progress denominator now applies the same `Fingerprinter` type assertion as dispatch, and each fingerprinter receives a per-probe copy of `Meta`.
+
 ## v0.6.1
 
 Patch release. Repairs the release pipeline, hardens the collector installer, and polishes the Explorer UI.
