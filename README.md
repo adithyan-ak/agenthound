@@ -49,7 +49,11 @@ Which poisoned tools sit on high-risk routes?
 Which agents can read sensitive data and send it outbound?
 ```
 
-That is the BloodHound idea applied to AI-agent infrastructure.
+That is the BloodHound idea applied to AI-agent infrastructure — across the whole stack, not one protocol:
+
+- 🔌 **Protocols** — MCP · A2A
+- 🧠 **Services** — LiteLLM · Ollama · vLLM · LangServe · MLflow · Qdrant · Jupyter · Open WebUI
+- 💻 **Agent clients** — Claude Desktop · Claude Code · Cursor · VS Code · Windsurf · Continue · Cline · Zed · JetBrains · Amazon Q · Kiro · Augment
 
 ## How It Works
 
@@ -177,7 +181,7 @@ agenthound discover 10.0.0.0/24 --mcp
 agenthound loot 172.30.0.20:4000 --type litellm --master-key sk-... --engagement-id RTV --output -
 ```
 
-Looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`.
+Looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`, `jupyter`.
 
 **3. Exploit** — sanctioned, reversible offensive actions:
 
