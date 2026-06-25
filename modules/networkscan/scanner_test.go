@@ -261,6 +261,22 @@ func TestScanner_NoProgressHook(t *testing.T) {
 	}
 }
 
+// TestScanner_ConcurrencyClamped is the A2 regression: an absurd Concurrency
+// must be clamped to MaxConcurrency so the tasks channel (concurrency*2) does
+// not overflow to a negative size (panic on 32-bit) or allocate an enormous
+// buffer (OOM on 64-bit). With the clamp the scan completes normally.
+func TestScanner_ConcurrencyClamped(t *testing.T) {
+	d := &fakeDialer{openSet: map[string]bool{}}
+	s := &Scanner{
+		Dialer:      d,
+		Timeout:     50 * time.Millisecond,
+		Concurrency: 1 << 30, // ~1.07e9; *2 would be ~51 GiB of channel buffer
+	}
+	if _, err := s.Scan(context.Background(), "10.0.0.1"); err != nil {
+		t.Fatalf("Scan with huge Concurrency err = %v; clamp should prevent panic/OOM", err)
+	}
+}
+
 func TestScanner_ExpandError(t *testing.T) {
 	// Public CIDR without --allow-public-targets returns the expand error
 	// without calling the dialer.

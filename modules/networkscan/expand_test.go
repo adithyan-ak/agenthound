@@ -234,6 +234,27 @@ func TestExpand_NestedFileRejected(t *testing.T) {
 	}
 }
 
+// TestExpand_TargetsFileDedupes is the A1 regression: overlapping CIDRs /
+// repeated entries in a targets file collapse to a unique, order-preserving
+// host set (no duplicate Targets, no redundant probes).
+func TestExpand_TargetsFileDedupes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dups.txt")
+	// /30 listed twice + a single host that overlaps the /30.
+	content := "10.0.0.0/30\n10.0.0.0/30\n10.0.0.1\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := Expand("@"+path, ExpandOptions{})
+	if err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	want := []string{"10.0.0.0", "10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	if !sliceEqual(got, want) {
+		t.Errorf("got %v, want %v (deduped, first-seen order)", got, want)
+	}
+}
+
 func TestExpand_TargetsFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "targets.txt")

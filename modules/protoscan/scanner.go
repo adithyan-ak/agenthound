@@ -24,14 +24,13 @@
 package protoscan
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -62,6 +61,10 @@ var (
 const (
 	DefaultConcurrency  = 50
 	DefaultProbeTimeout = 5 * time.Second
+
+	// MaxConcurrency caps the worker pool so an absurd concurrency value can't
+	// spawn a runaway number of goroutines / HTTP connections.
+	MaxConcurrency = 4096
 )
 
 // Scanner discovers MCP servers and A2A agents on a network. It conforms
@@ -109,6 +112,9 @@ func (s *Scanner) Scan(ctx context.Context, spec string) ([]action.Target, error
 	}
 	if s.Concurrency <= 0 {
 		s.Concurrency = DefaultConcurrency
+	}
+	if s.Concurrency > MaxConcurrency {
+		s.Concurrency = MaxConcurrency
 	}
 	if s.Timeout <= 0 {
 		s.Timeout = DefaultProbeTimeout
@@ -306,15 +312,24 @@ func (s *Scanner) probeMCP(ctx context.Context, baseURL string) (string, bool) {
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		// Streamable HTTP MCP servers require BOTH media types in Accept and
+		// may 406 otherwise; advertise both so spec-strict servers respond.
+		req.Header.Set("Accept", "application/json, text/event-stream")
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		ctype := resp.Header.Get("Content-Type")
 		_ = resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			continue
+		}
+		// A Streamable HTTP server may frame the initialize response as a single
+		// SSE event (Content-Type: text/event-stream) rather than raw JSON;
+		// pull the data payload out so the shape match works for both forms.
+		if strings.Contains(ctype, "text/event-stream") {
+			body = extractSSEData(body)
 		}
 		// Lenient JSON-RPC initialize response shape.
 		var parsed struct {
@@ -335,6 +350,31 @@ func (s *Scanner) probeMCP(ctx context.Context, baseURL string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// extractSSEData concatenates the `data:` field values from an SSE event
+// stream body into a single byte slice. MCP's Streamable HTTP transport may
+// frame the JSON-RPC initialize response as one SSE event; we only need the
+// data payload to shape-match it. Returns the raw body unchanged if it
+// contains no data lines (so a non-SSE body still flows to json.Unmarshal,
+// which will then fail cleanly).
+func extractSSEData(body []byte) []byte {
+	var buf bytes.Buffer
+	sc := bufio.NewScanner(bytes.NewReader(body))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	found := false
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		found = true
+		buf.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+	}
+	if !found {
+		return body
+	}
+	return buf.Bytes()
 }
 
 // probeA2A GETs /.well-known/agent-card.json and (on 404) the legacy
@@ -420,11 +460,4 @@ func EmitDiscoveryNodes(targets []action.Target) ingest.GraphData {
 	return out
 }
 
-var (
-	_ action.Scanner = (*Scanner)(nil)
-
-	ErrUnsupportedMode = errors.New("protoscan: unsupported mode")
-)
-
-// init/log placeholder so unused imports stay clean.
-var _ = slog.Debug
+var _ action.Scanner = (*Scanner)(nil)

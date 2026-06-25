@@ -12,6 +12,15 @@ Fixes from a focused review of the network-level `scan` / `discover` path:
 - **Targets files reject nested includes.** A `@file` / `file://` line *inside* a targets file is refused, preventing a self-referential or cyclic file from recursing through expansion until it exhausts memory / file descriptors.
 - Corrected a misleading comment on the `AUTHORIZED` prompt (it always prompts when `--allow-public-targets` is set and is fail-closed; it never skipped private specs as the comment claimed).
 
+Robustness and cleanup from the same review:
+
+- **Ctrl-C now flushes partial results for `scan` / `discover`.** Both verbs wire SIGINT/SIGTERM into the scan context (`signal.NotifyContext`), so an interrupted sweep cancels the worker pool and writes the partial envelope to `--output` instead of dying mid-write. `scan` skips the fingerprint phase on interrupt; `discover` emits the endpoints found so far.
+- **Overlapping/duplicate targets-file entries are de-duplicated** (order-preserving), eliminating duplicate `Target`s and redundant probes/fingerprint requests.
+- **Worker-pool concurrency is clamped** (`MaxConcurrency = 4096`) in both scanners, preventing an absurd `--network-scan-concurrency` from overflowing the tasks-channel size on 32-bit or allocating a runaway buffer / goroutine count.
+- **MCP discovery handles Streamable HTTP**: the probe sends `Accept: application/json, text/event-stream` (some servers `406` otherwise) and parses an SSE-framed `initialize` response, improving recall without affecting precision.
+- **Nested `@file` / `file://` includes inside a targets file are rejected** (`ErrNestedTargetsFile`), closing a self-referential/cyclic recursion that could exhaust memory / file descriptors.
+- Removed dead code: the unused `protoscan` discover registrations (`mcp.discover` / `a2a.discover`, never dispatched — `discover` constructs its scanner directly) and an unused error/`slog` shim. The fingerprint progress denominator now applies the same `Fingerprinter` type assertion as dispatch, and each fingerprinter receives a per-probe copy of `Meta`.
+
 ## v0.6.1
 
 Patch release. Repairs the release pipeline, hardens the collector installer, and polishes the Explorer UI.

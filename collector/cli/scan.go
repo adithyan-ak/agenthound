@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -474,7 +475,8 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 		ns.Progress = reporter.update
 	}
 
-	ctx := context.Background()
+	ctx, stop := signalContext()
+	defer stop()
 	if !quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[scan] expanding targets: %s\n", spec)
 	}
@@ -511,7 +513,17 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	// Jupyter, LangServe, OpenWebUI in v0.2 — fingerprinters land in
 	// v0.3/v0.4) emit no node; this is intentional per design F.
 	envelope := buildNetworkScanEnvelope(spec, targets, authzFile, authzHash, allowPublic)
-	dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope, quiet)
+	// On cancellation (Ctrl-C), every fingerprint probe would immediately fail
+	// against the dead context, so skip dispatch and write the partial
+	// port-sweep envelope instead of spinning through guaranteed-failing probes.
+	if ctx.Err() != nil {
+		if !quiet {
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+				"[scan] interrupted; skipping fingerprint dispatch and writing partial results\n")
+		}
+	} else {
+		dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope, quiet)
+	}
 
 	if output == "" {
 		output = fmt.Sprintf("scan-%s.json", envelope.Meta.ScanID)
@@ -653,7 +665,11 @@ func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []actio
 				result, err := fp.Fingerprint(ctx, action.Target{
 					Kind:    "host",
 					Address: fmt.Sprintf("%s:%s", host, portStr),
-					Meta:    t.Meta,
+					// Pass a per-probe copy so a fingerprinter that mutates Meta
+					// cannot cross-contaminate sibling probes or the recorded
+					// target. maps.Clone(nil) is nil, which fingerprinters
+					// already tolerate.
+					Meta: maps.Clone(t.Meta),
 				})
 				if err != nil {
 					slog.Debug("fingerprint error", "kind", kind, "host", host, "port", portStr, "error", err)
@@ -700,7 +716,14 @@ func countFingerprintProbes(targets []action.Target) int {
 				continue
 			}
 			for _, kind := range kinds {
-				if _, ok := module.GetByTarget(kind, action.Fingerprint); ok {
+				mod, ok := module.GetByTarget(kind, action.Fingerprint)
+				if !ok {
+					continue
+				}
+				// Mirror dispatchFingerprints exactly: a module registered for
+				// the Fingerprint action that does not implement Fingerprinter
+				// is skipped there, so it must not inflate the count here.
+				if _, ok := mod.(action.Fingerprinter); ok {
 					total++
 				}
 			}

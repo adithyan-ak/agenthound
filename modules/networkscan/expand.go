@@ -213,5 +213,24 @@ func expandFile(path string, opts ExpandOptions) ([]string, error) {
 	if len(out) == 0 {
 		return nil, ErrTargetsFileEmpty
 	}
-	return out, nil
+	// Overlapping CIDRs or repeated entries across lines can list the same
+	// host more than once; collapse to a unique, order-preserving set so the
+	// scanner does not emit duplicate Targets or re-probe the same host:port.
+	return dedupeHosts(out), nil
+}
+
+// dedupeHosts removes duplicate host strings, preserving first-seen order.
+// The targets-file path is the only spec source that can produce duplicates:
+// a single CIDR enumerates uniquely and a single host/IP is one entry.
+func dedupeHosts(hosts []string) []string {
+	seen := make(map[string]struct{}, len(hosts))
+	out := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	return out
 }

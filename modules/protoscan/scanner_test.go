@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -334,6 +335,88 @@ func TestScan_ProgressReported(t *testing.T) {
 	last := calls[len(calls)-1]
 	if last[0] != 1 || last[1] != 1 {
 		t.Errorf("final progress = [%d %d], want [1 1]", last[0], last[1])
+	}
+}
+
+// TestScan_ConcurrencyClamped is the A2 regression: an absurd Concurrency is
+// clamped to MaxConcurrency, so the scan can't spawn a runaway goroutine /
+// connection count. Completes normally and the receiver is clamped.
+func TestScan_ConcurrencyClamped(t *testing.T) {
+	srv := mcpStub(t)
+	defer srv.Close()
+	s := &Scanner{
+		Mode:        ModeMCP,
+		MCPPorts:    []int{portOf(t, srv)},
+		Concurrency: 1 << 30,
+		Timeout:     time.Second,
+	}
+	if _, err := s.Scan(context.Background(), "127.0.0.1"); err != nil {
+		t.Fatalf("Scan with huge Concurrency err = %v", err)
+	}
+	if s.Concurrency != MaxConcurrency {
+		t.Errorf("Concurrency = %d, want clamped to %d", s.Concurrency, MaxConcurrency)
+	}
+}
+
+// TestProbeMCP_RequiresDualAccept is part of the O1 fix: a Streamable-HTTP MCP
+// server may 406 unless the client advertises both application/json AND
+// text/event-stream. The probe must now send both and still match.
+func TestProbeMCP_RequiresDualAccept(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			w.WriteHeader(406)
+			return
+		}
+		if r.Method == "POST" && (r.URL.Path == "/" || r.URL.Path == "/mcp") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(initializeOK))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	s := &Scanner{Mode: ModeMCP, MCPPorts: []int{portOf(t, srv)}}
+	targets, err := s.Scan(context.Background(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 MCP target (server requires dual Accept), got %d", len(targets))
+	}
+}
+
+// TestProbeMCP_SSEFramedResponse is part of the O1 fix: a Streamable-HTTP MCP
+// server may frame the initialize response as an SSE event (Content-Type:
+// text/event-stream) rather than raw JSON. The probe must extract the data
+// payload and still shape-match.
+func TestProbeMCP_SSEFramedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && (r.URL.Path == "/" || r.URL.Path == "/mcp") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("event: message\ndata: " + initializeOK + "\n\n"))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer srv.Close()
+	s := &Scanner{Mode: ModeMCP, MCPPorts: []int{portOf(t, srv)}}
+	targets, err := s.Scan(context.Background(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 MCP target from SSE-framed initialize, got %d", len(targets))
+	}
+}
+
+// TestExtractSSEData covers the O1 SSE-payload extractor directly, including
+// the non-SSE passthrough branch.
+func TestExtractSSEData(t *testing.T) {
+	if got := string(extractSSEData([]byte("event: message\ndata: {\"a\":1}\n\n"))); got != `{"a":1}` {
+		t.Errorf("single data line = %q, want %q", got, `{"a":1}`)
+	}
+	if got := string(extractSSEData([]byte(`{"plain":true}`))); got != `{"plain":true}` {
+		t.Errorf("non-SSE body should pass through unchanged, got %q", got)
 	}
 }
 

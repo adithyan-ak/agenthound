@@ -274,6 +274,69 @@ func TestRequireAuthorizedPrompt(t *testing.T) {
 	}
 }
 
+// nonFingerprinterModule is registered for action.Fingerprint but does NOT
+// implement action.Fingerprinter (no Fingerprint method) — a misregistration
+// the count/dispatch paths must both skip.
+type nonFingerprinterModule struct{ kind string }
+
+func (m *nonFingerprinterModule) ID() string            { return "nonfp." + m.kind }
+func (m *nonFingerprinterModule) Action() action.Action { return action.Fingerprint }
+func (m *nonFingerprinterModule) Target() string        { return m.kind }
+func (m *nonFingerprinterModule) Description() string   { return "not a fingerprinter" }
+func (m *nonFingerprinterModule) Version() string       { return "0.0.0" }
+func (m *nonFingerprinterModule) IsDestructive() bool   { return false }
+
+// TestCountFingerprintProbes_RequiresFingerprinter is the A3 regression: the
+// progress denominator must apply the same action.Fingerprinter type assertion
+// dispatchFingerprints does, so a module registered for Fingerprint that does
+// not implement the interface is not counted.
+func TestCountFingerprintProbes_RequiresFingerprinter(t *testing.T) {
+	m := &nonFingerprinterModule{kind: "ollama"} // port 11434 -> "ollama"
+	module.Register(m)
+	defer deregisterModule(t, m.ID())
+
+	targets := []action.Target{{
+		Kind:    "host",
+		Address: "10.0.0.1",
+		Meta:    map[string]string{"open_ports": "11434", "candidate_kinds": "ollama"},
+	}}
+	if got := countFingerprintProbes(targets); got != 0 {
+		t.Errorf("countFingerprintProbes = %d, want 0 (module is not a Fingerprinter)", got)
+	}
+}
+
+// metaMutatingFingerprinter writes to the Target's Meta during Fingerprint.
+type metaMutatingFingerprinter struct{ kind string }
+
+func (m *metaMutatingFingerprinter) ID() string            { return "mutfp." + m.kind }
+func (m *metaMutatingFingerprinter) Action() action.Action { return action.Fingerprint }
+func (m *metaMutatingFingerprinter) Target() string        { return m.kind }
+func (m *metaMutatingFingerprinter) Description() string   { return "meta-mutating fingerprinter" }
+func (m *metaMutatingFingerprinter) Version() string       { return "0.0.0" }
+func (m *metaMutatingFingerprinter) IsDestructive() bool   { return false }
+func (m *metaMutatingFingerprinter) Fingerprint(_ context.Context, t action.Target) (*action.FingerprintResult, error) {
+	t.Meta["mutated"] = "yes" // would corrupt sibling probes if Meta were shared
+	return &action.FingerprintResult{Matched: false}, nil
+}
+
+// TestDispatchFingerprints_MetaCopyIsolatesProbes is the A4 regression: each
+// fingerprinter must receive its own copy of Meta, so a mutation cannot leak
+// back into the shared target map (or sibling probes).
+func TestDispatchFingerprints_MetaCopyIsolatesProbes(t *testing.T) {
+	fp := &metaMutatingFingerprinter{kind: "ollama"}
+	module.Register(fp)
+	defer deregisterModule(t, fp.ID())
+
+	orig := map[string]string{"open_ports": "11434", "candidate_kinds": "ollama"}
+	targets := []action.Target{{Kind: "host", Address: "10.0.0.1", Meta: orig}}
+
+	dispatchFingerprints(context.Background(), io.Discard, targets, &ingest.IngestData{}, true)
+
+	if _, leaked := orig["mutated"]; leaked {
+		t.Errorf("fingerprinter mutation leaked into the shared target Meta: %v", orig)
+	}
+}
+
 // TestAllCollectorsFailed is the Finding 12 regression: scan must exit
 // non-zero only when EVERY enabled collector errored. Partial success and a
 // legitimately empty-but-successful scan (zero enabled, or zero failed) must
