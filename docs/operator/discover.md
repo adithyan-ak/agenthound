@@ -76,16 +76,22 @@ The output file is a standard ingest envelope. `discover` emits raw `:MCPServer`
 | Control | Default | Override flag | Notes |
 |---|---|---|---|
 | Public IP space | refused | `--allow-public-targets` + AUTHORIZED prompt | Mirrors `scan`'s gate exactly. |
-| CIDRs > /16 | refused | `--allow-large-cidr` | A /24 is ~256 hosts × 4 ports per protocol = ~1k probes; a /16 is ~65k hosts. |
+| CIDRs > /16 | refused | `--allow-large-cidr` | A /24 is ~256 hosts × 4 ports per protocol = ~1k probes; a /16 is ~65k hosts. An absolute ceiling of 1,048,576 hosts (exactly IPv4 `/12`, IPv6 `/108`) applies *even with* `--allow-large-cidr`; split larger ranges into chunks. |
 | Link-local | refused (no flag) | n/a | 169.254.x.x and fe80::/10 cannot be routed off-host. |
 | Multicast | refused (no flag) | n/a | Not unicast scan targets. |
 | Authorization watermark | optional | `--authorization-file <path>` | Path + SHA-256 recorded in envelope `meta.extra`. |
 
 ## Concurrency and timeouts
 
-- `--network-scan-concurrency N` — default 50 parallel HTTP probes
+- `--network-scan-concurrency N` — default 50 parallel HTTP probes (hard-clamped to 4096)
 - `--timeout T` — default 5s per probe
 - `--insecure` — skip TLS verification (for self-signed dev MCP servers; do NOT use in engagements)
+
+## Output volume and cancellation
+
+By default `discover` prints a single summary line — `[discover] <spec>: N endpoint(s)` — and gates the full per-endpoint listing (protocol + URL for each match) behind `--verbose`. On an interactive terminal a single rewriting progress line tracks the probe sweep; it is omitted automatically when output is piped or redirected, and `--quiet` / `AGENTHOUND_QUIET=1` suppresses both the progress line and the summary. None of this affects the JSON written to `--output`.
+
+Ctrl-C (SIGINT) or SIGTERM cancels the probe pool cleanly and writes the endpoints found so far to `--output`, so an interrupted sweep still produces useful JSON rather than dying mid-write.
 
 ## Combining with `scan` and `loot`
 
@@ -111,7 +117,7 @@ After each ingest the `cross_service_credential_chain` post-processor folds the 
 
 ## See also
 
-- `docs/scanner.md` — `agenthound scan` operator guide
-- `docs/loot-litellm.md` — LiteLLM Looter operator guide
+- [`agenthound scan` operator guide](scanner.md)
+- [LiteLLM Looter operator guide](loot/litellm.md)
+- [Security model](security.md) — full threat model
 - `modules/protoscan/scanner.go` — implementation
-- `docs/security.md` — full threat model

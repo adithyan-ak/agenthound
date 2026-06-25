@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased
+## v0.7.0
 
-### Network scanner hardening
+Network `scan` / `discover` usability and hardening. Adds progress and summary output to the network verbs, fixes a `:MCPServer` duplicate-node bug at the cross-collector merge point, and adds memory-safety guards (absolute host ceiling, nested-include rejection, concurrency clamp) across the scan/discover path.
+
+### Scan & discover output (#62)
+
+- **One-line summary by default.** `scan` prints `[scan] <spec>: N host(s) with at least one open port` and `discover` prints `[discover] <spec>: N endpoint(s)`, followed (for `scan`) by per-match fingerprint lines and a fingerprint summary. The full per-host / per-endpoint listing — which can run to thousands of lines on a large sweep — is gated behind `--verbose`.
+- **Interactive progress line.** When stderr is a TTY, a single rewriting line tracks the port sweep and the fingerprint phase. It is omitted automatically when output is piped or redirected, so CI logs and piped output stay clean.
+- **`--quiet` / `AGENTHOUND_QUIET=1`** suppresses the progress line, the summary, and the fingerprint output, leaving only errors. Progress and summaries always go to stderr and never affect the JSON written to `--output`.
+
+### Network scanner & discovery hardening (#64)
 
 Fixes from a focused review of the network-level `scan` / `discover` path:
 
@@ -18,8 +26,12 @@ Robustness and cleanup from the same review:
 - **Overlapping/duplicate targets-file entries are de-duplicated** (order-preserving), eliminating duplicate `Target`s and redundant probes/fingerprint requests.
 - **Worker-pool concurrency is clamped** (`MaxConcurrency = 4096`) in both scanners, preventing an absurd `--network-scan-concurrency` from overflowing the tasks-channel size on 32-bit or allocating a runaway buffer / goroutine count.
 - **MCP discovery handles Streamable HTTP**: the probe sends `Accept: application/json, text/event-stream` (some servers `406` otherwise) and parses an SSE-framed `initialize` response, improving recall without affecting precision.
-- **Nested `@file` / `file://` includes inside a targets file are rejected** (`ErrNestedTargetsFile`), closing a self-referential/cyclic recursion that could exhaust memory / file descriptors.
 - Removed dead code: the unused `protoscan` discover registrations (`mcp.discover` / `a2a.discover`, never dispatched — `discover` constructs its scanner directly) and an unused error/`slog` shim. The fingerprint progress denominator now applies the same `Fingerprinter` type assertion as dispatch, and each fingerprinter receives a per-probe copy of `Meta`.
+
+### Documentation
+
+- README "Why AgentHound" now surfaces full-stack coverage — protocols (MCP, A2A), services, and agent clients — rather than implying single-protocol scope. (#63)
+- Reference and operator docs refreshed for v0.7.0: documented the scan/discover progress, summary, `--verbose`, and `--quiet` behavior; corrected the `--network-scan-concurrency` default (`50`, was misdocumented as `256`/`64`); completed the looter `--type` list (added `jupyter`); marked all network-scan fingerprinters as shipped; and fixed the `--cors-origins` default and several broken cross-links.
 
 ## v0.6.1
 

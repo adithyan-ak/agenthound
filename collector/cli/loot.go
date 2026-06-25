@@ -50,8 +50,8 @@ and EXPOSES_CREDENTIAL edges into the graph, where the
 cross_service_credential_chain post-processor joins them with Config
 Collector emissions to surface credential-chain findings.
 
-Supported Looters include --type litellm (LiteLLM gateway), ollama,
-jupyter, and mlflow.
+Supported Looters: --type litellm (LiteLLM gateway), ollama, mlflow,
+qdrant, openwebui, and jupyter.
 
 Example:
 

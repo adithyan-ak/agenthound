@@ -13,6 +13,7 @@ Attack-path discovery for AI agent infrastructure. [BloodHound](https://github.c
 ## Operator Guides
 
 - **[Network Scanning](operator/scanner.md)** — Sweep CIDRs for AI/ML services + fingerprint
+- **[Rules Bundles](operator/rules-bundle.md)** — Out-of-band fingerprint rule updates (`--rules-bundle`)
 - **[Protocol Discovery](operator/discover.md)** — Find MCP servers and A2A agents by protocol shape
 - **[Looting](operator/loot/index.md)** — Extract credentials and model artifacts from discovered services
   - [LiteLLM](operator/loot/litellm.md) — Master key → upstream provider keys

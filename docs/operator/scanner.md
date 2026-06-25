@@ -34,17 +34,17 @@ agenthound scan 10.0.0.0/24 --network-scan-concurrency 100
 
 ## Default port set
 
-The scanner probes seven ports by default — every port in this set has a v0.2+ fingerprinter or is reserved for v0.3/v0.4:
+The scanner probes seven ports by default. Every port in this set now has a shipped fingerprinter:
 
 | Port | Service | Fingerprinter status |
 |------|---------|---------------------|
-| 11434 | Ollama | **v0.2 — shipped** |
-| 4000 | LiteLLM | **v0.2 — shipped** |
-| 8000 | vLLM AND LangServe (port collision; fingerprint dispatch resolves) | v0.3 (vLLM), v0.4 (LangServe) |
-| 6333 | Qdrant | v0.4 |
-| 5000 | MLflow | v0.4 |
-| 8888 | Jupyter | v0.3 |
-| 3000 | Open WebUI | v0.3 |
+| 11434 | Ollama | shipped |
+| 4000 | LiteLLM | shipped |
+| 8000 | vLLM AND LangServe (port collision; fingerprint dispatch resolves) | shipped (both) |
+| 6333 | Qdrant | shipped |
+| 5000 | MLflow | shipped |
+| 8888 | Jupyter | shipped |
+| 3000 | Open WebUI | shipped |
 
 Hosts with open ports for which no fingerprinter ships in your binary version emit no node. The open-port set is captured in `Target.Meta["open_ports"]` so a future re-fingerprint against the same scan output can populate the missing services without a fresh scan.
 
@@ -129,7 +129,7 @@ The envelope contains:
 
 **Concurrency vs. `--scan-concurrency`.** Two separate knobs. `--scan-concurrency` (default 5) controls MCP/A2A enumeration worker count when running the legacy `agenthound scan` (no positional arg) flow. `--network-scan-concurrency` (default 50) controls the network probe pool. Different cost profiles — MCP/A2A do JSON-RPC handshakes; network probes do raw TCP connects.
 
-**TLS.** The probes are HTTP today. v0.3 adds HTTPS coverage when the fingerprinters need it (some services bind TLS by default). The `--insecure` flag from the legacy collector flow does not apply to the network scanner — fingerprinters that opt into TLS handshakes will declare their own per-module flag via `FlagsModule` (v0.3).
+**TLS.** The network-scan fingerprint probes are HTTP today; HTTPS coverage is not yet wired into the network scanner. The `--insecure` flag applies only to the legacy local MCP/A2A collectors (`scan --mcp` / `scan --a2a`), not to the network sweep — a fingerprinter that needs a TLS handshake would declare its own per-module flag via `FlagsModule`.
 
 ---
 
@@ -155,128 +155,5 @@ cat /tmp/scan.json | jq '.meta'
 ## See also
 
 - [LiteLLM looting](loot/litellm.md) — extracting credentials from a fingerprinted LiteLLM gateway.
+- [Rules bundles](rules-bundle.md) — out-of-band fingerprint rule updates (`--rules-bundle`).
 - [Security model](security.md) — overall AgentHound threat model.
-# `--rules-bundle` — out-of-band fingerprint rule updates
-
-The fingerprint rules engine ships rules embedded in the AgentHound binary (`sdk/rules/builtin/fingerprints/*.yaml`). v0.3 adds a `--rules-bundle <path>` override so operators can pick up rule fixes without rebuilding the collector.
-
-> **The operator is responsible for verifying the cosign signature on the bundle BEFORE pointing AgentHound at it.** v0.3 ships with optional verification — the loader does not call cosign automatically. Mandatory signature verification (refuse to load unsigned bundles) lands in v0.5 once the release pipeline has cut at least one bundle.
-
----
-
-## Quick start
-
-```bash
-# Download a published bundle.
-gh release download rules-v2026.06.01 \
-    --repo adithyan-ak/agenthound \
-    --pattern 'agenthound-rules-*.tar.gz*'
-
-# Verify the cosign signature BEFORE running anything.
-cosign verify-blob \
-    --bundle agenthound-rules-rules-v2026.06.01.tar.gz.sigstore.json \
-    --certificate-identity-regexp 'https://github.com/.*' \
-    --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-    agenthound-rules-rules-v2026.06.01.tar.gz
-
-# Use the bundle in any command that runs fingerprinters.
-agenthound --rules-bundle ./agenthound-rules-rules-v2026.06.01.tar.gz scan 10.0.0.0/24
-
-# Or point at a directory of YAML files (during development / lab work).
-agenthound --rules-bundle ./my-custom-rules/ scan 10.0.0.0/24
-
-# Env var alternative.
-AGENTHOUND_RULES_BUNDLE=./bundle.tar.gz agenthound scan 10.0.0.0/24
-```
-
----
-
-## Override semantics
-
-The bundle merges into the embedded rule set with **same-id rules from the bundle winning**:
-
-| Embedded rule | Bundle rule | Effective rule |
-|---|---|---|
-| `id: ollama` | (absent) | embedded |
-| `id: ollama` | `id: ollama` | bundle (override wins) |
-| (absent) | `id: my-custom` | bundle (additive) |
-
-This is what you want for hot-fixing a broken regex in a shipped rule, or for adding a new fingerprinter rule the binary's rule set doesn't yet include.
-
----
-
-## Bundle format
-
-A bundle is one of:
-
-- A directory containing `*.yaml` files (one rule per file).
-- A `.tar.gz` archive containing `fingerprints/*.yaml` entries.
-
-The loader reads `*.yaml` and skips other file types. Each YAML file follows the same shape as the embedded rules at `sdk/rules/builtin/fingerprints/`:
-
-```yaml
-id: ollama-hotfix-2026-06
-name: Ollama (CVE-2026-XXXXX hotfix)
-description: refines the Ollama version regex to catch the new patch series
-version: 2
-service_kind: ollama
-probes:
-  - method: GET
-    path: /api/version
-    matchers:
-      - type: http_status
-        status_code: 200
-      - type: json_path
-        path: "$.version"
-        regex: '^\d+\.\d+\.\d+(-rc\d+)?$'
-    captures:
-      version: "$.version"
-emit:
-  node_kinds:
-    - OllamaInstance
-    - AIService
-  properties:
-    service_kind: ollama
-    auth_method: none
-    is_anonymous_loot: "true"
-    version: "{capture:version}"
-```
-
-Rule IDs MUST be globally unique within a bundle (and across the bundle + embedded merge — the bundle's same-id rule wins, but two same-id rules within one bundle is a load-time conflict).
-
----
-
-## Release cadence
-
-Bundles are published by the `rules-bundle.yml` GitHub Actions workflow. Triggers:
-
-- **`workflow_dispatch`** — manual release, used for ad-hoc rule fixes.
-- **`on: push: tags: ['rules-v*']`** — pushing a `rules-vYYYY.MM.DD` tag automatically cuts a release.
-
-There is **no `on: schedule` trigger**. Bundles are content-driven — a no-changes month produces no bundle. An empty release would confuse cosign verification on the consumer side.
-
-The release artifacts:
-
-- `agenthound-rules-<tag>.tar.gz` — the bundle.
-- `agenthound-rules-<tag>.tar.gz.sha256` — checksum.
-- `agenthound-rules-<tag>.tar.gz.sigstore.json` — cosign keyless bundle (signature + certificate, cosign v3 format).
-
----
-
-## Troubleshooting
-
-**Bundle doesn't load at all.** Check the path. `agenthound --rules-bundle <path>` surfaces the error from `LoadFingerprintBundle` if the path doesn't exist or doesn't unpack. Check the format with `tar -tzf <bundle>.tar.gz` showing one or more `*.yaml` entries.
-
-**Bundle loads but my override doesn't take effect.** Same-id-wins requires the bundle's rule ID to match the embedded rule ID exactly. Check the embedded set with `agenthound rules list`.
-
-**Bundle loads but a rule is silently dropped.** The loader skips files that fail YAML parsing. Run `agenthound rules validate <yaml-path>` against each file in your bundle to catch parse errors. Per-file size cap is 1 MiB.
-
-**Cosign verification fails.** The `--certificate-identity-regexp` in the example matches GitHub Actions OIDC. If you forked the repo and re-released, your cert identity will differ — adjust the regex. Time skew can cause verification failures if your machine clock is off; sync NTP.
-
----
-
-## See also
-
-- `sdk/rules/bundle.go` — implementation of `LoadFingerprintBundle` and `MergeFingerprintRules`.
-- `.github/workflows/rules-bundle.yml` — the release pipeline.
-- [`docs/scanner.md`](scanner.md) — the network scanner that consumes fingerprint rules.
