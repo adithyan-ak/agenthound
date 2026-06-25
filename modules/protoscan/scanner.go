@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/modules/networkscan"
@@ -74,6 +75,12 @@ type Scanner struct {
 	Timeout     time.Duration
 	Insecure    bool
 	ExpandOpts  networkscan.ExpandOptions
+
+	// Progress, if non-nil, is called periodically with the number of
+	// completed probes and the total probe count (hosts × protocol ports).
+	// It is invoked from a single dedicated goroutine on a fixed cadence,
+	// plus once at the end, so implementations may render without locking.
+	Progress func(done, total int)
 
 	httpClient *http.Client
 }
@@ -153,6 +160,30 @@ func (s *Scanner) Scan(ctx context.Context, spec string) ([]action.Target, error
 	results := make([]action.Target, 0, len(hosts))
 	var mu sync.Mutex
 
+	// Progress accounting: workers bump completed after each probe; a single
+	// reporter goroutine samples it on a fixed cadence so rendering never
+	// contends with the worker pool. Guarded so a nil Progress costs nothing.
+	total := len(jobs)
+	var completed atomic.Int64
+	var stopReporter, reporterDone chan struct{}
+	if s.Progress != nil && total > 0 {
+		stopReporter = make(chan struct{})
+		reporterDone = make(chan struct{})
+		go func() {
+			defer close(reporterDone)
+			ticker := time.NewTicker(150 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopReporter:
+					return
+				case <-ticker.C:
+					s.Progress(int(completed.Load()), total)
+				}
+			}
+		}()
+	}
+
 	jobCh := make(chan job)
 	var wg sync.WaitGroup
 	for i := 0; i < s.Concurrency; i++ {
@@ -168,6 +199,7 @@ func (s *Scanner) Scan(ctx context.Context, spec string) ([]action.Target, error
 					results = append(results, t)
 					mu.Unlock()
 				}
+				completed.Add(1)
 			}
 		}()
 	}
@@ -183,6 +215,15 @@ dispatch:
 	}
 	close(jobCh)
 	wg.Wait()
+
+	// Stop the reporter and emit one final sample. Receiving on reporterDone
+	// guarantees the ticker goroutine has returned, so this last call can
+	// never race with it.
+	if s.Progress != nil && total > 0 {
+		close(stopReporter)
+		<-reporterDone
+		s.Progress(int(completed.Load()), total)
+	}
 
 	if cancelled {
 		return results, ctx.Err()

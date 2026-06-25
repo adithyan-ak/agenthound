@@ -69,6 +69,18 @@ func init() {
 	rootCmd.PersistentFlags().String("rules-bundle", "", "Path to a fingerprint rules bundle (directory or .tar.gz). Same-id rules from the bundle override the embedded set. Verify cosign signature manually before pointing AgentHound at it; see https://docs.agenthound.io/reference/rule-syntax/. (env: AGENTHOUND_RULES_BUNDLE)")
 }
 
+// quietEnabled resolves the effective quiet setting for a command: the
+// --quiet persistent flag OR AGENTHOUND_QUIET=1, mirroring the resolution in
+// PersistentPreRunE. It is safe to call on a command with no parent (the
+// flag lookup simply fails and we fall back to the env var), so unit tests
+// that build bare commands don't panic.
+func quietEnabled(cmd *cobra.Command) bool {
+	if q, err := cmd.Root().PersistentFlags().GetBool("quiet"); err == nil && q {
+		return true
+	}
+	return os.Getenv("AGENTHOUND_QUIET") == "1"
+}
+
 func setupLogger(level string, quiet, jsonLog bool) {
 	var logLevel slog.Level
 	switch level {

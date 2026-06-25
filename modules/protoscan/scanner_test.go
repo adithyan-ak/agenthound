@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -231,6 +232,39 @@ func TestScan_CancellationReturnsPartialAndError(t *testing.T) {
 		if tgt.Meta["protocol"] != "mcp" {
 			t.Errorf("partial target protocol = %q, want mcp", tgt.Meta["protocol"])
 		}
+	}
+}
+
+// TestScan_ProgressReported verifies the optional Progress hook fires and the
+// final sample reports every probe complete. ModeMCP with a single port over
+// one host is exactly 1 job, so the terminal sample must be [1 1].
+func TestScan_ProgressReported(t *testing.T) {
+	srv := mcpStub(t)
+	defer srv.Close()
+
+	var mu sync.Mutex
+	var calls [][2]int
+	s := &Scanner{
+		Mode:     ModeMCP,
+		MCPPorts: []int{portOf(t, srv)},
+		Progress: func(done, total int) {
+			mu.Lock()
+			calls = append(calls, [2]int{done, total})
+			mu.Unlock()
+		},
+	}
+	if _, err := s.Scan(context.Background(), "127.0.0.1"); err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) == 0 {
+		t.Fatal("Progress was never called")
+	}
+	last := calls[len(calls)-1]
+	if last[0] != 1 || last[1] != 1 {
+		t.Errorf("final progress = [%d %d], want [1 1]", last[0], last[1])
 	}
 }
 

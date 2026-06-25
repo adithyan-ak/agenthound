@@ -31,6 +31,7 @@ func newScanCmdForTest() *cobra.Command {
 	cmd.Flags().Duration("timeout", 0, "")
 	cmd.Flags().Bool("insecure", false, "")
 	cmd.Flags().String("scan-output", "", "")
+	cmd.Flags().Bool("verbose", false, "")
 	return cmd
 }
 

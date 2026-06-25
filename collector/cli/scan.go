@@ -95,6 +95,8 @@ func init() {
 	scanCmd.Flags().Bool("allow-large-cidr", false, "Allow scanning CIDRs larger than /16 (IPv4) or /112 (IPv6).")
 	scanCmd.Flags().String("authorization-file", "", "Path to a written-authorization document. The path and SHA-256 are recorded in the scan-output watermark.")
 
+	scanCmd.Flags().Bool("verbose", false, "List per-host scan results (network mode). Default is a one-line summary.")
+
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -394,6 +396,8 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	concurrency, _ := cmd.Flags().GetInt("network-scan-concurrency")
 	authzFile, _ := cmd.Flags().GetString("authorization-file")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	quiet := quietEnabled(cmd)
 
 	// AUTHORIZED prompt — required when --allow-public-targets is set, before
 	// any network IO. Skipped when the spec is a private/loopback host
@@ -439,6 +443,7 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	// possible — avoids constructing a parallel options struct. We don't
 	// type-assert here because module.Get returns the concrete value the
 	// init() registered.
+	reporter := newProgressReporter(cmd.OutOrStderr(), "[scan] probing "+spec, quiet)
 	if ns, ok := mod.(*networkscan.Scanner); ok {
 		if len(ports) > 0 {
 			ns.Ports = ports
@@ -451,21 +456,36 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 		if timeout > 0 {
 			ns.Timeout = timeout
 		}
+		ns.Progress = reporter.update
 	}
 
 	ctx := context.Background()
-	_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[scan] expanding targets: %s\n", spec)
+	if !quiet {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[scan] expanding targets: %s\n", spec)
+	}
 	targets, err := scanner.Scan(ctx, spec)
+	reporter.clear()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("scan: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStderr(),
-		"[scan] discovered %d host(s) with at least one open port\n", len(targets))
-	for _, t := range targets {
+	// Default output is a single summary line. The full per-host listing —
+	// which can run to thousands of lines on a large sweep — is gated behind
+	// --verbose. --quiet suppresses both.
+	if !quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStderr(),
-			"[scan]   %s — open: %s — candidates: %s\n",
-			t.Address, t.Meta["open_ports"], t.Meta["candidate_kinds"])
+			"[scan] %s: %d host(s) with at least one open port\n", spec, len(targets))
+		switch {
+		case verbose:
+			for _, t := range targets {
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+					"[scan]   %s — open: %s — candidates: %s\n",
+					t.Address, t.Meta["open_ports"], t.Meta["candidate_kinds"])
+			}
+		case len(targets) > 0:
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+				"[scan] (re-run with --verbose to list per-host open ports)\n")
+		}
 	}
 
 	// Phase 2: fingerprint each target against its candidate kinds. The
@@ -476,7 +496,7 @@ func runNetworkScan(cmd *cobra.Command, spec string) error {
 	// Jupyter, LangServe, OpenWebUI in v0.2 — fingerprinters land in
 	// v0.3/v0.4) emit no node; this is intentional per design F.
 	envelope := buildNetworkScanEnvelope(spec, targets, authzFile, authzHash, allowPublic)
-	dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope)
+	dispatchFingerprints(ctx, cmd.OutOrStderr(), targets, envelope, quiet)
 
 	if output == "" {
 		output = fmt.Sprintf("scan-%s.json", envelope.Meta.ScanID)
@@ -567,7 +587,14 @@ func sha256OfFile(path string) (string, error) {
 //
 // Failures are logged but never fatal: a misbehaving fingerprinter
 // against one target should not block the rest of the scan.
-func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []action.Target, envelope *ingest.IngestData) {
+func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []action.Target, envelope *ingest.IngestData, quiet bool) {
+	// Pre-count the probes we will actually attempt (open port → candidate
+	// kind → registered fingerprinter) so the progress line has an exact
+	// denominator. This walks the same decision tree as the dispatch loop
+	// below but does no network IO.
+	total := countFingerprintProbes(targets)
+	reporter := newProgressReporter(stderr, "[scan] fingerprinting", quiet)
+
 	matched := 0
 	probed := 0
 	for _, t := range targets {
@@ -607,6 +634,7 @@ func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []actio
 					continue
 				}
 				probed++
+				reporter.update(probed, total)
 				result, err := fp.Fingerprint(ctx, action.Target{
 					Kind:    "host",
 					Address: fmt.Sprintf("%s:%s", host, portStr),
@@ -620,16 +648,50 @@ func dispatchFingerprints(ctx context.Context, stderr io.Writer, targets []actio
 					continue
 				}
 				matched++
-				_, _ = fmt.Fprintf(stderr,
-					"[fingerprint] %s:%s → %s (version=%s, auth=%s)\n",
-					host, portStr, result.ServiceKind, result.Version, result.AuthMethod)
+				if !quiet {
+					// Clear the progress line so the match prints cleanly,
+					// then let the next update() redraw it.
+					reporter.clear()
+					_, _ = fmt.Fprintf(stderr,
+						"[fingerprint] %s:%s → %s (version=%s, auth=%s)\n",
+						host, portStr, result.ServiceKind, result.Version, result.AuthMethod)
+				}
 				envelope.Graph.Nodes = append(envelope.Graph.Nodes, result.IngestData.Graph.Nodes...)
 				envelope.Graph.Edges = append(envelope.Graph.Edges, result.IngestData.Graph.Edges...)
 			}
 		}
 	}
-	_, _ = fmt.Fprintf(stderr,
-		"[scan] fingerprint summary: %d probe(s), %d match(es)\n", probed, matched)
+	reporter.clear()
+	if !quiet {
+		_, _ = fmt.Fprintf(stderr,
+			"[scan] fingerprint summary: %d probe(s), %d match(es)\n", probed, matched)
+	}
+}
+
+// countFingerprintProbes returns the exact number of fingerprint probes
+// dispatchFingerprints will attempt for the given targets — one per
+// (open port, candidate kind) pair that has a registered fingerprinter.
+// It performs no network IO; it only consults the module registry.
+func countFingerprintProbes(targets []action.Target) int {
+	total := 0
+	for _, t := range targets {
+		for _, portStr := range splitCSV(t.Meta["open_ports"]) {
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				continue
+			}
+			kinds, ok := networkscan.PortToKind[port]
+			if !ok {
+				continue
+			}
+			for _, kind := range kinds {
+				if _, ok := module.GetByTarget(kind, action.Fingerprint); ok {
+					total++
+				}
+			}
+		}
+	}
+	return total
 }
 
 // splitCSV is the no-op-on-empty companion of strings.Split. Returns nil
