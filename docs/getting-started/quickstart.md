@@ -114,7 +114,7 @@ agenthound loot 172.30.0.20:4000 --type litellm \
     --output -
 ```
 
-Available looter types: `litellm`, `ollama`. The `--engagement-id` flag is a correlation key recorded on every emitted edge for IR coordination.
+Available looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`, `jupyter`. The `--engagement-id` flag is a correlation key recorded on every emitted edge for IR coordination.
 
 Loot Ollama models and modelfiles:
 
@@ -235,7 +235,7 @@ docker compose -f docker/demo/docker-compose.yml down --volumes
 | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | PostgreSQL |
 | `AGENTHOUND_BIND` | `127.0.0.1:8080` | Server bind address |
 | `AGENTHOUND_LOG_LEVEL` | `info` | Log level: debug, info, warn, error |
-| `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | CORS origins for the UI |
+| `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080,http://127.0.0.1:8080` | CORS origins for the UI |
 | `AGENTHOUND_OUTPUT` | `./scan-<id>.json` | Collector output path (`-` for stdout) |
 | `AGENTHOUND_CONCURRENCY` | `5` | Collector parallelism |
 

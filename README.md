@@ -157,7 +157,7 @@ go install github.com/adithyan-ak/agenthound/server/cmd/agenthound-server@latest
 agenthound-server serve
 
 # Pin install.sh to a release tag (verifies checksums; uses cosign when available)
-curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v0.6.1/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v0.7.0/install.sh | sh
 ```
 
 See the full [installation guide](https://docs.agenthound.io/getting-started/install/) for Homebrew, release binaries, signature verification, and source builds.

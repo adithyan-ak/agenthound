@@ -34,7 +34,7 @@ agenthound scan [CIDR|host|@targets-file] [flags]
 **Two modes:**
 
 1. **Local mode** (no positional arg) — runs config + MCP collectors against the local host.
-2. **Network mode** (positional arg) — sweeps targets for AI/ML services on standard ports (Ollama 11434, vLLM 8000, Qdrant 6333, MLflow 5000, LiteLLM 4000, Jupyter 8888, LangServe/OpenWebUI 3000), then fingerprints each match.
+2. **Network mode** (positional arg) — sweeps targets for AI/ML services on standard ports (Ollama 11434, vLLM/LangServe 8000, Qdrant 6333, MLflow 5000, LiteLLM 4000, Jupyter 8888, Open WebUI 3000), then fingerprints each match.
 
 #### Collector Selection
 
@@ -82,7 +82,7 @@ At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--ports` | `11434,8000,6333,5000,4000,8888,3000` | Override the default AI-service port set. |
-| `--network-scan-concurrency` | `256` | Max parallel TCP connect probes. |
+| `--network-scan-concurrency` | `50` | Max parallel TCP connect probes. |
 | `--allow-public-targets` | `false` | Allow scanning non-RFC1918 IPs. Requires interactive `AUTHORIZED` prompt. |
 | `--allow-large-cidr` | `false` | Allow CIDRs larger than /16 (IPv4) or /112 (IPv6), up to an absolute ceiling of 1,048,576 hosts (exactly /12 IPv4, /108 IPv6) that applies even with this flag. |
 | `--authorization-file` | | Path to a written-authorization document. Path + SHA-256 recorded in scan watermark. |
@@ -132,7 +132,7 @@ agenthound discover <cidr|host|@file> [flags]
 | `--a2a` | (both if neither set) | Probe for A2A agents only. |
 | `--mcp-ports` | `3000,8000,8080,8443` | Override MCP probe port set. |
 | `--a2a-ports` | `80,443,3000,8080` | Override A2A probe port set. |
-| `--network-scan-concurrency` | `64` | Max parallel HTTP probes. |
+| `--network-scan-concurrency` | `50` | Max parallel HTTP probes. |
 | `--timeout` | `5s` | Per-probe HTTP timeout. |
 | `--insecure` | `false` | Skip TLS verification on HTTPS probes. |
 | `--allow-public-targets` | `false` | Allow probing public IPs (requires `AUTHORIZED` prompt). |
@@ -169,7 +169,7 @@ agenthound loot <host:port> --type <kind> [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--type` | **(required)** | Looter kind: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`. |
+| `--type` | **(required)** | Looter kind: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`, `jupyter`. |
 | `--master-key` | | Sugar for `--credential master_key=...`. |
 | `--credential` | | Operator-supplied credential as `KEY=VALUE` (repeatable). |
 | `--include-credential-values` | `false` | Emit raw values on Credential nodes. |
@@ -192,6 +192,8 @@ agenthound loot <host:port> --type <kind> [flags]
 | `--api-key` | | Open WebUI admin API key (or session JWT). When supplied, enumerates upstream provider keys via authenticated `GET /openai/config` and emits Credential + EXPOSES_CREDENTIAL. Omit for anonymous posture only (`GET /api/config`). |
 
 `--type qdrant` is anonymous and pure-GET (no per-module flags): it inventories collections via `GET /collections` and `GET /collections/{name}`, folding `collection_count`, `collections`, `total_points`, and `anonymous_listing` onto the `QdrantInstance` node. It emits **no** Credential nodes.
+
+`--type jupyter` is also anonymous and pure-GET (no per-module flags): it inventories active sessions via `GET /api/sessions` and the notebook tree via `GET /api/contents/`, emitting one `:MCPResource` per discovered notebook.
 
 #### Example
 
@@ -421,7 +423,7 @@ Print version string and commit hash.
 | `--neo4j-user` | `AGENTHOUND_NEO4J_USER` | `neo4j` | Neo4j username. |
 | `--neo4j-password` | `AGENTHOUND_NEO4J_PASSWORD` | `agenthound` | Neo4j password. |
 | `--pg-uri` | `AGENTHOUND_PG_URI` | `postgres://agenthound:agenthound@localhost:5432/agenthound?sslmode=disable` | PostgreSQL URI. |
-| `--cors-origins` | `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080` | Comma-separated CORS origins. |
+| `--cors-origins` | `AGENTHOUND_CORS_ORIGINS` | `http://localhost:8080,http://127.0.0.1:8080` | Comma-separated CORS origins. |
 | `--log-level` | `AGENTHOUND_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 
 Priority: CLI flag > env var > default.
