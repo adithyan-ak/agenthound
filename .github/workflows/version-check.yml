@@ -1,0 +1,29 @@
+name: Version Check
+
+# Runs only when the hand-maintained version strings change, so a release-prep
+# PR can't merge with install.sh / README pins that disagree with the CHANGELOG.
+# The release pipeline (release.yml -> make prerelease -> scripts/version-check.sh)
+# re-checks at tag time, so a mismatch can never reach a published release.
+on:
+  pull_request:
+    paths:
+      - "install.sh"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "scripts/version-check.sh"
+      - ".github/workflows/version-check.yml"
+
+concurrency:
+  group: version-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Version pins match the CHANGELOG
+        run: bash scripts/version-check.sh
