@@ -86,8 +86,11 @@ At least one of `--target`, `--targets`, `--targets-file`, or `--discover-domain
 | `--allow-public-targets` | `false` | Allow scanning non-RFC1918 IPs. Requires interactive `AUTHORIZED` prompt. |
 | `--allow-large-cidr` | `false` | Allow CIDRs larger than /16 (IPv4) or /112 (IPv6). |
 | `--authorization-file` | | Path to a written-authorization document. Path + SHA-256 recorded in scan watermark. |
+| `--verbose` | `false` | List every discovered host (open ports + candidate kinds). Default is a one-line summary. |
 
 Link-local and multicast addresses are refused unconditionally.
+
+By default network-mode `scan` prints a one-line summary (`N host(s) with at least one open port`) plus a final fingerprint summary; pass `--verbose` to list every host, which can run to thousands of lines on a large sweep. On an interactive terminal a single rewriting progress line is shown during the port sweep and fingerprint phase. `--quiet` (or `AGENTHOUND_QUIET=1`) suppresses the progress line, the per-host summary, and the fingerprint output, leaving only errors. None of this affects the JSON written to `--output`.
 
 #### Shared Flags
 
@@ -136,6 +139,9 @@ agenthound discover <cidr|host|@file> [flags]
 | `--allow-large-cidr` | `false` | Allow CIDRs larger than /16. |
 | `--authorization-file` | | Written-authorization doc; recorded in watermark. |
 | `--scan-output` | | Output path (defaults to `./discover-<scan_id>.json`). |
+| `--verbose` | `false` | List every discovered endpoint (protocol + URL). Default is a one-line summary. |
+
+Like `scan`, `discover` prints a one-line summary by default (`N endpoint(s)`), shows a rewriting progress line on an interactive terminal, and honors `--quiet` / `AGENTHOUND_QUIET=1`. Pass `--verbose` to list each endpoint.
 
 #### Example
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -209,6 +210,54 @@ func TestScanner_PanicIsolation(t *testing.T) {
 	}
 	if !panicked.Load() {
 		t.Error("panic was not triggered (test setup wrong)")
+	}
+}
+
+// TestScanner_ProgressReported verifies the optional Progress hook fires and
+// that the final sample reports every probe complete (done == total ==
+// hosts × ports). A /30 is 4 hosts × the 7 default ports = 28 probes.
+func TestScanner_ProgressReported(t *testing.T) {
+	d := &fakeDialer{openSet: map[string]bool{"10.0.0.1:11434": true}}
+
+	var mu sync.Mutex
+	var calls [][2]int
+	s := &Scanner{
+		Dialer:  d,
+		Timeout: 100 * time.Millisecond,
+		Progress: func(done, total int) {
+			mu.Lock()
+			calls = append(calls, [2]int{done, total})
+			mu.Unlock()
+		},
+	}
+
+	if _, err := s.Scan(context.Background(), "10.0.0.0/30"); err != nil {
+		t.Fatalf("Scan err = %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) == 0 {
+		t.Fatal("Progress was never called")
+	}
+	wantTotal := 4 * len(DefaultPorts)
+	last := calls[len(calls)-1]
+	if last[0] != wantTotal || last[1] != wantTotal {
+		t.Errorf("final progress = [%d %d], want [%d %d]", last[0], last[1], wantTotal, wantTotal)
+	}
+}
+
+// TestScanner_NoProgressHook is a guard that a nil Progress field is the safe
+// default — Scan must complete normally without ever touching the hook.
+func TestScanner_NoProgressHook(t *testing.T) {
+	d := &fakeDialer{openSet: map[string]bool{"10.0.0.1:11434": true}}
+	s := &Scanner{Dialer: d, Timeout: 100 * time.Millisecond}
+	targets, err := s.Scan(context.Background(), "10.0.0.0/30")
+	if err != nil {
+		t.Fatalf("Scan err = %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("got %d targets, want 1", len(targets))
 	}
 }
 

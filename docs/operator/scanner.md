@@ -117,6 +117,8 @@ The envelope contains:
 
 ## Operational notes
 
+**Progress and output volume.** By default the scanner prints a single summary line — `[scan] <spec>: N host(s) with at least one open port` — followed by the per-match fingerprint lines and a fingerprint summary. The full per-host listing (open ports + candidate kinds for every host) is gated behind `--verbose`, because a `/24` sweep over a bridge or VPN can otherwise emit hundreds of near-identical lines. When stderr is an interactive terminal, a single rewriting progress line tracks the port sweep and the fingerprint phase; it is omitted automatically when output is piped or redirected (so logs stay clean) and when `--quiet` / `AGENTHOUND_QUIET=1` is set. Progress and summaries go to stderr and never affect the JSON written to `--output`.
+
 **Cancellation.** Ctrl-C cancels the worker pool cleanly. The producer stops queueing tasks before the next port probe; in-flight probes drain to completion (3-second timeout). Partial results are written to `--output` so a long-running scan that gets interrupted still produces useful JSON.
 
 **False positives on private networks with weird routing.** If your dev machine runs Tailscale / a corporate VPN / CGNAT routing, TCP connect probes against unrouted private IPs can return success because the kernel's connect path catches the SYN locally. The scanner reports what it sees at the TCP layer; the fingerprinters in the next step are the actual correctness layer (an open port that doesn't speak Ollama produces no `OllamaInstance` node).

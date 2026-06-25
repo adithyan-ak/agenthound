@@ -66,7 +66,7 @@ func TestDispatchFingerprints_DerivesKindFromPort(t *testing.T) {
 	}}
 
 	envelope := &ingest.IngestData{}
-	dispatchFingerprints(context.Background(), io.Discard, targets, envelope)
+	dispatchFingerprints(context.Background(), io.Discard, targets, envelope, false)
 
 	if fp.probeCount != 1 {
 		t.Fatalf("fingerprinter probed %d time(s), want exactly 1", fp.probeCount)
@@ -154,7 +154,7 @@ func TestDispatchFingerprints_TriesAllCandidateKinds(t *testing.T) {
 	}}
 
 	envelope := &ingest.IngestData{}
-	dispatchFingerprints(context.Background(), io.Discard, targets, envelope)
+	dispatchFingerprints(context.Background(), io.Discard, targets, envelope, false)
 
 	if vllm.probeCount != 1 {
 		t.Errorf("vllm probed %d time(s), want exactly 1", vllm.probeCount)

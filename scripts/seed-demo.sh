@@ -21,7 +21,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LAB_COMPOSE="$REPO_ROOT/docker/demo/docker-compose.yml"
-LAB_CIDR="172.30.0.0/24"
+# Demo lab hosts (static IPs from docker/demo/docker-compose.yml). We scan an
+# explicit host list rather than the whole 172.30.0.0/24 so the demo reports
+# the real services instead of 254 Docker-bridge phantoms — every address on a
+# bridge network accepts TCP connects, so a /24 sweep "finds" 256 identical
+# hosts (see docs/operator/scanner.md).
+LAB_HOSTS=(172.30.0.10 172.30.0.20 172.30.0.30 172.30.0.40 172.30.0.50 172.30.0.60 172.30.0.70 172.30.0.80)
 LITELLM_HOST="172.30.0.20:4000"
 OLLAMA_HOST="172.30.0.10:11434"
 MASTER_KEY="sk-DEMO-CHAIN-KEY-NOT-REAL"
@@ -72,11 +77,15 @@ EOF
 OUT_DIR=$(mktemp -d)
 trap 'rm -rf "$OUT_DIR"' EXIT
 
-echo "[seed-demo] running agenthound scan against $LAB_CIDR"
-"$CMD_AGENTHOUND" scan "$LAB_CIDR" --output "$OUT_DIR/scan.json"
+# Materialize the explicit host list as an @targets file for scan/discover.
+LAB_TARGETS="$OUT_DIR/lab-hosts.txt"
+printf '%s\n' "${LAB_HOSTS[@]}" > "$LAB_TARGETS"
 
-echo "[seed-demo] running agenthound discover against $LAB_CIDR"
-"$CMD_AGENTHOUND" discover "$LAB_CIDR" --output "$OUT_DIR/discover.json"
+echo "[seed-demo] running agenthound scan against ${#LAB_HOSTS[@]} lab hosts"
+"$CMD_AGENTHOUND" scan "@$LAB_TARGETS" --output "$OUT_DIR/scan.json"
+
+echo "[seed-demo] running agenthound discover against ${#LAB_HOSTS[@]} lab hosts"
+"$CMD_AGENTHOUND" discover "@$LAB_TARGETS" --output "$OUT_DIR/discover.json"
 
 echo "[seed-demo] running agenthound loot --type litellm"
 echo "AUTHORIZED" | "$CMD_AGENTHOUND" loot "$LITELLM_HOST" \

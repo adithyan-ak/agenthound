@@ -60,6 +60,7 @@ func init() {
 	discoverCmd.Flags().Bool("allow-large-cidr", false, "Allow probing CIDRs larger than /16")
 	discoverCmd.Flags().String("authorization-file", "", "Path to a written-authorization document; recorded in the watermark")
 	discoverCmd.Flags().String("scan-output", "", "Write ingest JSON to this path. Use '-' for stdout.")
+	discoverCmd.Flags().Bool("verbose", false, "List per-endpoint discover results. Default is a one-line summary.")
 	rootCmd.AddCommand(discoverCmd)
 }
 
@@ -75,6 +76,8 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 	allowPublic, _ := cmd.Flags().GetBool("allow-public-targets")
 	allowLarge, _ := cmd.Flags().GetBool("allow-large-cidr")
 	authzFile, _ := cmd.Flags().GetString("authorization-file")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	quiet := quietEnabled(cmd)
 	output, _ := cmd.Flags().GetString("scan-output")
 	if output == "" {
 		if cfg != nil && cfg.Output != "" {
@@ -126,19 +129,35 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 		},
 	}
 
+	reporter := newProgressReporter(cmd.OutOrStderr(), "[discover] probing "+spec, quiet)
+	scanner.Progress = reporter.update
+
 	ctx := context.Background()
-	_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[discover] expanding targets: %s\n", spec)
+	if !quiet {
+		_, _ = fmt.Fprintf(cmd.OutOrStderr(), "[discover] expanding targets: %s\n", spec)
+	}
 	targets, err := scanner.Scan(ctx, spec)
+	reporter.clear()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("discover: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStderr(),
-		"[discover] discovered %d endpoint(s)\n", len(targets))
-	for _, t := range targets {
+	// Default output is a single summary line; the full per-endpoint listing
+	// is gated behind --verbose. --quiet suppresses both.
+	if !quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStderr(),
-			"[discover]   %s — protocol=%s url=%s\n",
-			t.Address, t.Meta["protocol"], t.Meta["url"])
+			"[discover] %s: %d endpoint(s)\n", spec, len(targets))
+		switch {
+		case verbose:
+			for _, t := range targets {
+				_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+					"[discover]   %s — protocol=%s url=%s\n",
+					t.Address, t.Meta["protocol"], t.Meta["url"])
+			}
+		case len(targets) > 0:
+			_, _ = fmt.Fprintf(cmd.OutOrStderr(),
+				"[discover] (re-run with --verbose to list per-endpoint details)\n")
+		}
 	}
 
 	envelope := buildDiscoverEnvelope(spec, targets, authzFile, authzHash, allowPublic)

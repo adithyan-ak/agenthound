@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/adithyan-ak/agenthound/sdk/action"
@@ -79,6 +80,13 @@ type Scanner struct {
 	// Dialer is overridable in tests so the worker pool can be exercised
 	// without binding to real ports. nil → net.Dialer with Timeout.
 	Dialer dialer
+
+	// Progress, if non-nil, is called periodically with the number of
+	// completed probes and the total probe count (hosts × ports). It is
+	// invoked from a single dedicated goroutine on a fixed cadence, plus
+	// once at the end, so implementations may render directly without
+	// locking. nil disables progress reporting (the default).
+	Progress func(done, total int)
 }
 
 // hostResult aggregates open ports for a single host with mutex-protected
@@ -140,6 +148,30 @@ func (s *Scanner) Scan(ctx context.Context, cidr string) ([]action.Target, error
 	}
 	tasks := make(chan probeTask, concurrency*2)
 
+	// Progress accounting: workers bump completed after each probe; a single
+	// reporter goroutine samples it on a fixed cadence so rendering never
+	// contends with the worker pool. Guarded so a nil Progress costs nothing.
+	total := len(hosts) * len(ports)
+	var completed atomic.Int64
+	var stopReporter, reporterDone chan struct{}
+	if s.Progress != nil && total > 0 {
+		stopReporter = make(chan struct{})
+		reporterDone = make(chan struct{})
+		go func() {
+			defer close(reporterDone)
+			ticker := time.NewTicker(150 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopReporter:
+					return
+				case <-ticker.C:
+					s.Progress(int(completed.Load()), total)
+				}
+			}
+		}()
+	}
+
 	var wg sync.WaitGroup
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -147,6 +179,7 @@ func (s *Scanner) Scan(ctx context.Context, cidr string) ([]action.Target, error
 			defer wg.Done()
 			for t := range tasks {
 				probe(ctx, d, t.host, t.port, timeout, results[t.host])
+				completed.Add(1)
 			}
 		}()
 	}
@@ -165,6 +198,16 @@ producer:
 	}
 	close(tasks)
 	wg.Wait()
+
+	// Stop the reporter and emit one final sample. Receiving on reporterDone
+	// guarantees the ticker goroutine has returned, so this last call can
+	// never race with it. On a clean run completed == total (every probe ran);
+	// on cancellation it reflects the partial count.
+	if s.Progress != nil && total > 0 {
+		close(stopReporter)
+		<-reporterDone
+		s.Progress(int(completed.Load()), total)
+	}
 
 	var out []action.Target
 	for _, host := range hosts {
