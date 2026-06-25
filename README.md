@@ -181,7 +181,7 @@ agenthound discover 10.0.0.0/24 --mcp
 agenthound loot 172.30.0.20:4000 --type litellm --master-key sk-... --engagement-id RTV --output -
 ```
 
-Looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`.
+Looter types: `litellm`, `ollama`, `mlflow`, `qdrant`, `openwebui`, `jupyter`.
 
 **3. Exploit** — sanctioned, reversible offensive actions:
 
