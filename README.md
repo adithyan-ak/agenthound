@@ -147,6 +147,14 @@ agenthound scan --config --output - | curl --data-binary @- -H "Content-Type: ap
 open http://127.0.0.1:8080   # xdg-open on Linux
 ```
 
+Prefer a reproducible, pinned install? Every release is cosign-signed with an SBOM:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/adithyan-ak/agenthound/v0.7.0/install.sh | sh
+```
+
+Also available via Homebrew (`brew install agenthound agenthound-server`), `go install`, and signed release binaries — see the [installation guide](https://docs.agenthound.io/getting-started/install/).
+
 Want the full arc against a safe target? `make demo` spins up 8 deliberately-vulnerable AI services on an isolated network and seeds scan → loot → ingest end-to-end.
 
 <p align="center">
