@@ -8,6 +8,8 @@
 
 MCP · A2A · model gateways · inference servers · vector stores · MLOps · notebooks · 12 agent clients
 
+[![DEF CON 34 · Red Team Village](https://img.shields.io/badge/DEF_CON_34-Red_Team_Village-E4002B?style=for-the-badge&labelColor=000000)](https://redteamvillage.io/)
+
 [Quickstart](#-quick-start) ·
 [Capabilities](#-capabilities) ·
 [Lifecycle](#-the-offensive-lifecycle) ·
@@ -25,7 +27,7 @@ MCP · A2A · model gateways · inference servers · vector stores · MLOps · n
 
 > **Authorized use only.** AgentHound ships read-only discovery **and** active exploitation modules. Run it only against infrastructure you own or are written-authorized to assess. See [Safety & Authorization](#-safety--authorization).
 
-**AgentHound is an open-source offensive security framework for AI agent infrastructure.** It runs the full engagement — recon, fingerprinting, credential looting, **model & weight exfiltration**, model inversion, tool and instruction poisoning, and config-implant persistence — across every layer of the modern agentic stack, then merges every fact into one Neo4j graph and proves the attack paths that tie it all together. One data model, one graph, one `revert` to clean up.
+**AgentHound is an open-source offensive security framework for AI agent infrastructure.** It runs the full engagement — recon, fingerprinting, credential looting, **model & weight exfiltration**, model inversion, tool and instruction poisoning, and config-implant persistence — across every layer of the modern agentic stack, then merges every fact into one Neo4j graph and proves the attack paths that tie it all together. One data model, one graph, one `revert` to clean up. If you know BloodHound, you already know the shape — this is BloodHound for the agentic stack.
 
 ## ⚡ Capabilities
 
@@ -122,7 +124,7 @@ A new attack against a new AI service is one module away — implement an action
 ## 📦 By the numbers
 
 - **23 module packages** — 22 self-registering attack modules + the `protoscan` discovery engine
-- **8 offensive verbs** — `scan` · `discover` · `loot` · `extract` · `poison` · `implant` · `revert` (+ enumerate / fingerprint dispatch)
+- **7 offensive CLI verbs** — `scan` · `discover` · `loot` · `extract` · `poison` · `implant` · `revert` (`enumerate` + `fingerprint` run inside `scan`)
 - **8 fingerprinters · 6 looters · 1 model-inversion extractor · 2 poisoners · 1 implanter**
 - **Graph:** 25 node labels · 30 edge kinds (18 raw + 12 composite) · **15 post-processors**
 - **Intelligence:** 35 detection rules + 8 fingerprint rules · 19 prebuilt attack-path queries · OWASP MCP Top 10 + OWASP Agentic Top 10 + **7 MITRE ATLAS techniques**
@@ -203,6 +205,57 @@ agenthound-server query --findings --fail-on critical
 ```
 
 See the full [CLI reference](https://docs.agenthound.io/reference/cli/) for every verb, flag, and module.
+
+## 🔎 What AgentHound finds
+
+AgentHound's findings are built around the questions red teams and defenders ask when they need to understand reachability, blast radius, and pathing risk.
+
+| Finding | What it means | Question it answers |
+|---|---|---|
+| **Credential-chain paths** | The same secret appears in multiple contexts, letting trust cross service boundaries. | Which reused credential gives an agent access it never explicitly had? |
+| **Reachability** | Agents, MCP servers, tools, resources, prompts, A2A skills, and AI services are joined into one graph. | What can this agent actually reach if trust edges are followed? |
+| **Execution paths** | An agent can reach shell-like, database, network, or other high-impact tools. | Which agents have a path to command execution, data-plane control, or production impact? |
+| **Exfiltration paths** | An agent can read sensitive data and also reach an outbound channel. | Where can sensitive data leave the environment? |
+| **Cross-protocol pivots** | MCP, A2A, host context, and AI-service infrastructure combine into one reachable path. | Can one agent protocol become a bridge into another trust domain? |
+| **Tool poisoning** | Tool descriptions, prompts, or instruction files contain suspicious model-steering content. | Which tools or instructions could influence model behavior in unsafe ways? |
+| **Tool shadowing** | A lookalike tool mimics a trusted capability or name. | Which tool could intercept or hijack an expected action? |
+| **Rug pulls** | A tool's description, schema, or server instructions changed between scans. | What changed since the last known-good graph, and did it create a new risk path? |
+| **Unauthenticated servers or agents** | MCP servers or A2A agents are reachable without expected authentication. | Which exposed agent surfaces need immediate review? |
+| **Risk hotspots** | Nodes and paths are prioritized with risk scores and prebuilt graph queries. | Where should investigation or remediation start first? |
+
+See [Detection Rules](https://docs.agenthound.io/reference/detection-rules/) and [Risk Scoring](https://docs.agenthound.io/reference/risk-scoring/) for the full catalog.
+
+## 🔗 Path primitives
+
+AgentHound doesn't just list findings — it creates graph edges you can chain, query, and report:
+
+- **`CAN_REACH`**: an agent can traverse trust, credential, host, or protocol relationships to reach a target.
+- **`CAN_EXECUTE`**: an agent can reach a tool capable of command, database, network, or code execution.
+- **`CAN_EXFILTRATE_VIA`**: an agent can read sensitive data and send it through an outbound channel.
+- **`CAN_IMPERSONATE`**: an agent or identity can act as another trust principal.
+- **`SHADOWS`**: a tool mimics a trusted tool closely enough to hijack expected behavior.
+- **`POISONED_DESCRIPTION` / `POISONED_INSTRUCTIONS`**: tool or instruction text contains model-steering content.
+
+These edges turn AI-agent infrastructure into something you can pathfind instead of manually reason about.
+
+## 🗺️ Example path
+
+```mermaid
+flowchart LR
+  Agent["AgentInstance<br/>claude-desktop"]
+  Notes["MCPServer<br/>internal-notes"]
+  Cred["Credential<br/>value_hash: a3f9..."]
+  Gateway["LiteLLMGateway<br/>prod"]
+  Providers["LLM providers<br/>OpenAI / Anthropic / Bedrock"]
+
+  Agent -- TRUSTS_SERVER --> Notes
+  Notes -- HAS_ENV_VAR --> Cred
+  Gateway -- EXPOSES_CREDENTIAL --> Cred
+  Agent -- CAN_REACH --> Gateway
+  Gateway -- PROVIDES_MODEL --> Providers
+```
+
+No single config file declares this path. AgentHound computes it once collector output lands in the same graph.
 
 ## 🛡️ Safety & authorization
 

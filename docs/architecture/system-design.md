@@ -9,10 +9,10 @@ AgentHound is an offensive security framework for AI agent infrastructure. It ru
    |    agenthound         |  JSON file   |     agenthound-server           |
    |    (collector)        | -- or stdin->|     (single-user)               |
    |                       |  pipe / UI   |                                 |
-   |  scan / rules /       |  drag-drop   |  serve / ingest / query         |
-   |  version (+ stub      |              |  +---------------------------+  |
-   |  loot/extract/        |              |  |    API Server (chi/v5)    |  |
-   |  poison/implant)      |              |  | /api/v1/* — read=open,    |  |
+   |  scan / discover /    |  drag-drop   |  serve / ingest / query         |
+   |  loot / extract /     |              |  +---------------------------+  |
+   |  poison / implant /   |              |  |    API Server (chi/v5)    |  |
+   |  revert (+ rules)     |              |  | /api/v1/* — read=open,    |  |
    +-----------------------+              |  |  mutate=Origin allowlist  |  |
                                           |  |  +---------------------+  |  |
                                           |  |  | Embedded React SPA  |  |  |
